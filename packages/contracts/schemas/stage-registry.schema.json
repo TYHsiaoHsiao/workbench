@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "stage-registry.schema.json",
+  "title": "Stage Registry v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "knowledge_bridge", "stages"],
+  "properties": {
+    "contract_version": { "const": "1.0" },
+    "knowledge_bridge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["skill", "is_stage", "default"],
+      "properties": {
+        "skill": { "type": "string", "minLength": 1 },
+        "is_stage": { "const": false },
+        "default": { "const": "off" },
+        "trigger_commands": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "maintenance_commands": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "name",
+          "skill",
+          "optional",
+          "inputs",
+          "outputs",
+          "gates",
+          "knowledge_mount",
+          "style_mount",
+          "model_options",
+          "state_fields",
+          "downstream"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^0[1-8]$" },
+          "name": { "type": "string", "minLength": 1 },
+          "skill": { "type": "string", "minLength": 1 },
+          "optional": { "type": "boolean" },
+          "inputs": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string" }
+          },
+          "outputs": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string" }
+          },
+          "gates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "type", "description"],
+              "properties": {
+                "id": { "type": "string", "minLength": 1 },
+                "type": { "type": "string", "enum": ["hard", "soft"] },
+                "description": { "type": "string", "minLength": 1 }
+              }
+            }
+          },
+          "knowledge_mount": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["lane", "default"],
+            "properties": {
+              "lane": {
+                "type": "string",
+                "enum": ["story_method", "visual_research", "performance_method", "camera_method", "none"]
+              },
+              "default": { "type": "string", "enum": ["off", "on"] },
+              "scope": {
+                "type": "string",
+                "enum": ["story_01_05", "image_06", "performance_07", "camera_08", "full"]
+              }
+            }
+          },
+          "style_mount": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["enabled"],
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "mode": { "type": "string", "enum": ["explicit", "auto", "off"] }
+            }
+          },
+          "model_options": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["seedance_2_0", "minimax_h3", "dual"] }
+          },
+          "state_fields": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "downstream": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^0[1-8]$" }
+          }
+        }
+      }
+    }
+  }
+}

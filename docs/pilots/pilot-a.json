@@ -1,0 +1,226 @@
+{
+  "project": "试点A-雨夜回声",
+  "entry": "A",
+  "steps": [
+    {
+      "stage": "01",
+      "action": "synopsis written + gates passed",
+      "at": "2026-11-14T13:59:30"
+    },
+    {
+      "stage": "03",
+      "action": "skipped: 世界观可选，60 秒短片不需要",
+      "at": "2026-11-14T13:59:30"
+    }
+  ],
+  "gates": [
+    {
+      "gate": "positioning_menu",
+      "status": "passed",
+      "first_attempt": true
+    },
+    {
+      "gate": "sub_option_confirm",
+      "status": "passed",
+      "first_attempt": true
+    },
+    {
+      "gate": "upstream_confirmed",
+      "status": "passed",
+      "first_attempt": true
+    },
+    {
+      "gate": "duration_budget",
+      "status": "passed",
+      "first_attempt": true
+    },
+    {
+      "gate": "upstream_integration",
+      "status": "passed",
+      "first_attempt": true
+    },
+    {
+      "gate": "scene_lock",
+      "status": "passed",
+      "first_attempt": true
+    },
+    {
+      "gate": "production_data",
+      "status": "passed",
+      "first_attempt": true
+    },
+    {
+      "gate": "style_card_confirm",
+      "status": "passed",
+      "first_attempt": true
+    },
+    {
+      "gate": "upstream_confirmed",
+      "status": "passed",
+      "first_attempt": true
+    },
+    {
+      "gate": "shot_plan_gate",
+      "status": "passed",
+      "first_attempt": true
+    },
+    {
+      "gate": "model_choice",
+      "status": "passed",
+      "first_attempt": true
+    }
+  ],
+  "transitions": [
+    {
+      "from": "v01",
+      "to": "v02",
+      "next": "02"
+    },
+    {
+      "from": "v02",
+      "to": "v03",
+      "next": "04"
+    },
+    {
+      "from": "v03",
+      "to": "v04",
+      "next": "05"
+    },
+    {
+      "from": "v04",
+      "to": "v05",
+      "next": "06"
+    },
+    {
+      "from": "v05",
+      "to": "v06",
+      "next": "07"
+    },
+    {
+      "from": "v06",
+      "to": "v07",
+      "next": "08"
+    },
+    {
+      "from": "v07",
+      "to": "v08",
+      "next": "done"
+    }
+  ],
+  "negative_checks": [
+    {
+      "name": "waive_hard_gate",
+      "blocked": true
+    },
+    {
+      "name": "advance_with_pending_gate",
+      "blocked": true
+    }
+  ],
+  "user_steps": {
+    "01": 2,
+    "02": 1,
+    "04": 1,
+    "05": 2,
+    "06": 1,
+    "07": 1,
+    "08": 3
+  },
+  "reference_load": {
+    "stage": "05",
+    "loaded": 2,
+    "applicable": 2
+  },
+  "style_injections": [
+    {
+      "stage": "06",
+      "tool": "mj",
+      "sha": "2468211997759eada9e7dd2a79ba4a3f46b6ef3c66144a2a723d5248858232f4",
+      "markers": [
+        "【风格卡】",
+        "色彩比例",
+        "光线",
+        "构图/镜头",
+        "材质与色彩",
+        "禁止/避免",
+        "本工具适配"
+      ]
+    },
+    {
+      "stage": "08",
+      "tool": "seedance_2_0",
+      "sha": "ecb8f1cc0cf46f368dcc6e0863ffe04dd0dd4f3ea7f6fb832ed11d0b7ef56955",
+      "markers": [
+        "【风格卡】",
+        "色彩比例",
+        "光线",
+        "构图/镜头",
+        "材质与色彩",
+        "禁止/避免",
+        "本工具适配"
+      ]
+    }
+  ],
+  "revision": {
+    "stale_downstream": [
+      "06",
+      "07",
+      "08"
+    ],
+    "expected": [
+      "06",
+      "07",
+      "08"
+    ]
+  },
+  "export_restore": {
+    "export_files": 19,
+    "restore_files": 19,
+    "restored_stage": "done",
+    "state_version_match": true
+  },
+  "final_state": {
+    "stage": "done",
+    "version": "v08",
+    "style": {
+      "status": "on",
+      "profile_path": "00_project/style-cards/style-001-profile.json",
+      "note": "风格 001 希区柯克；最近注入 08/seedance_2_0"
+    },
+    "stale_downstream": [
+      "06",
+      "07",
+      "08"
+    ],
+    "stage_artifacts": {
+      "01": "01_story/synopsis.md",
+      "02": "01_story/characters.md",
+      "04": "01_story/treatment.md",
+      "05": "02_script/screenplay-v02.md",
+      "06": "03_assets/assets-v01.md",
+      "07": "04_performance/acting-v01.md",
+      "08": "05_shots/shot-plan-v01.md"
+    }
+  },
+  "artifacts": [
+    "00_project/brief.md",
+    "00_project/reference-memory.json",
+    "00_project/reference-memory.md",
+    "00_project/style-cards/style-001-injection-06-mj.json",
+    "00_project/style-cards/style-001-injection-08-seedance_2_0.json",
+    "00_project/style-cards/style-001-profile.json",
+    "01_story/characters.md",
+    "01_story/synopsis.md",
+    "01_story/treatment.md",
+    "02_script/screenplay-v02.md",
+    "02_script/screenplay.md",
+    "03_assets/assets-v01.md",
+    "04_performance/acting-v01.md",
+    "05_shots/continuity-ledger-v01.md",
+    "05_shots/shot-plan-v01.md",
+    "06_prompts/seedance-v01.md",
+    "AGENTS.md",
+    "状态卡.md"
+  ],
+  "status_cards": 1
+}

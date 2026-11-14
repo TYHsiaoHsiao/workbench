@@ -1,0 +1,40 @@
+{
+  "version": "1.1",
+  "safe_tokens": ["aistudio-md-2"],
+  "wordlist": "packages/brand_guard/wordlist.b64",
+  "allowlist": "config/brand-allowlist.json",
+  "skip_dirs": [".git", ".workbench", "__pycache__", "node_modules", ".idea", ".vscode"],
+  "skip_exts": [
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".gif",
+    ".ico",
+    ".pdf",
+    ".zip",
+    ".7z",
+    ".rar",
+    ".sqlite",
+    ".db",
+    ".mp4",
+    ".mov",
+    ".wav",
+    ".mp3",
+    ".ttf",
+    ".otf",
+    ".woff",
+    ".woff2"
+  ],
+  "max_file_mb": 20,
+  "targets": [
+    { "name": "workbench-repo", "path": "." },
+    { "name": "control-layer", "path": "../10Skill剧本到视频提示词本地知识库自动化工作流" },
+    { "name": "workspace-report-analysis", "path": "../配置体系分析报告.md" },
+    { "name": "workspace-report-linkage", "path": "../A-B-C串联逻辑与预期收益分析报告.md" },
+    { "name": "workspace-prd-optimization", "path": "../AI影视工作台配置体系优化迭代PRD.md" },
+    { "name": "workspace-prd-development", "path": "../AI影视工作台开发PRD.md" },
+    { "name": "knowledge-base-readme", "path": "../全球热门与获奖影视剧本知识库MD版/README.md" },
+    { "name": "knowledge-catalog-spreadsheet", "path": "../全球热门与获奖影视剧本知识库MD版/知识库目录.xlsx" }
+  ]
+}

@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+.workbench/
+*.tmp
+*.bak
+.DS_Store
+Thumbs.db
+dist/
+.pytest_cache/
+.idea/
+.vscode/

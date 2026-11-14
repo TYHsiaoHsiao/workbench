@@ -1,0 +1,68 @@
+"""C 子系统：风格服务（注册表 / 风格卡 / 工具适配 / 06-08 挂载）。"""
+from __future__ import annotations
+
+from .adapters import (
+    CAMERA_MOVES,
+    CONTINUITY_WORDS,
+    IMAGE_TOOLS,
+    NEGATIVE_WORDS,
+    TOOL_ALIASES,
+    TOOL_IDS,
+    TOOL_SPECS,
+    VIDEO_TOOLS,
+    AdapterError,
+    combined_prompt,
+    normalize_tool,
+    palette_summary,
+    stage_tools,
+    style_block,
+    tool_label,
+    validate_prompt,
+)
+from .registry import (
+    DEFAULT_REGISTRY,
+    STYLE_REGISTRY_SCHEMA,
+    StyleRegistry,
+    StyleRegistryError,
+    load_style_registry,
+)
+from .service import (
+    STYLE_CARD_DIR,
+    STYLE_PROFILE_SCHEMA,
+    StyleService,
+    StyleServiceError,
+    apply_profile,
+    build_profile,
+    inject_prompt,
+)
+
+__all__ = [
+    "CAMERA_MOVES",
+    "CONTINUITY_WORDS",
+    "IMAGE_TOOLS",
+    "NEGATIVE_WORDS",
+    "TOOL_ALIASES",
+    "TOOL_IDS",
+    "TOOL_SPECS",
+    "VIDEO_TOOLS",
+    "AdapterError",
+    "combined_prompt",
+    "normalize_tool",
+    "palette_summary",
+    "stage_tools",
+    "style_block",
+    "tool_label",
+    "validate_prompt",
+    "DEFAULT_REGISTRY",
+    "STYLE_REGISTRY_SCHEMA",
+    "StyleRegistry",
+    "StyleRegistryError",
+    "load_style_registry",
+    "STYLE_CARD_DIR",
+    "STYLE_PROFILE_SCHEMA",
+    "StyleService",
+    "StyleServiceError",
+    "apply_profile",
+    "build_profile",
+    "inject_prompt",
+]

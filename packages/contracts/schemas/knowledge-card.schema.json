@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "knowledge-card.schema.json",
+  "title": "Knowledge Card v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "card_id",
+    "project",
+    "stage",
+    "query_profile",
+    "evidence",
+    "candidates",
+    "selected_documents",
+    "deep_read_selected",
+    "confirmed",
+    "scope"
+  ],
+  "properties": {
+    "contract_version": { "const": "1.0" },
+    "card_id": { "type": "string", "minLength": 1 },
+    "project": { "type": "string", "minLength": 1 },
+    "stage": { "type": "string", "pattern": "^0[1-8]$" },
+    "query_profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["problem", "queries"],
+      "properties": {
+        "problem": { "type": "string", "minLength": 1 },
+        "queries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["lane", "query"],
+            "properties": {
+              "lane": {
+                "type": "string",
+                "enum": ["screenplay", "method_book", "cultural_fact", "style_reference"]
+              },
+              "query": { "type": "string", "minLength": 1 },
+              "weight": { "type": "number", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "page", "snippet", "hit"],
+        "properties": {
+          "path": { "type": "string", "minLength": 1 },
+          "page": { "type": "string", "minLength": 1 },
+          "snippet": { "type": "string", "minLength": 1 },
+          "hit": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "selected_documents": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "deep_read_selected": { "type": "boolean" },
+    "confirmed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["by", "at"],
+      "properties": {
+        "by": { "type": "string" },
+        "at": { "type": "string" }
+      }
+    },
+    "scope": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": ["story_01_05", "image_06", "performance_07", "camera_08", "full"]
+      }
+    }
+  }
+}

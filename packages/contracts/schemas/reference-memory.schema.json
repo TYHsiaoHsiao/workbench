@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "reference-memory.schema.json",
+  "title": "Reference Memory v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "entries"],
+  "properties": {
+    "contract_version": { "const": "1.0" },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "status",
+          "source",
+          "type",
+          "local_path",
+          "page_hits",
+          "method",
+          "scope",
+          "stage",
+          "binding_facts",
+          "forbidden",
+          "confirmed",
+          "change_log"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^参考方法[0-9]{3}$" },
+          "status": { "type": "string", "enum": ["enabled", "disabled", "removed"] },
+          "source": { "type": "string", "minLength": 1 },
+          "type": {
+            "type": "string",
+            "enum": ["screenplay", "method_book", "cultural_fact", "style_reference", "other"]
+          },
+          "local_path": { "type": "string", "minLength": 1 },
+          "page_hits": { "type": "string", "minLength": 1 },
+          "method": { "type": "string", "minLength": 1 },
+          "scope": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "enum": ["story_01_05", "image_06", "performance_07", "camera_08", "full"]
+            }
+          },
+          "stage": { "type": "string", "pattern": "^0[1-8]$" },
+          "binding_facts": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "forbidden": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "confirmed": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["by", "at"],
+            "properties": {
+              "by": { "type": "string" },
+              "at": { "type": "string" }
+            }
+          },
+          "change_log": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["at", "action", "note"],
+              "properties": {
+                "at": { "type": "string" },
+                "action": {
+                  "type": "string",
+                  "enum": ["created", "enabled", "disabled", "removed", "updated", "replaced", "reverted"]
+                },
+                "note": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

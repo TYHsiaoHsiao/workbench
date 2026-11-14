@@ -1,0 +1,211 @@
+{
+  "M1_install_success": {
+    "ok": true,
+    "skills": 10,
+    "dry_run": true,
+    "source": "D:\\AI影视工作台\\10Skill剧本到视频提示词本地知识库自动化工作流\\01-Codex完整工程版\\skills"
+  },
+  "M2_evidence_coverage": {
+    "ok": true,
+    "pilot_a_artifacts": [
+      "01",
+      "02",
+      "04",
+      "05",
+      "06",
+      "07",
+      "08"
+    ],
+    "pilot_b_artifacts": [
+      "01",
+      "02",
+      "04",
+      "05"
+    ],
+    "executed_stages": 11,
+    "expected_stages": 11
+  },
+  "M3_gate_first_pass": {
+    "rate": 1.0,
+    "attempts": 18,
+    "first_attempt": 18,
+    "negative_checks": [
+      {
+        "name": "waive_hard_gate",
+        "blocked": true
+      },
+      {
+        "name": "advance_with_pending_gate",
+        "blocked": true
+      },
+      {
+        "name": "waive_hard_gate",
+        "blocked": true
+      },
+      {
+        "name": "advance_with_pending_gate",
+        "blocked": true
+      }
+    ]
+  },
+  "M4_manual_steps": {
+    "avg_per_stage": 1.64,
+    "target_max": 4,
+    "values": [
+      2,
+      1,
+      1,
+      2,
+      1,
+      1,
+      3,
+      3,
+      1,
+      1,
+      2
+    ]
+  },
+  "M5_reference_reuse": {
+    "rate": 1.0,
+    "pilot_a": {
+      "stage": "05",
+      "loaded": 2,
+      "applicable": 2
+    },
+    "pilot_b": {
+      "stage": "05",
+      "loaded": 1,
+      "applicable": 1
+    }
+  },
+  "M6_style_injection": {
+    "rate": 1.0,
+    "injections": [
+      {
+        "stage": "06",
+        "tool": "mj",
+        "sha": "2468211997759eada9e7dd2a79ba4a3f46b6ef3c66144a2a723d5248858232f4",
+        "markers": [
+          "【风格卡】",
+          "色彩比例",
+          "光线",
+          "构图/镜头",
+          "材质与色彩",
+          "禁止/避免",
+          "本工具适配"
+        ]
+      },
+      {
+        "stage": "08",
+        "tool": "seedance_2_0",
+        "sha": "ecb8f1cc0cf46f368dcc6e0863ffe04dd0dd4f3ea7f6fb832ed11d0b7ef56955",
+        "markers": [
+          "【风格卡】",
+          "色彩比例",
+          "光线",
+          "构图/镜头",
+          "材质与色彩",
+          "禁止/避免",
+          "本工具适配"
+        ]
+      }
+    ],
+    "default_not_injected": true
+  },
+  "M7_brand": {
+    "ok": true,
+    "hits": 0,
+    "scanned": 179,
+    "sample_blocked": true
+  },
+  "M8_drift": {
+    "ok": true,
+    "mismatches": [],
+    "checked": 3
+  },
+  "M9_defects": {
+    "open_p0": 0,
+    "open_p1": 0,
+    "note": "迭代内发现并修复的缺陷均已回归验证"
+  },
+  "E2E": {
+    "E2E-01": "pass（安装计划 10 个 Skill，dry-run）",
+    "E2E-02": "skip（暂无 macOS 环境，已知局限）",
+    "E2E-03": "pass（试点 A 01-08，08 两步）",
+    "E2E-04": "pass（试点 B 接管报告 + 未改稿）",
+    "E2E-05": "pass（参考记忆 05 自动加载）",
+    "E2E-06": "pass（06/08 注入含全部风格字段）",
+    "E2E-07": "pass（修订标记 06/07/08）",
+    "E2E-08": "pass（迁移 + 规则升级 + 参考记忆保留）",
+    "E2E-09": "pass（守卫样本命中 + 正常内容零误报）",
+    "E2E-10": "pass（导出 ZIP + 还原后状态一致）"
+  },
+  "migration": {
+    "ok": true,
+    "migrated_stage": "01",
+    "entries": 1,
+    "upgrade_ok": true,
+    "report": "D:\\AI影视工作台\\.pilot-legacy\\旧项目\\00_project\\state.json",
+    "rollback": {
+      "ok": true,
+      "backup": "upgrade-20261114-135930",
+      "restored": [
+        {
+          "file": "AGENTS.md",
+          "sha256_prefix": "50875cfddda0",
+          "identical_to_backup": true,
+          "backup_differs_from_previous": true
+        },
+        {
+          "file": "00_project/project-status.md",
+          "sha256_prefix": "e9cc7b95b039",
+          "identical_to_backup": true,
+          "backup_differs_from_previous": false
+        }
+      ],
+      "note": "还原后与备份字节一致（演练用）"
+    }
+  },
+  "rollback_drill": {
+    "ok": true,
+    "backup": "upgrade-20261114-135930",
+    "restored": [
+      {
+        "file": "AGENTS.md",
+        "sha256_prefix": "50875cfddda0",
+        "identical_to_backup": true,
+        "backup_differs_from_previous": true
+      },
+      {
+        "file": "00_project/project-status.md",
+        "sha256_prefix": "e9cc7b95b039",
+        "identical_to_backup": true,
+        "backup_differs_from_previous": false
+      }
+    ],
+    "note": "还原后与备份字节一致（演练用）"
+  },
+  "export_restore": {
+    "export_files": 19,
+    "restore_files": 19,
+    "restored_stage": "done",
+    "state_version_match": true
+  },
+  "author_script": {
+    "sha256_before": "57db912b1036f5d2d030b684d443a60eb1edb63d1906868e43efa189c7b4bcba",
+    "sha256_after": "57db912b1036f5d2d030b684d443a60eb1edb63d1906868e43efa189c7b4bcba",
+    "unchanged": true
+  },
+  "revision": {
+    "stale_downstream": [
+      "06",
+      "07",
+      "08"
+    ],
+    "expected": [
+      "06",
+      "07",
+      "08"
+    ]
+  }
+}

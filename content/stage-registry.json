@@ -1,0 +1,207 @@
+{
+  "contract_version": "1.0",
+  "knowledge_bridge": {
+    "skill": "film-knowledge-bridge",
+    "is_stage": false,
+    "default": "off",
+    "trigger_commands": [
+      "调用本地知识库",
+      "查本地剧本",
+      "匹配参考剧本",
+      "只查方法书",
+      "知识库B",
+      "知识库C"
+    ],
+    "maintenance_commands": [
+      "配置本地知识库",
+      "更新本地知识库",
+      "整理新剧本并更新知识库"
+    ]
+  },
+  "stages": [
+    {
+      "id": "01",
+      "name": "概念锚定",
+      "skill": "film-synopsis",
+      "optional": false,
+      "inputs": ["00_project/state.json", "00_project/brief.md"],
+      "outputs": ["01_story/synopsis.md"],
+      "gates": [
+        {
+          "id": "positioning_menu",
+          "type": "hard",
+          "description": "逐字显示项目定位 A/B/C/D 菜单并等待用户确认，不得替换成其他问卷"
+        },
+        {
+          "id": "sub_option_confirm",
+          "type": "hard",
+          "description": "B/C/D 子选项必须继续执行并等待确认"
+        }
+      ],
+      "knowledge_mount": { "lane": "story_method", "default": "off", "scope": "story_01_05" },
+      "style_mount": { "enabled": false },
+      "model_options": [],
+      "state_fields": ["stage", "version", "gates", "references"],
+      "downstream": ["02", "03", "04", "05", "06", "07", "08"]
+    },
+    {
+      "id": "02",
+      "name": "角色圣经",
+      "skill": "film-characters",
+      "optional": false,
+      "inputs": ["01_story/synopsis.md"],
+      "outputs": ["01_story/characters.md"],
+      "gates": [
+        {
+          "id": "upstream_confirmed",
+          "type": "hard",
+          "description": "01 概念锚定已确认后才可进入"
+        }
+      ],
+      "knowledge_mount": { "lane": "story_method", "default": "off", "scope": "story_01_05" },
+      "style_mount": { "enabled": false },
+      "model_options": [],
+      "state_fields": ["stage", "version", "gates", "references"],
+      "downstream": ["04", "05", "06", "07", "08"]
+    },
+    {
+      "id": "03",
+      "name": "世界观",
+      "skill": "film-worldbuilding",
+      "optional": true,
+      "inputs": ["01_story/synopsis.md", "01_story/characters.md"],
+      "outputs": ["01_story/worldbuilding.md"],
+      "gates": [
+        {
+          "id": "upstream_confirmed",
+          "type": "hard",
+          "description": "01 与 02 已确认后才可进入"
+        }
+      ],
+      "knowledge_mount": { "lane": "story_method", "default": "off", "scope": "story_01_05" },
+      "style_mount": { "enabled": false },
+      "model_options": [],
+      "state_fields": ["stage", "version", "gates", "references"],
+      "downstream": ["04", "05", "06", "08"]
+    },
+    {
+      "id": "04",
+      "name": "分场大纲",
+      "skill": "film-treatment",
+      "optional": false,
+      "inputs": ["01_story/synopsis.md", "01_story/characters.md", "01_story/worldbuilding.md"],
+      "outputs": ["01_story/treatment.md"],
+      "gates": [
+        {
+          "id": "duration_budget",
+          "type": "hard",
+          "description": "产出初步时长预算，进入 05 前确认"
+        }
+      ],
+      "knowledge_mount": { "lane": "story_method", "default": "off", "scope": "story_01_05" },
+      "style_mount": { "enabled": false },
+      "model_options": [],
+      "state_fields": ["stage", "version", "gates", "references", "duration_budget"],
+      "downstream": ["05", "06", "07", "08"]
+    },
+    {
+      "id": "05",
+      "name": "剧本深度融合",
+      "skill": "film-screenplay",
+      "optional": false,
+      "inputs": ["01_story/synopsis.md", "01_story/characters.md", "01_story/treatment.md"],
+      "outputs": ["02_script/screenplay.md"],
+      "gates": [
+        {
+          "id": "upstream_integration",
+          "type": "hard",
+          "description": "先整合最新概念锚定、角色、世界观与分场，再使用参考方法"
+        },
+        {
+          "id": "scene_lock",
+          "type": "hard",
+          "description": "场次硬边界与逐场锁定表确认后才可扩写"
+        }
+      ],
+      "knowledge_mount": { "lane": "story_method", "default": "off", "scope": "story_01_05" },
+      "style_mount": { "enabled": false },
+      "model_options": [],
+      "state_fields": ["stage", "version", "gates", "references", "scene_lock"],
+      "downstream": ["06", "07", "08"]
+    },
+    {
+      "id": "06",
+      "name": "图像资产",
+      "skill": "film-lira-assets",
+      "optional": false,
+      "inputs": ["02_script/screenplay.md", "00_project/state.json"],
+      "outputs": ["03_assets/assets-v01.md"],
+      "gates": [
+        {
+          "id": "production_data",
+          "type": "hard",
+          "description": "进入前必须具备角色状态、场景与道具资料，缺则从作者剧本提取"
+        },
+        {
+          "id": "style_card_confirm",
+          "type": "soft",
+          "description": "调用风格服务时须先展示风格卡并等待确认"
+        }
+      ],
+      "knowledge_mount": { "lane": "visual_research", "default": "off", "scope": "image_06" },
+      "style_mount": { "enabled": true, "mode": "explicit" },
+      "model_options": [],
+      "state_fields": ["stage", "version", "gates", "style_profile"],
+      "downstream": ["07", "08"]
+    },
+    {
+      "id": "07",
+      "name": "表演",
+      "skill": "film-acting",
+      "optional": false,
+      "inputs": ["02_script/screenplay.md", "05_shots/shot-plan-v01.md"],
+      "outputs": ["04_performance/acting-v01.md"],
+      "gates": [
+        {
+          "id": "upstream_confirmed",
+          "type": "hard",
+          "description": "剧本与镜头清单已确认后才可进入"
+        }
+      ],
+      "knowledge_mount": { "lane": "performance_method", "default": "off", "scope": "performance_07" },
+      "style_mount": { "enabled": false },
+      "model_options": [],
+      "state_fields": ["stage", "version", "gates", "references"],
+      "downstream": ["08"]
+    },
+    {
+      "id": "08",
+      "name": "视频提示词",
+      "skill": "film-cinedance",
+      "optional": false,
+      "inputs": ["02_script/screenplay.md", "03_assets/assets-v01.md", "04_performance/acting-v01.md"],
+      "outputs": [
+        "05_shots/shot-plan-v01.md",
+        "05_shots/continuity-ledger-v01.md",
+        "06_prompts/seedance-v01.md"
+      ],
+      "gates": [
+        {
+          "id": "shot_plan_gate",
+          "type": "hard",
+          "description": "先把整场戏拆成可执行镜头清单并等待确认，不得直接写全部提示词"
+        },
+        {
+          "id": "model_choice",
+          "type": "hard",
+          "description": "确认后只问一次：A Seedance 2.0 / B MiniMax H3 / C 双版本"
+        }
+      ],
+      "knowledge_mount": { "lane": "camera_method", "default": "off", "scope": "camera_08" },
+      "style_mount": { "enabled": true, "mode": "explicit" },
+      "model_options": ["seedance_2_0", "minimax_h3", "dual"],
+      "state_fields": ["stage", "version", "gates", "model_choice", "shot_plan_status"],
+      "downstream": []
+    }
+  ]
+}

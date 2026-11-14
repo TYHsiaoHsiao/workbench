@@ -1,0 +1,95 @@
+{
+  "project": "试点B-旧剧本接管",
+  "entry": "B",
+  "steps": [],
+  "gates": [
+    {
+      "gate": "screenplay_intake",
+      "status": "passed",
+      "first_attempt": true
+    },
+    {
+      "gate": "positioning_menu",
+      "status": "passed",
+      "first_attempt": true
+    },
+    {
+      "gate": "sub_option_confirm",
+      "status": "passed",
+      "first_attempt": true
+    },
+    {
+      "gate": "upstream_confirmed",
+      "status": "passed",
+      "first_attempt": true
+    },
+    {
+      "gate": "duration_budget",
+      "status": "passed",
+      "first_attempt": true
+    },
+    {
+      "gate": "upstream_integration",
+      "status": "passed",
+      "first_attempt": true
+    },
+    {
+      "gate": "scene_lock",
+      "status": "passed",
+      "first_attempt": true
+    }
+  ],
+  "transitions": [
+    {
+      "from": "v01",
+      "to": "v02",
+      "next": "02"
+    },
+    {
+      "from": "v02",
+      "to": "v03",
+      "next": "04"
+    },
+    {
+      "from": "v03",
+      "to": "v04",
+      "next": "05"
+    }
+  ],
+  "negative_checks": [
+    {
+      "name": "waive_hard_gate",
+      "blocked": true
+    },
+    {
+      "name": "advance_with_pending_gate",
+      "blocked": true
+    }
+  ],
+  "user_steps": {
+    "01": 3,
+    "02": 1,
+    "04": 1,
+    "05": 2
+  },
+  "reference_load": {
+    "stage": "05",
+    "loaded": 1,
+    "applicable": 1
+  },
+  "author_script_locked": {
+    "sha256_before": "57db912b1036f5d2d030b684d443a60eb1edb63d1906868e43efa189c7b4bcba",
+    "sha256_after": "57db912b1036f5d2d030b684d443a60eb1edb63d1906868e43efa189c7b4bcba",
+    "unchanged": true
+  },
+  "final_state": {
+    "stage": "05",
+    "version": "v04",
+    "stage_artifacts": {
+      "01": "01_story/synopsis.md",
+      "02": "01_story/characters.md",
+      "04": "01_story/treatment.md",
+      "05": "02_script/production-breakdown-v01.md"
+    }
+  }
+}

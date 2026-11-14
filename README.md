@@ -1,0 +1,131 @@
+# AI 影视工作台（workbench）
+
+把一个「剧本到视频提示词」的创作流程，从一堆提示词与 Skill 文件，升级成可执行、可校验、可交接的工作台。
+
+- **8 个创作阶段**（01 概念锚定 → 08 视频提示词）由路由表统一描述；
+- **知识服务**与**风格服务**作为可选挂载点，默认关闭、按需启用；
+- **契约先行**：阶段产物、参考记忆、知识卡、风格画像、项目状态全部有 JSON Schema；
+- **品牌守卫**：仓库与工作区零品牌残留，CI 阻断回归。
+
+当前版本 `1.0.0`：迭代 0（地基）、迭代 1a（B 知识服务 PoC）、迭代 2 方案 A（有限正文回退）、迭代 2.1（精度修订）、迭代 1b（A 编排硬化）、迭代 3（C 风格服务）与迭代 4（试点与固化）已完成。两个试点：从零到 08（`试点A-雨夜回声`）、既有剧本到 05（`试点B-旧剧本接管`），指标与证据见 `docs/pilots/`。
+
+## 目录结构
+
+```text
+workbench/
+  workbench.py               # CLI 入口
+  VERSION                    # 版本号
+  manifest.json              # 发行文件清单（scripts/build_manifest.py 生成）
+  content/
+    stage-registry.json      # 阶段注册表 v1：8 阶段 + 知识桥元数据
+    intent-rules.json        # 意图路由规则（维护口令隔离 / 知识库 / 阶段 / 入口 / 修订）
+    style-registry.json      # 风格注册表 v1：200 位导演色卡元数据 + 质量分级（只读引用外部风格包）
+  config/
+    brand-guard.json         # 品牌守卫配置（目标、跳过、允许例外）
+    brand-allowlist.json     # 允许例外清单（第三方语料）
+  packages/
+    contracts/               # JSON Schema + 子集校验器
+    core_router/             # 注册表、状态构造、门禁引擎、意图路由、项目初始化、旧项目迁移
+    brand_guard/             # 禁用词扫描与报告
+    cli/                     # 命令行
+    knowledge_service/       # 只读知识适配、元数据+有限正文回退、证据质量评分、行级证据链、知识卡
+    style_service/           # 风格注册表解析、风格卡构建、8 工具适配、06/08 注入与记录
+    installer/               # Skill 安装/升级：备份、幂等、回滚、配置保留
+  tests/                     # 149 个 unittest 用例
+  scripts/                   # run_ci.py / build_manifest.py / pilot_matrix.py / 平台包装
+  docs/                      # 架构、品牌守卫、命令卡、故障排查、迁移说明、迭代报告、pilots/
+  .github/workflows/ci.yml   # GitHub Actions
+```
+
+## 快速开始
+
+要求：Python >= 3.10，无第三方运行时依赖。
+
+```bash
+python workbench.py version          # 版本与契约版本
+python workbench.py doctor           # 环境与仓库自检（失败退出码 3）
+python workbench.py check            # 校验阶段注册表
+python workbench.py brand-guard      # 扫描品牌禁用词（命中退出码 1）
+python workbench.py init 我的短片 --entry A   # 创建项目骨架（状态卡 v2）
+python workbench.py route "只做CINEDANCE"     # 意图路由（维护口令优先隔离）
+python workbench.py gate list --project 我的短片        # 查看当前阶段门禁
+python workbench.py gate pass positioning_menu --project 我的短片
+python workbench.py next --project 我的短片             # 门禁未通过会被拒绝（退出码 1）
+python workbench.py install --source ../skills --dry-run # 安装/升级 Skill（备份+回滚）
+python workbench.py migrate --project 旧项目            # 旧项目迁移到状态卡 v2
+python workbench.py upgrade --project 旧项目            # 旧项目规则升级（备份后更新）
+python workbench.py knowledge probe           # 探测本地知识库（只读）
+python workbench.py knowledge search --project 我的短片 --stage 05 \
+  --problem "当前阶段的问题" --query "screenplay:悬疑 反转" \
+  --fallback-files 200 --fallback-bytes 262144 \
+  --out 我的短片/00_project/knowledge-cards/05-candidates.json
+python workbench.py style list --json                    # 风格注册表 200 条（可 --category 01 --quality A）
+python workbench.py style apply 001 --project 我的短片   # 生成风格卡并更新 state.style
+python workbench.py style inject 001 --project 我的短片 --stage 06 --tool mj --prompt-file p06.txt
+python workbench.py reference list --project 我的短片 --stage 05        # 当前阶段自动加载的参考方法
+python workbench.py export --project 我的短片          # 导出项目 ZIP（含元数据）
+python workbench.py restore 归档.zip --dest 目标目录    # 还原导出包
+python workbench.py validate 文件.json --schema state.schema.json
+```
+
+- 项目默认创建在「文档目录/AI 影视工作台/projects/<名称>/」，可用 `--project-root` 或环境变量 `AI_FILM_PROJECTS_ROOT` 覆盖；包含 `00_project/`（状态、参考记忆、历史、知识卡、风格卡）、`00_inbox/`、`01_story/` … `06_prompts/`。
+- 项目状态以 `00_project/state.json` 为唯一事实来源，必须通过 `state.schema.json`（v2 字段）校验；门禁与修订日志同文件持久化。
+- 本地 CI：`python scripts/run_ci.py`（编译 → 149 项测试 → doctor → brand-guard）。
+- 知识服务只读现有索引，不改知识库本体；先做元数据候选，召回不足时按预算做有限正文回退；只有路径/行号/命中词齐全才输出 `ok` 知识卡。回退可用 `--no-fallback` 关闭、用 `--fallback-files` / `--fallback-bytes` 调预算。证据按质量评分排序，并过滤「反转身」等动作误命中；高置信证据足够时会丢弃纯字面低置信证据（统计见 `report.evidence_quality`）。
+- 风格服务只读引用外部 200 位导演色卡包（`scripts/build_style_registry.py` 生成注册表）；风格默认不注入：先 `style apply` 写风格卡与 `state.style`，再 `style inject` 做结构校验并写注入记录。校验只针对用户正文，风格卡作为提示词前缀；06 用图像工具、08 用视频工具，其他阶段不挂载。
+- 生成发行清单：`python scripts/build_manifest.py`。
+- 生成发行包：`python scripts/build_release.py`（输出 `dist/workbench-<版本>.zip` 与 SHA-256）。
+
+## 契约一览（contracts 1.0）
+
+| 契约 | 文件 | 作用 |
+|---|---|---|
+| 项目状态 | `state.schema.json` | 入口/模式/阶段/版本/门禁/参考编号（v2 扩展：知识桥、风格、修订日志） |
+| 跨阶段参考记忆 | `reference-memory.schema.json` | 参考方法条目与变更留痕 |
+| 知识卡 | `knowledge-card.schema.json` | 检索画像、证据链、确认状态 |
+| 风格画像 | `style-profile.schema.json` | 导演色卡、适配器、质量等级 |
+| 风格注册表 | `style-registry.schema.json` | 200 位导演色卡元数据、质量分级与问题清单 |
+| 阶段产物 | `stage-artifact.schema.json` | 产物版本、哈希、门禁、确认状态 |
+| 阶段注册表 | `stage-registry.schema.json` | 8 阶段输入输出、门禁、挂载点 |
+
+## 迭代状态
+
+| 迭代 | 范围 | 状态 |
+|---|---|---|
+| 0 | 骨架、契约、注册表、品牌守卫、CLI、CI | 已完成（0.1.0） |
+| 1a | B 知识服务 PoC：只读适配现库、证据链、知识卡、真实库实跑 | 已完成（0.2.0） |
+| 2 | B 知识接入：召回改进方案 A——有限正文回退（只读、预算可配） | 已完成（0.3.0） |
+| 2.1 | B 知识接入精度修订：动作误命中过滤、结构语境/叙事搭配/多词共现加权、低置信证据丢弃 | 已完成（0.3.1） |
+| 1b | A 编排硬化：安装器、初始化器、路由、门禁、状态卡 v2、迁移 | 已完成（0.4.0） |
+| 3 | C 风格服务：200 导演色卡 → 风格画像 → 多模型提示词适配与 06/08 注入记录 | 已完成（0.5.0） |
+| 4 | 试点项目与发布：试点 A（从零到 08）、试点 B（B 入口到 05）、M1–M9 复核、文档定稿、1.0.0 发行包与回滚演练 | 已完成（1.0.0） |
+
+## 原则
+
+- **单阶段推进**：任一时刻只执行一个阶段，不跨阶段串写。
+- **确认点前置**：入口、定位菜单、镜头规划、风格卡、知识卡都必须先展示再等待确认。
+- **知识桥不是阶段**：默认关闭，只有用户明确请求才检索；没有本地路径/页码/命中词不得声称命中。
+- **修订留版本**：先写新版本，再让下游读取最新已确认版本；上游变更必须标记受影响下游。
+- **品牌中性**：所有产出与文档不得出现历史品牌字样；例外仅限第三方语料本体（见 `docs/brand-guard.md`）。
+
+## 文档
+
+- `docs/quick-start.md`：第一次拿到发行包的 10 分钟上手（自检/建项目/阶段推进/知识/风格）。
+- `docs/release-notes-1.0.0.md`：1.0.0 发行说明（能力、验证、限制、升级与校验）。
+- `docs/architecture.md`：分层、数据流、阶段加载顺序、与现有 Skill 子系统的映射。
+- `docs/command-card.md`：全部命令速查（环境、项目、迁移、安装、知识、风格、契约）。
+- `docs/troubleshooting.md`：故障排查（环境、门禁、风格、知识、编码、迁移、导出）。
+- `docs/knowledge-service.md`：知识服务接口、只读保证与已知局限。
+- `docs/knowledge-poc-report.md`：迭代 1a PoC 报告（探测、实跑证据、召回率决策）。
+- `docs/iteration-2-recall-report.md`：迭代 2 方案 A 报告（有限正文回退、预算、真实库召回、精度观察与 0.3.1 精度修订实测）。
+- `docs/iteration-1b-report.md`：迭代 1b 报告（安装器/初始化器/意图路由/门禁/状态卡 v2/迁移与 E2E 证据）。
+- `docs/style-service.md`：风格服务接口、工具适配矩阵、注入记录与已知局限。
+- `docs/style-registry-report.md`：风格包构建报告（质量分级与问题清单）。
+- `docs/iteration-3-report.md`：迭代 3 报告（C 风格服务 0.5.0，注册表/风格卡/适配器/注入 E2E）。
+- `docs/migration.md`：旧项目迁移与规则升级说明（字段映射、备份、回滚、检查清单）。
+- `docs/iteration-4-report.md`：迭代 4 报告（试点 A/B、M1–M9、E2E-01~10、发布检查、回滚演练）。
+- `docs/pilots/`：试点日志与指标（`pilot-a.json`、`pilot-b.json`、`metrics.json`）。
+- `docs/pilot-c-trial-log-template.md`：试点 C 真实项目试用记录表（每日 4 指标 + 每周汇总）。
+- `docs/brand-guard.md`：禁用词表、归一化、例外与 CI 阻断规则。
+- `docs/iteration-0-report.md`：迭代 0 交付与验收记录。
+- `AI影视工作台开发PRD.md`（工作区根）：完整产品需求与迭代计划。
