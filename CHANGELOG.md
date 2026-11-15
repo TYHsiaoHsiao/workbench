@@ -1,5 +1,13 @@
 # 变更日志
 
+## [2.9.0] - 2026-11-15 — 知识库索引维护：按契约重建/增量索引与 FTS5 检索（M21）
+
+- 新增 `knowledge-index.schema.json`（索引元数据契约 v0.1：index_id/构建模式/来源/引擎/计数）。
+- 新增 `packages/knowledge_service/index_builder.py`：Markdown 分块（标题段落 + 900 字切分/80 重叠）、SQLite FTS5 trigram 索引、全量/增量构建（按路径+mtime 复用）、`verify` 一致性校验、`search`（≥3 字 FTS + bm25/snippet，短查询 LIKE 回退）。
+- CLI 新增 `workbench.py index build/info/verify/search`（默认输出 `index/`，可用 `--out` 覆盖；`--incremental` 增量）。
+- `doctor` 增加索引检查（knowledge-index 契约 + FTS5 trigram 探针），共 10 项；`build_manifest.py`/`build_release.py` 排除 `index/`，`.gitignore` 同步。
+- 新增 14 项测试（合计 401 项）；真实知识库子目录（61 文档 / 10,542 分块）构建、检索与增量重建实测通过；向后兼容，无破坏性变更。
+
 ## [2.8.0] - 2026-11-15 — 跨平台 CI、覆盖率与可复现构建门禁、Web 快照回滚（M20）
 
 - 跨平台 CI：重写 `.github/workflows/ci.yml`（push/pull_request/workflow_dispatch；ubuntu/windows/macos × Python 3.11/3.12 矩阵；run_ci → build_release → package_smoke → upload-artifact）。

@@ -45,7 +45,7 @@ python scripts/package_smoke.py              # 发行包冒烟
 
 - 测试对象：`packages/`（`workbench.py` 为 6 行入口，不计入，避免 0% 稀释）。
 - 口径：AST 可执行行（跳过 docstring、纯 `import`），运行 `tests/` 时用 `sys.monitoring`（Python 3.12+）或 `trace`（旧版本）统计命中行。
-- 实测（2.8.0）：**76.37%（5590/7320 行）**，CI 门禁 `--min 75`。
+- 实测（2.9.0）：**76.92%（5897/7666 行）**，CI 门禁 `--min 75`。
 - 与 PRD 目标的差距：PRD §7 要求测试覆盖率 ≥80%，当前低 3.6pp；提升策略见 `docs/requirements-traceability.md` 与 §9.25。新增代码必须带测试，覆盖率只增不减。
 
 ## 5. 可复现构建

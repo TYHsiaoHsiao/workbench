@@ -1,4 +1,4 @@
-# 命令卡（v2.8.0）
+# 命令卡（v2.9.0）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -8,7 +8,7 @@
 | 命令 | 作用 |
 |---|---|
 | `python workbench.py version` | 版本号 + 契约版本 |
-| `python workbench.py doctor` | 9 项自检：Python、目录骨架、15 份契约、阶段注册表、意图规则、风格注册表、flow（17 节点/4 模板/6 契约）、generate（4 provider）、品牌词表 |
+| `python workbench.py doctor` | 10 项自检：Python、目录骨架、16 份契约、阶段注册表、意图规则、风格注册表、flow（17 节点/4 模板/6 契约）、generate（4 provider）、index（knowledge-index 契约 + FTS5 trigram 可用）、品牌词表 |
 | `python workbench.py check` | 校验阶段注册表；`--project <名或路径>` 同时校验项目 `state.json` 与参考记忆 |
 | `python workbench.py check --project 项目名 --content` | 跨阶段内容一致性：风格卡/知识卡/产物文件存在性、`confirmed_references` 子集、treatment↔shot-plan 时长、下游过期提示（1.0.1） |
 | `python workbench.py brand-guard` | 品牌禁用词扫描；`--json` 输出结构化报告 |
@@ -158,7 +158,7 @@ python workbench.py flow run --project 雨夜回声 --graph flow-main --dry-run
 | `python scripts/run_ci.py` | 本地 CI：编译 → 文档链接 → FR 映射 → 测试 → 覆盖率≥75% → doctor → 冷启动基准 → 品牌守卫 → 可复现构建 |
 | `python scripts/check_doc_links.py [--json]` | 文档链接检查：Markdown 链接与行内代码中的仓库内路径必须存在 |
 | `python scripts/check_fr_mapping.py [--json]` | FR 追溯映射检查：FR-01–FR-22 全覆盖、无重复/非预期 ID，并与 PRD 头衔交叉校验（M19） |
-| `python scripts/coverage_check.py [--min 75] [--json] [--out <文件>]` | 零依赖行覆盖率（`packages/`，跳过 docstring/import；2.8.0 实测 76.37%，CI `--min 75`） |
+| `python scripts/coverage_check.py [--min 75] [--json] [--out <文件>]` | 零依赖行覆盖率（`packages/`，跳过 docstring/import；2.9.0 实测 76.92%，CI `--min 75`） |
 | `python scripts/repro_check.py [--json]` | 可复现构建：两次构建与 `.sha256` 三方一致（M20） |
 | `python scripts/bench.py [--runs 5] [--max-cold-start 1.0] [--enforce] [--json]` | NFR 基准：CLI 冷启动/doctor 耗时中位数（`--enforce` 超阈值退出 1） |
 | `python scripts/build_manifest.py` | 生成发行清单 `manifest.json`（文件级 SHA256） |
@@ -179,6 +179,15 @@ python workbench.py flow run --project 雨夜回声 --graph flow-main --dry-run
 | 命令/文件 | 作用 |
 |---|---|
 | `.github/workflows/ci.yml` | GitHub Actions：ubuntu/windows/macos × Python 3.11/3.12，跑 run_ci → build_release → package_smoke → 上传 artifact |
-| `python scripts/coverage_check.py [--min 75] [--json]` | 零依赖行覆盖率（`packages/`）；2.8.0 实测 76.37% |
+| `python scripts/coverage_check.py [--min 75] [--json]` | 零依赖行覆盖率（`packages/`）；2.9.0 实测 76.92% |
 | `python scripts/repro_check.py [--json]` | 可复现构建：两次构建与 `.sha256` 三方一致 |
 | `docs/ci.md` | 门禁清单/矩阵/覆盖率策略/排障 |
+
+## 13. 知识库索引维护（M21）
+
+| 命令 | 作用 |
+|---|---|
+| `python workbench.py index build --source <目录> [--out index] [--incremental] [--index-id ID] [--json]` | 按契约重建索引（默认全量；`--incremental` 复用未变文件、重索引变更、删除消失文档） |
+| `python workbench.py index info [--out index] [--json]` | 索引信息（index_id/模式/来源/文档与分块数/更新时间） |
+| `python workbench.py index verify [--out index] [--json]` | 校验元数据契约、库计数与 FTS 可查询性 |
+| `python workbench.py index search --query <词> [--limit 8] [--out index] [--json]` | 全文检索：≥3 字走 FTS5 trigram（bm25+snippet），短词自动 LIKE 回退 |

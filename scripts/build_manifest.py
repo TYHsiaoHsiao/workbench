@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-SKIP_DIRS = {".git", ".workbench", "__pycache__", ".idea", ".vscode", "dist", ".pytest_cache"}
+SKIP_DIRS = {".git", ".workbench", "__pycache__", ".idea", ".vscode", "dist", ".pytest_cache", "index"}
 SKIP_FILES = {"manifest.json"}
 
 

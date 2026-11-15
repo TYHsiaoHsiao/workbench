@@ -7,6 +7,7 @@ import json
 import os
 import re
 import shlex
+import sqlite3
 import sys
 import time
 from datetime import datetime
@@ -55,7 +56,16 @@ from core_router.project import PROJECT_DIRS, default_projects_root
 from core_router.registry import REPO_ROOT as WORKBENCH_ROOT
 from core_router.state import validate_state
 from installer import InstallerError, install_skills
-from knowledge_service import KnowledgeService, KnowledgeServiceError
+from knowledge_service import (
+    KnowledgeIndexError,
+    KnowledgeService,
+    KnowledgeServiceError,
+    build_index,
+    discover_kb_root,
+    index_info,
+    search_index,
+    verify_index,
+)
 from flow import (
     FlowError,
     Runner,
@@ -263,6 +273,21 @@ def _check_generate() -> tuple[bool, str]:
     return True, f"生成平台 provider {len(ids)} 个（mock 默认 dry-run）· 任务契约 2 份"
 
 
+def _check_index() -> tuple[bool, str]:
+    schemas = set(list_schemas())
+    if "knowledge-index.schema.json" not in schemas:
+        return False, "缺少索引契约: knowledge-index.schema.json"
+    try:
+        probe = sqlite3.connect(":memory:")
+        try:
+            probe.execute("CREATE VIRTUAL TABLE t USING fts5(x, tokenize='trigram')")
+        finally:
+            probe.close()
+    except sqlite3.Error as exc:
+        return False, f"SQLite FTS5 trigram 不可用（需要 >= 3.34）: {exc}"
+    return True, "索引维护契约 1 份（knowledge-index）· FTS5 trigram 可用"
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     checks = [
         ("python", _check_python()),
@@ -273,6 +298,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         ("style-registry", _check_style_registry()),
         ("flow", _check_flow()),
         ("generate", _check_generate()),
+        ("index", _check_index()),
         ("brand-wordlist", _check_wordlist()),
     ]
     failures = 0
@@ -667,6 +693,98 @@ def cmd_knowledge_search(args: argparse.Namespace) -> int:
             _print(f"- {item['path']}（{item['page']}）命中「{item['hit']}」：{item['snippet'][:120]}")
         if args.out:
             _print(f"知识卡已写入: {args.out}（contracts v1.0）")
+    return EXIT_OK
+
+
+_INDEX_DEFAULT_OUT = WORKBENCH_ROOT / "index"
+
+
+def _index_out(value: str | None) -> Path:
+    return Path(value) if value else _INDEX_DEFAULT_OUT
+
+
+def cmd_index_build(args: argparse.Namespace) -> int:
+    source = (args.source or "").strip()
+    if not source:
+        detected = discover_kb_root()
+        if detected is None:
+            _print("未指定 --source，且未自动探测到知识库根目录（可用 AI_FILM_KB_ROOT 指定）")
+            return EXIT_USAGE
+        source = str(detected)
+    try:
+        result = build_index(
+            source,
+            _index_out(args.out),
+            incremental=args.incremental,
+            index_id=args.index_id,
+        )
+    except (KnowledgeIndexError, OSError) as exc:
+        _print(f"索引构建失败: {exc}")
+        return EXIT_FAIL
+    meta = result["meta_data"]
+    if args.json:
+        _emit(result, True)
+    else:
+        mode = "增量" if meta["build_mode"] == "incremental" else "全量"
+        _print(f"索引已构建（{mode}）: {result['db']}")
+        _print(f"元数据: {result['meta']}（index_id={meta['index_id']}，contracts v0.1）")
+        _print(f"来源: {meta['source_root']}")
+        _print(
+            f"文档 {meta['documents']} 份 / 分块 {meta['chunks']} 块；"
+            f"本次索引 {meta['files_indexed']}、复用 {meta['files_reused']}、"
+            f"移除 {meta['files_removed']}（共 {meta['files_total']} 个文件）"
+        )
+    return EXIT_OK
+
+
+def cmd_index_info(args: argparse.Namespace) -> int:
+    try:
+        info = index_info(_index_out(args.out))
+    except KnowledgeIndexError as exc:
+        _print(f"索引信息读取失败: {exc}")
+        return EXIT_FAIL
+    meta = info["meta_data"]
+    if args.json:
+        _emit(info, True)
+    else:
+        _print(f"索引数据库: {info['db']}（{info['db_bytes']} 字节）")
+        _print(f"元数据: {info['meta']}")
+        _print(f"index_id: {meta['index_id']}；构建模式: {meta['build_mode']}")
+        _print(f"来源: {meta['source_root']}")
+        _print(
+            f"文档 {meta['documents']} 份 / 分块 {meta['chunks']} 块；"
+            f"更新于 {meta['updated_at']}"
+        )
+    return EXIT_OK
+
+
+def cmd_index_verify(args: argparse.Namespace) -> int:
+    report = verify_index(_index_out(args.out))
+    if args.json:
+        _emit(report, True)
+    else:
+        _print(f"索引校验: {'通过' if report['ok'] else '失败'}")
+        for issue in report["errors"]:
+            _print(f"[问题] {issue}")
+        meta = report.get("meta_data") or {}
+        if report["ok"]:
+            _print(f"文档 {meta.get('documents')} 份 / 分块 {meta.get('chunks')} 块，FTS 可查询")
+    return EXIT_OK if report["ok"] else EXIT_FAIL
+
+
+def cmd_index_search(args: argparse.Namespace) -> int:
+    try:
+        result = search_index(_index_out(args.out), args.query, limit=args.limit)
+    except KnowledgeIndexError as exc:
+        _print(f"检索失败: {exc}")
+        return EXIT_FAIL
+    if args.json:
+        _emit(result, True)
+    else:
+        _print(f"检索「{result['query']}」→ {result['count']} 条（模式 {result['mode']}）")
+        for item in result["results"]:
+            _print(f"- {item['path']} · {item['heading'] or '（无标题）'}")
+            _print(f"  {item['snippet']}")
     return EXIT_OK
 
 
@@ -2615,6 +2733,34 @@ def build_parser() -> argparse.ArgumentParser:
     knowledge_bridge.add_argument("--note", default="", help="备注")
     knowledge_bridge.add_argument("--json", action="store_true", help="以 JSON 输出")
     knowledge_bridge.set_defaults(func=cmd_knowledge_bridge)
+
+    index_cmd = sub.add_parser("index", help="知识库索引维护：按契约重建 / 增量维护 / 校验 / 检索（FR-10）")
+    index_sub = index_cmd.add_subparsers(dest="index_command", required=True)
+
+    index_build = index_sub.add_parser("build", help="构建或增量维护本地 FTS5 索引")
+    index_build.add_argument("--source", help="正文来源目录（缺省自动探测知识库根）")
+    index_build.add_argument("--out", help="索引输出目录（缺省 workbench/index）")
+    index_build.add_argument("--incremental", action="store_true", help="增量维护（按 mtime 复用未变文件）")
+    index_build.add_argument("--index-id", help="指定 index_id（缺省自动生成 idx-...）")
+    index_build.add_argument("--json", action="store_true", help="以 JSON 输出")
+    index_build.set_defaults(func=cmd_index_build)
+
+    index_info_cmd = index_sub.add_parser("info", help="查看索引元数据与大小")
+    index_info_cmd.add_argument("--out", help="索引输出目录（缺省 workbench/index）")
+    index_info_cmd.add_argument("--json", action="store_true", help="以 JSON 输出")
+    index_info_cmd.set_defaults(func=cmd_index_info)
+
+    index_verify = index_sub.add_parser("verify", help="校验索引库与元数据一致性、FTS 可查询")
+    index_verify.add_argument("--out", help="索引输出目录（缺省 workbench/index）")
+    index_verify.add_argument("--json", action="store_true", help="以 JSON 输出")
+    index_verify.set_defaults(func=cmd_index_verify)
+
+    index_search = index_sub.add_parser("search", help="检索本地索引（trigram FTS，短词回退 LIKE）")
+    index_search.add_argument("--query", required=True, help="查询词（中文可直接检索）")
+    index_search.add_argument("--limit", type=int, default=8, help="返回条数上限（默认 8）")
+    index_search.add_argument("--out", help="索引输出目录（缺省 workbench/index）")
+    index_search.add_argument("--json", action="store_true", help="以 JSON 输出")
+    index_search.set_defaults(func=cmd_index_search)
 
     reference = sub.add_parser("reference", help="跨阶段参考记忆：统计与按阶段加载")
     reference_sub = reference.add_subparsers(dest="reference_command", required=True)

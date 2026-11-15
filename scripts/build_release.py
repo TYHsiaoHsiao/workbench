@@ -11,7 +11,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DIST_DIR = REPO_ROOT / "dist"
-SKIP_DIRS = {".git", ".workbench", "__pycache__", ".idea", ".vscode", "dist", ".pytest_cache"}
+SKIP_DIRS = {".git", ".workbench", "__pycache__", ".idea", ".vscode", "dist", ".pytest_cache", "index"}
 SKIP_FILES = {".DS_Store", "Thumbs.db"}
 SKIP_SUFFIXES = {".tmp", ".bak", ".pyc", ".pyo"}
 

@@ -168,4 +168,7 @@
 - 行覆盖率低于 75%：用 `python scripts/coverage_check.py --json` 查看低覆盖文件与行数，补测试或清理死代码；门槛在 `run_ci.py` 的 `--min 75`。
 - 可复现构建校验失败：确认 `build_release.py` 的时间戳/权限逻辑未被改动，且 `.sha256` 与 zip 同时重建；`python scripts/repro_check.py` 应报告两次构建一致。
 - GitHub Actions 未触发：本机无 remote 时 workflow 不会跑；先 `git remote add origin <url>` 并 push 分支，再用 `workflow_dispatch` 手动触发；本地等价为 `python scripts/run_ci.py`。
+- 索引构建报「当前 SQLite 不支持 FTS5 trigram tokenizer」：Python 内置 SQLite 需 ≥3.34；Windows 建议使用 Python 3.12 官方发行版，必要时改用短查询 LIKE 回退（功能受限）。
+- `index search` 无结果：先 `index info` 确认文档/分块数；中文按 trigram 切分，查询 ≥3 字走 FTS，短词走 LIKE；换更具体的连续短语重试。
+- 索引与源文件不一致：源文件变更后执行 `index build --incremental`；源目录迁移或分块规则变化时执行全量重建（删除 `index/` 或省略 `--incremental`）。
 

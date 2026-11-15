@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Knowledge Index v0.1",
+  "description": "知识库索引元数据契约（FR-10 索引维护，M21）。索引数据库由 workbench.py index build 生成，元数据与库文件同目录存放。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "index_id",
+    "build_mode",
+    "source_root",
+    "engine",
+    "created_at",
+    "updated_at",
+    "documents",
+    "chunks",
+    "files_total",
+    "files_indexed",
+    "files_reused",
+    "files_removed",
+    "bytes_source"
+  ],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.1"
+    },
+    "index_id": {
+      "type": "string",
+      "pattern": "^idx-[a-z0-9-]{4,80}$"
+    },
+    "build_mode": {
+      "enum": ["full", "incremental"]
+    },
+    "source_root": {
+      "type": "string",
+      "minLength": 1
+    },
+    "engine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "tokenizer", "schema_version"],
+      "properties": {
+        "name": {
+          "enum": ["sqlite-fts5"]
+        },
+        "tokenizer": {
+          "enum": ["trigram"]
+        },
+        "schema_version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "updated_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "documents": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "chunks": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "files_total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "files_indexed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "files_reused": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "files_removed": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "bytes_source": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

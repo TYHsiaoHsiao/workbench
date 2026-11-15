@@ -7,7 +7,7 @@
 - **契约先行**：阶段产物、参考记忆、知识卡、风格画像、项目状态全部有 JSON Schema；
 - **品牌守卫**：仓库与工作区零品牌残留，CI 阻断回归。
 
-当前版本 `2.8.0`：迭代 0（地基）、迭代 1a（B 知识服务 PoC）、迭代 2 方案 A（有限正文回退）、迭代 2.1（精度修订）、迭代 1b（A 编排硬化）、迭代 3（C 风格服务）、迭代 4（试点与固化）、1.0.1（真实项目补丁）、1.0.2（工作台体验补丁）、M1（可视化节点工作台骨架，1.1.0）、M2/M3（可视化节点工作台能力层，1.2.0）、M4（运行回放与图导入导出，1.3.0）与 M5（并行执行、节点级重试、项目管理面板，1.4.0）与 M6（状态锁与事务、运行对比、项目预览，1.5.0）以及 M7（条件分支与循环、运行基线与回归告警、产物快照差异，1.6.0）与 M8（复合节点与真实生成平台适配，1.7.0）以及 M9（生成任务状态轮询与 Web 生成面板，1.8.0）与 M10（生成结果回填、失败重试与任务详情抽屉，1.9.0）与 M11（批量回填、生成平台流程节点与生成面板筛选，1.10.0）与 M12（批次编排、批量自动重试与批次历史，2.0.0）已完成；2.0.1 为实时预览与界面迭代补丁（`/api/dev/version` 自动刷新、节点分类视觉与 17 类节点演示图，见 `docs/release-notes-2.0.1.md`）；2.1.0 为 M13 批次增强（批次并行预演（仅 dry-run）、失败图一键恢复与批次恢复 API，见 `docs/release-notes-2.1.0.md`）；2.2.0 为 M14 批次队列化与失败通知（项目内批次队列、顺序执行与失败汇总通知、CLI 跨项目 `--all-projects`，见 `docs/release-notes-2.2.0.md`）；2.3.0 为 M15 队列增强（定时调度、条目取消/重排与 `flow queue daemon` 后台守护，见 `docs/release-notes-2.3.0.md`）；2.4.0 为 M16 队列失败重试与通知外送（失败条目重试、JSONL 通知日志与 `--notify-cmd` 外送、daemon 日志轮转，见 `docs/release-notes-2.4.0.md`）；2.5.0 为 M17 PRD 验收对齐（打包冒烟、文档链接检查、CLI 冷启动基准、PRD 指标/验收章节一致性修订，见 `docs/release-notes-2.5.0.md`）；2.6.0 为 M18 项目状态快照与回滚（`rollback create/list/apply` 快照与安全回滚、`scripts/rollback_drill.py` 发行包升级→回滚演练，见 `docs/release-notes-2.6.0.md`）；2.7.0 为 M19 需求追溯与 FR↔里程碑映射（`docs/requirements-traceability.md`、`scripts/check_fr_mapping.py` 纳入 CI，见 `docs/release-notes-2.7.0.md`）；2.8.0 为 M20 跨平台 CI 矩阵、覆盖率与可复现构建门禁、Web 快照回滚面板（见 `docs/release-notes-2.8.0.md`）。三个试点：从零到 08（`试点A-雨夜回声`）、既有剧本到 05（`试点B-旧剧本接管`）、真实项目从零到 done（《死亡外科医生》，见 `docs/pilot-c-report.md`），指标与证据见 `docs/pilots/`。
+当前版本 `2.9.0`：迭代 0（地基）、迭代 1a（B 知识服务 PoC）、迭代 2 方案 A（有限正文回退）、迭代 2.1（精度修订）、迭代 1b（A 编排硬化）、迭代 3（C 风格服务）、迭代 4（试点与固化）、1.0.1（真实项目补丁）、1.0.2（工作台体验补丁）、M1（可视化节点工作台骨架，1.1.0）、M2/M3（可视化节点工作台能力层，1.2.0）、M4（运行回放与图导入导出，1.3.0）与 M5（并行执行、节点级重试、项目管理面板，1.4.0）与 M6（状态锁与事务、运行对比、项目预览，1.5.0）以及 M7（条件分支与循环、运行基线与回归告警、产物快照差异，1.6.0）与 M8（复合节点与真实生成平台适配，1.7.0）以及 M9（生成任务状态轮询与 Web 生成面板，1.8.0）与 M10（生成结果回填、失败重试与任务详情抽屉，1.9.0）与 M11（批量回填、生成平台流程节点与生成面板筛选，1.10.0）与 M12（批次编排、批量自动重试与批次历史，2.0.0）已完成；2.0.1 为实时预览与界面迭代补丁（`/api/dev/version` 自动刷新、节点分类视觉与 17 类节点演示图，见 `docs/release-notes-2.0.1.md`）；2.1.0 为 M13 批次增强（批次并行预演（仅 dry-run）、失败图一键恢复与批次恢复 API，见 `docs/release-notes-2.1.0.md`）；2.2.0 为 M14 批次队列化与失败通知（项目内批次队列、顺序执行与失败汇总通知、CLI 跨项目 `--all-projects`，见 `docs/release-notes-2.2.0.md`）；2.3.0 为 M15 队列增强（定时调度、条目取消/重排与 `flow queue daemon` 后台守护，见 `docs/release-notes-2.3.0.md`）；2.4.0 为 M16 队列失败重试与通知外送（失败条目重试、JSONL 通知日志与 `--notify-cmd` 外送、daemon 日志轮转，见 `docs/release-notes-2.4.0.md`）；2.5.0 为 M17 PRD 验收对齐（打包冒烟、文档链接检查、CLI 冷启动基准、PRD 指标/验收章节一致性修订，见 `docs/release-notes-2.5.0.md`）；2.6.0 为 M18 项目状态快照与回滚（`rollback create/list/apply` 快照与安全回滚、`scripts/rollback_drill.py` 发行包升级→回滚演练，见 `docs/release-notes-2.6.0.md`）；2.7.0 为 M19 需求追溯与 FR↔里程碑映射（`docs/requirements-traceability.md`、`scripts/check_fr_mapping.py` 纳入 CI，见 `docs/release-notes-2.7.0.md`）；2.8.0 为 M20 跨平台 CI 矩阵、覆盖率与可复现构建门禁、Web 快照回滚面板（见 `docs/release-notes-2.8.0.md`）；2.9.0 为 M21 知识库索引维护（按契约重建/增量索引、SQLite FTS5 trigram 全文检索与 `workbench.py index` CLI，见 `docs/release-notes-2.9.0.md`）。三个试点：从零到 08（`试点A-雨夜回声`）、既有剧本到 05（`试点B-旧剧本接管`）、真实项目从零到 done（《死亡外科医生》，见 `docs/pilot-c-report.md`），指标与证据见 `docs/pilots/`。
 
 ## 目录结构
 
@@ -123,12 +123,15 @@ python workbench.py generate adopt --all --project 我的短片 --stage 05   # �
 python workbench.py project summary --project 我的短片        # 项目摘要（产物/流程图/运行）
 python workbench.py project list --stats                      # 跨项目统计（产物/待门禁/流程/运行）
 python workbench.py flow run --project 我的短片 --graph flow-main --live --retries 2   # 节点失败自动重试（0–3）
+python workbench.py index build --source <知识库子目录>   # 按契约重建索引（FTS5 trigram；--incremental 增量）
+python workbench.py index search --query 第一幕 --limit 5  # 全文检索证据片段（短查询自动 LIKE 回退）
+python workbench.py index verify                          # 校验索引库与元数据一致性
 python workbench.py project list --stats                            # 跨项目总览 + 流程/运行/待门禁/产物统计
 ```
 
 - 项目默认创建在「文档目录/AI 影视工作台/projects/<名称>/」，可用 `--project-root` 或环境变量 `AI_FILM_PROJECTS_ROOT` 覆盖；包含 `00_project/`（状态、参考记忆、历史、知识卡、风格卡）、`00_inbox/`、`01_story/` … `06_prompts/`。
 - 项目状态以 `00_project/state.json` 为唯一事实来源，必须通过 `state.schema.json`（v2 字段）校验；门禁与修订日志同文件持久化。
-- 本地 CI：`python scripts/run_ci.py`（编译 → 文档链接检查 → FR 追溯映射 → 387 项测试 → 行覆盖率 ≥75% → doctor → CLI 冷启动 NFR 基准 → brand-guard → 可复现构建校验）。
+- 本地 CI：`python scripts/run_ci.py`（编译 → 文档链接检查 → FR 追溯映射 → 401 项测试 → 行覆盖率 ≥75% → doctor → CLI 冷启动 NFR 基准 → brand-guard → 可复现构建校验）。
 - 文档链接检查：`python scripts/check_doc_links.py`（Markdown 链接与行内代码中的仓库内路径必须存在）。
 - CLI 冷启动基准：`python scripts/bench.py`（默认 5 次取中位数，`--enforce` 时超过 1.0s 退出码 1）。
 - 知识服务只读现有索引，不改知识库本体；先做元数据候选，召回不足时按预算做有限正文回退；只有路径/行号/命中词齐全才输出 `ok` 知识卡。回退可用 `--no-fallback` 关闭、用 `--fallback-files` / `--fallback-bytes` 调预算。证据按质量评分排序，并过滤「反转身」等动作误命中；高置信证据足够时会丢弃纯字面低置信证据（统计见 `report.evidence_quality`）。
@@ -136,7 +139,7 @@ python workbench.py project list --stats                            # 跨项目�
 - 生成发行清单：`python scripts/build_manifest.py`。
 - 生成发行包：`python scripts/build_release.py`（输出 `dist/workbench-<版本>.zip` 与 SHA-256）。
 - 发行包冒烟：`python scripts/package_smoke.py`（校验 `.sha256` → 解压到临时目录 → `version`/`doctor`/manifest 一致性；对应 PRD §11.3/§11.4）。
-- 行覆盖率检查：`python scripts/coverage_check.py`（`packages/` 可执行行，CI `--min 75`；2.8.0 实测 76.37%）。
+- 行覆盖率检查：`python scripts/coverage_check.py`（`packages/` 可执行行，CI `--min 75`；2.9.0 实测 76.92%）。
 - 可复现构建校验：`python scripts/repro_check.py`（两次构建与 `.sha256` 三方一致；`build_release.py` 固定 zip 时间戳/权限）。
 - 跨平台 CI：`.github/workflows/ci.yml`（ubuntu/windows/macos × Python 3.11/3.12 矩阵，说明见 `docs/ci.md`）。
 
@@ -186,6 +189,7 @@ python workbench.py project list --stats                            # 跨项目�
 | M17（20） | PRD 验收对齐：打包冒烟（`scripts/package_smoke.py`：SHA256→解压→version/doctor/manifest）、文档链接检查（`scripts/check_doc_links.py` 纳入 CI）、CLI 冷启动 NFR 基准（`scripts/bench.py`）、PRD §2.5 指标扩展/§11 验收与 E2E 扩展/文档一致性修订 | 已完成（2.5.0） |
 | M18（21） | 项目状态快照与回滚：`workbench.py rollback create/list/apply`（`00_project/history/snapshots/<snap-id>.zip` 快照 state/参考记忆/状态卡/流程图；回滚前自动安全快照、`--dry-run` 预演、路径校验）；`scripts/rollback_drill.py` 发行包升级→回滚演练（上一版→最新→回滚上一版并校验版本）；PRD §11.4 rollback 落地 | 已完成（2.6.0） |
 | M19（22） | 需求追溯与 FR↔里程碑映射：新增 `docs/requirements-traceability.md`（FR-01–FR-22 ↔ 实现/里程碑/证据/状态）与 `scripts/check_fr_mapping.py`（覆盖/重复/PRD 交叉校验，纳入 CI，门禁扩为七步） | 已完成（2.7.0） |
+| M21（24） | 知识库索引维护（FR-10）：`packages/knowledge_service/index_builder.py`（SQLite FTS5 trigram、分块 900/重叠 80、全量+增量构建、契约校验）+ CLI `index build/info/verify/search` + `doctor` 索引检查（10 项） + `knowledge-index.schema.json`；索引产物默认 `index/`（不入发行包） | 已完成（2.9.0） |
 | M20（23） | 跨平台 CI、覆盖率与可复现构建门禁、Web 快照回滚：`.github/workflows/ci.yml` 三平台 × 双 Python 矩阵；`scripts/coverage_check.py`（零依赖行覆盖率 76.37%，CI `--min 75`）；`scripts/repro_check.py` + `build_release.py` 固定时间戳（两次构建一致）；Web `/api/rollback/*` 与前端快照/回滚面板 | 已完成（2.8.0） |
 
 ## 原则
@@ -222,10 +226,12 @@ python workbench.py project list --stats                            # 跨项目�
 - `docs/release-notes-2.6.0.md`：2.6.0 发行说明（M18 项目状态快照与回滚：`rollback` 子命令、安全快照、dry-run、发行包回滚演练、验证与限制）。
 - `docs/release-notes-2.7.0.md`：2.7.0 发行说明（M19 需求追溯：FR↔里程碑映射表与 CI 映射检查、验证与限制）。
 - `docs/release-notes-2.8.0.md`：2.8.0 发行说明（M20 跨平台 CI 矩阵、覆盖率与可复现构建门禁、Web 快照回滚面板、验证与限制）。
+- `docs/release-notes-2.9.0.md`：2.9.0 发行说明（M21 知识库索引维护：按契约重建/增量索引、FTS5 trigram 检索、验证与限制）。
 - `docs/pilot-c-report.md`：真实项目试点报告（《死亡外科医生》从零到 done、M1–M9、摩擦与 1.0.x 清单）。
 - `docs/architecture.md`：分层、数据流、阶段加载顺序、与现有 Skill 子系统的映射。
 - `docs/command-card.md`：全部命令速查（环境、项目、迁移、安装、知识、风格、可视化工作流、契约）。
 - `docs/requirements-traceability.md`：PRD §6 FR-01–FR-22 ↔ 实现/里程碑/证据映射（M19；`scripts/check_fr_mapping.py` 校验）。
+- `docs/knowledge-index.md`：知识库索引维护（M21：契约、`index` 命令、分块与增量策略、FTS5/规模与限制）。
 - `docs/ci.md`：CI 九步门禁、GitHub Actions 跨平台矩阵、本地等价命令、覆盖率策略与可复现构建（M20）。
 - `docs/troubleshooting.md`：故障排查（环境、门禁、风格、知识、编码、迁移、导出）。
 - `docs/knowledge-service.md`：知识服务接口、只读保证与已知局限。

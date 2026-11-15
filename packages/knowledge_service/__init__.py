@@ -15,6 +15,16 @@ from .adapter import (
     query_terms,
 )
 from .evidence import EVIDENCE_EXTENSIONS, EvidenceError, scan_file
+from .index_builder import (
+    INDEX_SCHEMA,
+    KnowledgeIndexError,
+    build_index,
+    index_info,
+    read_meta,
+    search_index,
+    split_chunks,
+    verify_index,
+)
 from .service import (
     FALLBACK_MAX_FILE_BYTES,
     FALLBACK_MAX_FILES,
@@ -30,16 +40,23 @@ __all__ = [
     "EvidenceError",
     "FALLBACK_MAX_FILE_BYTES",
     "FALLBACK_MAX_FILES",
-    "INDEX_DB_NAME",
+    "INDEX_SCHEMA",
+    "KnowledgeIndexError",
     "KnowledgeService",
     "KnowledgeServiceError",
     "LANE_CATEGORIES",
     "ProbeResult",
     "SCOPE_BY_STAGE",
+    "build_index",
     "discover_kb_root",
+    "index_info",
     "list_candidates",
     "list_scan_files",
     "probe",
     "query_terms",
+    "read_meta",
     "scan_file",
+    "search_index",
+    "split_chunks",
+    "verify_index",
 ]
