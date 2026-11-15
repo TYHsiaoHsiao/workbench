@@ -1,7 +1,7 @@
 {
   "version": "1.0.1",
   "contract_version": "1.0",
-  "generated_at": "2026-11-15T09:22:14",
+  "generated_at": "2026-11-15T09:36:42",
   "file_count": 90,
   "files": [
     {
@@ -101,8 +101,8 @@
     },
     {
       "path": "docs/pilot-c-report.md",
-      "size": 8592,
-      "sha256": "34b967448a5411e2fe039d39ff7f23757b9636b4ab1e4fb545cb34f82c5c6eb7"
+      "size": 9431,
+      "sha256": "feffe31f6879179cbde7a3e847b15f3852a1324bdf132321be8019ea8893cc0c"
     },
     {
       "path": "docs/pilot-c-trial-log-template.md",
