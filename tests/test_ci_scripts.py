@@ -16,6 +16,7 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 import bench  # noqa: E402
 import check_doc_links  # noqa: E402
+import check_fr_mapping  # noqa: E402
 import package_smoke  # noqa: E402
 
 
@@ -123,6 +124,59 @@ class BenchTest(unittest.TestCase):
         self.assertEqual(10.0, summary["min_ms"])
         self.assertEqual(20.0, summary["median_ms"])
         self.assertEqual(30.0, summary["max_ms"])
+
+
+class FrMappingTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.mkdtemp(prefix="wb_frmap_")
+        self.root = Path(self._tmp)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self._tmp, ignore_errors=True)
+
+    def _write_trace(self, ids: list[str]) -> Path:
+        path = self.root / "docs" / "requirements-traceability.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        rows = "\n".join(f"| {fr} 名称 | P0 | 实现 | M1 | 证据 | 已实现 |" for fr in ids)
+        path.write_text(f"# 追溯\n\n| FR | 优先级 |\n|---|---|\n{rows}\n", encoding="utf-8")
+        return path
+
+    def _write_prd(self, ids: list[str]) -> Path:
+        path = self.root / "PRD.md"
+        headings = "\n\n".join(f"### {fr} 需求" for fr in ids)
+        path.write_text(headings + "\n", encoding="utf-8")
+        return path
+
+    def test_complete_mapping_passes(self) -> None:
+        self._write_trace(list(check_fr_mapping.EXPECTED_FR))
+        report = check_fr_mapping.check(self.root)
+        self.assertTrue(report["ok"], report)
+        self.assertEqual(22, len(report["found"]))
+        self.assertEqual([], report["missing"])
+
+    def test_missing_fr_detected(self) -> None:
+        ids = [fr for fr in check_fr_mapping.EXPECTED_FR if fr != "FR-10"]
+        self._write_trace(ids)
+        report = check_fr_mapping.check(self.root)
+        self.assertFalse(report["ok"])
+        self.assertEqual(["FR-10"], report["missing"])
+
+    def test_duplicate_and_extra_detected(self) -> None:
+        ids = list(check_fr_mapping.EXPECTED_FR) + ["FR-01", "FR-99"]
+        self._write_trace(ids)
+        report = check_fr_mapping.check(self.root)
+        self.assertFalse(report["ok"])
+        self.assertEqual(["FR-01"], report["duplicates"])
+        self.assertEqual(["FR-99"], report["extra"])
+
+    def test_prd_cross_check(self) -> None:
+        self._write_trace(list(check_fr_mapping.EXPECTED_FR))
+        prd_ids = [fr for fr in check_fr_mapping.EXPECTED_FR if fr != "FR-05"] + ["FR-33"]
+        prd = self._write_prd(prd_ids)
+        report = check_fr_mapping.check(self.root, prd)
+        self.assertFalse(report["ok"])
+        self.assertEqual(["FR-33"], report["prd_missing"])
+        self.assertEqual(["FR-05"], report["prd_extra"])
 
 
 if __name__ == "__main__":

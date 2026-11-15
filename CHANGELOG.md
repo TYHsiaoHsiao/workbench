@@ -1,5 +1,13 @@
 # 变更日志
 
+## [2.7.0] - 2026-11-15 — 需求追溯与 FR↔里程碑映射（M19）
+
+- 需求追溯：新增 `docs/requirements-traceability.md`——PRD §6 的 FR-01–FR-22 映射到实现位置、里程碑、验证证据与状态（已实现/部分实现/未实现），并加「扩展能力（M10–M19）」表与维护规则。
+- 检查工具：新增 `scripts/check_fr_mapping.py`（追溯表覆盖 FR-01–FR-22、无重复/非预期 ID；若找到 PRD 则做集合交叉校验），纳入 `scripts/run_ci.py`（编译 → 文档链接 → FR 映射 → 测试 → doctor → 基准 → 品牌守卫）。
+- 测试：`tests/test_ci_scripts.py` 新增 `FrMappingTest` 4 项（全覆盖通过、缺 FR 检出、重复/非预期检出、PRD 交叉校验）；合计 382 项；CI 全绿、品牌守卫 0 命中。
+- 文档：README 新增追溯表索引与 CI 说明；命令卡新增映射检查命令；架构 semver/迁移段补 M19；PRD v2.17（§9.24 迭代 22、§6 追溯说明、§11.3 门禁第 7 条）。
+- 兼容性：仅新增文档、脚本与测试；运行时代码无行为变化；`VERSION` 升 2.7.0（MINOR）。
+
 ## [2.6.0] - 2026-11-15 — 项目状态快照与回滚、发行包回滚演练（M18）
 
 - 项目快照：新增 `packages/core_router/rollback.py`；`rollback create` 将 `00_project/state.json`、参考记忆（JSON/MD）、状态卡与 `00_project/workflows/**/*.json`（排除 runs/batches/generations）打包为 `00_project/history/snapshots/<snap-id>.zip` 并写 metadata；`rollback list` 按创建时间倒序；快照 ID 格式 `snap-YYYYmmdd-HHMMSS-xxxx`。

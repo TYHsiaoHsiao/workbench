@@ -1,4 +1,4 @@
-# 命令卡（v2.6.0）
+# 命令卡（v2.7.0）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -157,6 +157,7 @@ python workbench.py flow run --project 雨夜回声 --graph flow-main --dry-run
 |---|---|
 | `python scripts/run_ci.py` | 本地 CI：编译 → 文档链接 → 单元测试 → doctor → CLI 冷启动基准 → 品牌守卫 |
 | `python scripts/check_doc_links.py [--json]` | 文档链接检查：Markdown 链接与行内代码中的仓库内路径必须存在 |
+| `python scripts/check_fr_mapping.py [--json]` | FR 追溯映射检查：FR-01–FR-22 全覆盖、无重复/非预期 ID，并与 PRD 头衔交叉校验（M19） |
 | `python scripts/bench.py [--runs 5] [--max-cold-start 1.0] [--enforce] [--json]` | NFR 基准：CLI 冷启动/doctor 耗时中位数（`--enforce` 超阈值退出 1） |
 | `python scripts/build_manifest.py` | 生成发行清单 `manifest.json`（文件级 SHA256） |
 | `python scripts/build_release.py` | 生成发行包 `dist/workbench-<版本>.zip` 与 `.sha256` |

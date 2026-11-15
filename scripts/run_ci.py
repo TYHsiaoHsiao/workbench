@@ -23,6 +23,7 @@ def main() -> int:
     steps = [
         ("compile", [sys.executable, "-m", "compileall", "-q", "packages", "workbench.py"]),
         ("doc-links", [sys.executable, "scripts/check_doc_links.py"]),
+        ("fr-mapping", [sys.executable, "scripts/check_fr_mapping.py"]),
         ("tests", [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"]),
         ("doctor", [sys.executable, "workbench.py", "doctor"]),
         ("bench", [sys.executable, "scripts/bench.py", "--enforce", "--max-cold-start", "1.0"]),
