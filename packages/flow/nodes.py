@@ -153,22 +153,43 @@ def _exec_knowledge_search(node: Node, ctx: NodeContext) -> NodeResult:
             outputs=[f"[dry-run] 阶段 {stage} 知识检索：{len(queries)} 个查询（不会写知识卡）"],
             logs=["dry-run 不调用知识服务，不写卡片"],
         )
-    from knowledge_service import KnowledgeService, KnowledgeServiceError
-
+    index_dir = str(params.get("index") or "").strip()
     kb_root = params.get("kb_root") or None
+    from knowledge_service import KnowledgeServiceError
+
     try:
-        service = KnowledgeService(kb_root=kb_root) if kb_root else KnowledgeService()
-        result = service.search(
-            project=str(load_state(ctx.project_root).get("project") or ctx.project_root.name),
-            stage=stage,
-            problem=problem,
-            queries=[str(item) for item in queries],
-            candidates_limit=int(params.get("candidates_limit", 40)),
-            evidence_limit=int(params.get("evidence_limit", 8)),
-            fallback=bool(params.get("fallback", True)),
-        )
+        if index_dir:
+            from knowledge_service import (
+                KnowledgeIndexError,
+                KnowledgeIndexServiceError,
+                search_index_card,
+            )
+
+            result = search_index_card(
+                project=str(load_state(ctx.project_root).get("project") or ctx.project_root.name),
+                stage=stage,
+                problem=problem,
+                queries=[str(item) for item in queries],
+                index_dir=index_dir,
+                evidence_limit=int(params.get("evidence_limit", 8)),
+            )
+        else:
+            from knowledge_service import KnowledgeService
+
+            service = KnowledgeService(kb_root=kb_root) if kb_root else KnowledgeService()
+            result = service.search(
+                project=str(load_state(ctx.project_root).get("project") or ctx.project_root.name),
+                stage=stage,
+                problem=problem,
+                queries=[str(item) for item in queries],
+                candidates_limit=int(params.get("candidates_limit", 40)),
+                evidence_limit=int(params.get("evidence_limit", 8)),
+                fallback=bool(params.get("fallback", True)),
+            )
     except KnowledgeServiceError as exc:
         raise NodeError(f"知识检索失败: {exc}") from exc
+    except (KnowledgeIndexError, KnowledgeIndexServiceError) as exc:
+        raise NodeError(f"索引知识检索失败: {exc}") from exc
 
     card = result.get("card") if isinstance(result, dict) else None
     if card is None and isinstance(result, dict) and "card_id" in result:

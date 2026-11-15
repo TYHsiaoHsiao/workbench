@@ -172,3 +172,7 @@
 - `index search` 无结果：先 `index info` 确认文档/分块数；中文按 trigram 切分，查询 ≥3 字走 FTS，短词走 LIKE；换更具体的连续短语重试。
 - 索引与源文件不一致：源文件变更后执行 `index build --incremental`；源目录迁移或分块规则变化时执行全量重建（删除 `index/` 或省略 `--incremental`）。
 
+
+- `knowledge search --index` 报「索引元数据不存在/索引数据库不存在」：先运行 `python workbench.py index build --source <子目录> --out index`，或检查 `--index` 是否指向上一步的输出目录。
+- 索引知识卡为 `no_evidence`：索引存在但查询词未命中；换更具体的连续短语，或对目标子目录重建索引。索引证据卡不读外部知识库，需要外部库时去掉 `--index`。
+- flow `knowledge_search` 节点配置 `index` 后失败：确认索引目录对运行机器可读且已构建（索引不入发行包，目标机需自行 `index build`）；也可暂时移除 `index` 参数回退外部知识库路径。

@@ -154,6 +154,10 @@
           "kb_root": {
             "type": "string",
             "title": "知识库根目录（可空）"
+          },
+          "index": {
+            "type": "string",
+            "title": "本地索引目录（M22；有值时优先生成索引证据卡）"
           }
         },
         "required": [

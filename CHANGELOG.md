@@ -1,5 +1,12 @@
 # 变更日志
 
+## [2.10.0] - 2026-11-15 — 本地索引接入知识服务证据卡（M22）
+
+- 新增 `packages/knowledge_service/index_service.py`：`search_index_card` 用 M21 索引逐查询（FTS/LIKE）生成同契约 knowledge-card，证据保持四字段（路径/段落/片段/命中词），按段落去重排序，无命中返回 `no_evidence`。
+- CLI `knowledge search` 新增 `--index <目录>`：用索引生成证据卡；flow `knowledge_search` 节点参数新增可选 `index`（同步 `flow-node-types` 参数校验），索引路径失败给出可读错误并保持原外部知识库分支可用。
+- 新增 12 项测试（服务 8、CLI 2、flow 节点 2），全量 413 项通过；覆盖率 77.37%（6017/7777 行）。
+- 兼容性：可选项与新增分支，未改变现有 `knowledge search` 默认行为与知识卡契约；索引目录仍不入发行包。
+
 ## [2.9.0] - 2026-11-15 — 知识库索引维护：按契约重建/增量索引与 FTS5 检索（M21）
 
 - 新增 `knowledge-index.schema.json`（索引元数据契约 v0.1：index_id/构建模式/来源/引擎/计数）。

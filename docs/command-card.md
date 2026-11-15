@@ -1,4 +1,4 @@
-# 命令卡（v2.9.0）
+# 命令卡（v2.10.0）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -55,6 +55,7 @@
 |---|---|
 | `python workbench.py knowledge probe` | 只读探测知识库（schema、文档数、FTS 可用性、问题列表） |
 | `python workbench.py knowledge search --project 项目名 --stage 05 --problem "问题" --query "screenplay:悬疑 反转"` | 检索 → 知识卡（`ok` / `no_evidence` / `no_candidates`） |
+| `... --index index` | M22：改用本地索引生成证据卡（四字段证据、page=段落标题；索引缺失/无命中分别报错/`no_evidence`） |
 | `... --fallback-files 200 --fallback-bytes 262144` | 调整有限正文回退预算 |
 | `... --no-fallback` | 关闭正文回退，只用元数据候选 |
 | `... --out 项目/00_project/knowledge-cards/05-candidates.json` | 保存知识卡（默认只打印） |
@@ -183,7 +184,7 @@ python workbench.py flow run --project 雨夜回声 --graph flow-main --dry-run
 | `python scripts/repro_check.py [--json]` | 可复现构建：两次构建与 `.sha256` 三方一致 |
 | `docs/ci.md` | 门禁清单/矩阵/覆盖率策略/排障 |
 
-## 13. 知识库索引维护（M21）
+## 13. 知识库索引维护（M21/M22）
 
 | 命令 | 作用 |
 |---|---|
@@ -191,3 +192,4 @@ python workbench.py flow run --project 雨夜回声 --graph flow-main --dry-run
 | `python workbench.py index info [--out index] [--json]` | 索引信息（index_id/模式/来源/文档与分块数/更新时间） |
 | `python workbench.py index verify [--out index] [--json]` | 校验元数据契约、库计数与 FTS 可查询性 |
 | `python workbench.py index search --query <词> [--limit 8] [--out index] [--json]` | 全文检索：≥3 字走 FTS5 trigram（bm25+snippet），短词自动 LIKE 回退 |
+| `python workbench.py knowledge search --project 项目名 --stage 01 --problem "问题" --query "查询词" --index index` | M22：索引检索并生成同契约知识卡（`--json` 输出 report；不写参考记忆） |

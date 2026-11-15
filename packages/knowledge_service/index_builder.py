@@ -25,6 +25,7 @@ INDEX_SCHEMA = "knowledge-index.schema.json"
 INDEX_SCHEMA_VERSION = "1"
 INDEX_DB_NAME = "knowledge-index.sqlite"
 INDEX_META_NAME = "knowledge-index-meta.json"
+INDEX_DIR_NAME = "index"
 ENGINE_NAME = "sqlite-fts5"
 TOKENIZER = "trigram"
 CHUNK_MAX_CHARS = 900
@@ -328,6 +329,32 @@ def index_info(out_dir: str | Path) -> dict[str, Any]:
         "db_bytes": db_file.stat().st_size,
         "meta": str(_meta_path(out)),
         "meta_data": meta,
+    }
+
+
+def default_index_dir() -> Path:
+    """索引默认目录（仓库内 ``index/``，不入发行包）。"""
+    return Path(__file__).resolve().parents[2] / INDEX_DIR_NAME
+
+
+def index_ready(out_dir: str | Path) -> dict[str, Any]:
+    """检查索引是否可用（元数据通过契约校验且数据库存在）。
+
+    不可用时抛 :class:`KnowledgeIndexError`，供 M22 服务层给出可读错误。
+    """
+    out = Path(out_dir).expanduser()
+    meta = read_meta(out)
+    _validate_meta(meta)
+    db_file = _db_path(out)
+    if not db_file.is_file():
+        raise KnowledgeIndexError(
+            f"索引数据库不存在: {db_file}（请先运行 index build）"
+        )
+    return {
+        "ok": True,
+        "db": str(db_file),
+        "meta_path": str(_meta_path(out)),
+        "meta": meta,
     }
 
 

@@ -58,12 +58,14 @@ from core_router.state import validate_state
 from installer import InstallerError, install_skills
 from knowledge_service import (
     KnowledgeIndexError,
+    KnowledgeIndexServiceError,
     KnowledgeService,
     KnowledgeServiceError,
     build_index,
     discover_kb_root,
     index_info,
     search_index,
+    search_index_card,
     verify_index,
 )
 from flow import (
@@ -647,20 +649,31 @@ def cmd_knowledge_probe(args: argparse.Namespace) -> int:
 
 
 def cmd_knowledge_search(args: argparse.Namespace) -> int:
-    service = KnowledgeService(args.kb_root)
+    index_dir = getattr(args, "index", None)
     try:
-        result = service.search(
-            project=args.project,
-            stage=args.stage,
-            problem=args.problem,
-            queries=list(args.query),
-            candidates_limit=args.candidates_limit,
-            evidence_limit=args.evidence_limit,
-            fallback=not args.no_fallback,
-            fallback_max_files=args.fallback_files,
-            fallback_max_bytes=args.fallback_bytes,
-        )
-    except KnowledgeServiceError as exc:
+        if index_dir:
+            result = search_index_card(
+                project=args.project,
+                stage=args.stage,
+                problem=args.problem,
+                queries=list(args.query),
+                index_dir=index_dir,
+                evidence_limit=args.evidence_limit,
+            )
+        else:
+            service = KnowledgeService(args.kb_root)
+            result = service.search(
+                project=args.project,
+                stage=args.stage,
+                problem=args.problem,
+                queries=list(args.query),
+                candidates_limit=args.candidates_limit,
+                evidence_limit=args.evidence_limit,
+                fallback=not args.no_fallback,
+                fallback_max_files=args.fallback_files,
+                fallback_max_bytes=args.fallback_bytes,
+            )
+    except (KnowledgeServiceError, KnowledgeIndexServiceError, KnowledgeIndexError) as exc:
         _print(f"检索失败: {exc}")
         return EXIT_FAIL
 
@@ -673,6 +686,23 @@ def cmd_knowledge_search(args: argparse.Namespace) -> int:
 
     if args.json:
         _emit(result, True)
+    elif result["report"].get("source") == "index":
+        report = result["report"]
+        _print(f"状态: {result['status']} — {report['statement']}")
+        _print(
+            f"索引: {report['index_root']}（{report['index_id']}，{report['build_mode']}）"
+        )
+        _print(
+            f"索引规模: 文档 {report['documents']} 份；分块 {report['chunks']} 块；"
+            f"来源 {report['source_root']}"
+        )
+        modes = "、".join(f"{q}={m}" for q, m in report["query_modes"].items())
+        _print(f"查询模式: {modes}（fts=全文索引，like=短词回退）")
+        _print(f"候选 {report['candidates']} 条；文件级证据 {report['evidence']} 条；未命中时请重建索引")
+        for item in result["card"]["evidence"]:
+            _print(f"- {item['path']}（{item['page']}）命中「{item['hit']}」：{item['snippet'][:120]}")
+        if args.out:
+            _print(f"知识卡已写入: {args.out}（contracts v1.0）")
     else:
         report = result["report"]
         _print(f"状态: {result['status']} — {report['statement']}")
@@ -2710,6 +2740,10 @@ def build_parser() -> argparse.ArgumentParser:
         help='格式 "lane:查询词"；lane=screenplay/method_book/cultural_fact/style_reference',
     )
     knowledge_search.add_argument("--kb-root", help="知识库根目录（缺省自动探测）")
+    knowledge_search.add_argument(
+        "--index",
+        help="改用按契约重建的本地索引目录（M22；缺省走外部知识库证据链）",
+    )
     knowledge_search.add_argument("--out", help="知识卡 JSON 输出路径")
     knowledge_search.add_argument("--candidates-limit", type=int, default=40)
     knowledge_search.add_argument("--evidence-limit", type=int, default=8)

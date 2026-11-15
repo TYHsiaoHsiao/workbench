@@ -1,6 +1,6 @@
 # 可视化节点工作台（M1–M16 + 2.0.1 实时预览 + M20 快照回滚）
 
-> 版本：2.8.0 · 状态：M1–M16 + 2.0.1 实时预览 + M20 Web 快照回滚面板已完成 · 适用范围：本地单用户
+> 版本：2.10.0 · 状态：M1–M16 + 2.0.1 实时预览 + M20 Web 快照回滚面板 + M22 索引证据卡接入已完成 · 适用范围：本地单用户
 
 ## 1. 定位
 
@@ -87,7 +87,7 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 |---|---|---|---|---|---|
 | `start` | 入口 | — | `project` | `project`（必填）、`entry`（A–D）、`note` | 加载 state、校验项目存在；入口不一致仅记录日志 |
 | `stage` | 阶段 | `state`、`artifact` | `artifact`、`log` | `stage`（01–08 必填）、`auto_gates`（默认 true）、`note` | 要求 `state.stage` 与节点阶段一致；`auto_gates` 时自动通过当前阶段 pending 门禁；仍有未过则失败；通过后 `advance` |
-| `knowledge_search` | 知识 | `state` | `knowledge_card`、`log` | `stage`、`problem`、`queries`（必填）、`candidates_limit`(40)、`evidence_limit`(8)、`fallback`(true)、`kb_root` | 调用只读知识服务检索，写 `00_project/knowledge-cards/<stage>-candidates.json`；知识桥状态 off→requested 并更新最近知识卡 |
+| `knowledge_search` | 知识 | `state` | `knowledge_card`、`log` | `stage`、`problem`、`queries`（必填）、`candidates_limit`(40)、`evidence_limit`(8)、`fallback`(true)、`kb_root`、`index`（M22，可空，本地索引目录） | 调用只读知识服务检索，写 `00_project/knowledge-cards/<stage>-candidates.json`；知识桥状态 off→requested 并更新最近知识卡 |
 | `style_apply` | 风格 | `state` | `style_card`、`log` | `style`（必填）、`tool`（8 工具之一） | 生成风格卡并更新 `state.style` |
 | `style_inject` | 风格 | `state`、`text` | `injection`、`log` | `stage`（06/08）、`tool`、`items[{shot,prompt}]`、`per_shot` | 批量结构校验并写注入记录（可选逐镜记录） |
 | `artifact_register` | 工具 | `state` | `artifact`、`log` | `stage`（01–08/done）、`kind`、`paths[]` | 登记产物到 `state.stage_artifacts` 与修订日志 |
@@ -387,10 +387,11 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - M15（2.3.0）新增 10 项测试（定时跳过/计划执行、取消、重排 before/after/index、非法参数；Web API 2：定时+取消、重排），全量 `Ran 351 tests ... OK`；CLI 冒烟：`queue add --at`/`cancel`/`move`/`daemon --until-empty`；doctor 9 项含 6 份 flow 契约。
 - M16（2.4.0）新增 8 项测试（队列重试/通知 6：重试重置、非 failed 拒绝、retry_failed 上限、通知日志、notify-cmd、无失败不通知；Web API 2：重试+通知、retry_failed），全量 `Ran 359 tests ... OK`；CLI 冒烟：`queue retry`、`run --retry-failed 1`、`queue notifications`、daemon 日志参数；doctor 9 项含 6 份 flow 契约。
 - M20（2.8.0）新增 5 项测试（覆盖率 2、可复现构建 2、Web 回滚 1），全量 `Ran 387 tests ... OK`；CI 九步全 PASS（覆盖率 76.37%、repro PASS、品牌守卫 0 命中）；Web 冒烟：快照创建 → 列表 → dry-run → 回滚。
+- M22（2.10.0）新增 12 项测试（索引证据卡服务 8、CLI 2、flow 节点 2），全量 `Ran 413 tests ... OK`；CLI 冒烟：`knowledge search --index` 生成同契约知识卡；flow `knowledge_search` 节点 `index` 参数运行后写 `00_project/knowledge-cards/<stage>-candidates.json`；索引缺失/无命中分别报可读错误与 `no_evidence`。
 
-## 18. 后续（M21 候选）
+## 18. 后续（M23 候选）
 
-- FR-10 索引维护（P0 缺口）：按契约重建索引（方案 B PoC）与增量维护 CLI。
-- 覆盖率从 76.37% 提升至 PRD 目标的 80%（补 webui/queue/batch 低覆盖分支）。
+- 索引维护增强：来源目录过滤/多来源合并、索引任务可视化与后台定时增量（FR-10 后续）。
+- 覆盖率从 77.37% 提升至 PRD 目标的 80%（补 webui/queue/batch 低覆盖分支）。
 - GitHub Actions 远端矩阵真实跑通（需配置 remote）与 macOS E2E-02。
 - 快照清理/定时快照策略与 Web 快照 diff 视图。

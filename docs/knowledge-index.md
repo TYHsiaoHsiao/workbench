@@ -39,4 +39,15 @@ python workbench.py index search --query 第一幕 --limit 5
 
 - 全量知识库约 13,272 个 Markdown / 10.5 GB（含 `10-小说库` 9.8 GB），不建议一次性全量建库；按子目录（如 `05`/`06`/`08`）分别建库。
 - 索引产物与源文本同量级，需预留磁盘；SQLite 需支持 FTS5 trigram（Python 内置 SQLite ≥ 3.34，当前 3.12 环境可用）。
-- 本迭代索引是独立新链路，尚未接入 `knowledge_search` 节点/服务（服务仍只读外部 `knowledgeIndex.sqlite`）；接入与语义检索为后续候选。
+- 2.9.0（M21）索引为独立链路；2.10.0（M22）已接入知识服务：CLI `knowledge search --index <dir>` 与 flow `knowledge_search` 节点 `index` 参数可生成同契约证据卡（详见 §6）。语义检索（embedding/向量）仍为后续候选。
+
+## 6. 接入知识服务（M22）
+
+- CLI：`python workbench.py knowledge search --index <索引目录> --project <项目> --stage 05 --problem "..." --queries "建立悬念"`
+  - `--index` 指向 `index build --out` 的输出目录（含 `knowledge-index.sqlite` 与 `knowledge-index-meta.json`）
+  - 无 `--index` 时仍走外部知识库证据链（`knowledgeIndex.sqlite`），两者输出同一 `knowledge-card.schema.json`
+- flow 节点：`knowledge_search` 的参数新增可选 `index`（本地索引目录）；设置后节点优先生成索引证据卡，不设置则走外部服务。
+- 证据卡差异：索引模式 `evidence` 的 `page` 为分块标题（无标题时「行 1」）、`hit` 为命中查询词；证据按 (path,page,snippet) 去重，
+  FTS 与 LIKE 结果混合排序（FTS 优先）。`no_evidence` 表示索引库中无命中（通常是索引建成后源/查询词变化）。
+- 限制：索引模式不读取外部 `knowledgeIndex.sqlite` 的 FTS 元数据；中文检索最低 3 字（1–2 字 LIKE 回退）；索引库需先由
+  `index build` 生成，路径不存在时 CLI/节点返回可读错误。

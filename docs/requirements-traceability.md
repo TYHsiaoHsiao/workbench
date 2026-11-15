@@ -1,6 +1,6 @@
 # 需求追溯表（FR ↔ 实现 ↔ 里程碑 ↔ 证据）
 
-> 版本：2.9.0 · 状态：M21（迭代 24）落盘 · 维护规则见文末
+> 版本：2.10.0 · 状态：M22（迭代 25）落盘 · 维护规则见文末
 
 本文件把 PRD §6 的 22 条功能需求（FR-01–FR-22）映射到工作台实现、里程碑与验证证据，作为需求—实现—验收之间的可审计链路。检查工具：`python scripts/check_fr_mapping.py`（CI 门禁，要求 22 条全覆盖、无重复）。
 
@@ -17,7 +17,7 @@
 | FR-07 参考记忆 v2 | P0 | `core_router.memory` + `reference-memory.schema.json`（JSON 主存 + MD 视图） | 迭代 0 / 1b（0.4.0） | `tests/`、`00_project/reference-memory.json` | 已实现 |
 | FR-08 知识库契约校验 | P0 | `knowledge_service` + `knowledge-card.schema.json`（只读适配 `knowledgeIndex.sqlite`） | 迭代 1a（0.2.0） | `docs/knowledge-service.md`、`tests/` | 已实现 |
 | FR-09 检索与证据卡 | P0 | `knowledge_service` 候选人/证据、2/2.1 召回与精度修订 | 迭代 1a / 2 / 2.1（0.2.0–0.3.1） | `docs/knowledge-poc-report.md`、`docs/iteration-2-recall-report.md` | 已实现 |
-| FR-10 索引维护 | P0 | `packages/knowledge_service/index_builder.py`（SQLite FTS5 trigram、分块、全量/增量、契约校验）+ CLI `index build/info/verify/search` | M21（2.9.0） | `docs/knowledge-index.md`、`tests/test_knowledge_index.py` | 已实现（基础版） |
+| FR-10 索引维护 | P0 | `packages/knowledge_service/index_builder.py`（SQLite FTS5 trigram、分块、全量/增量、契约校验）+ CLI `index build/info/verify/search`；M22 `index_service.py` 接入知识服务（`search_index_card`、CLI `knowledge search --index`、flow 节点 `index` 参数） | M21（2.9.0）、M22（2.10.0） | `docs/knowledge-index.md`、`tests/test_knowledge_index.py`、`tests/test_knowledge_index_service.py` | 已实现（基础版，已接入服务） |
 | FR-11 品牌守卫 | P0 | `brand_guard` + `config/brand-guard.json` + CI `brand-guard` 步骤 | 迭代 0（0.1.0） | CI 输出「命中 0 处」、`tests/` | 已实现 |
 | FR-12 项目初始化与模板 | P0 | `workbench.py init`（内置项目模板 + 入口/模式引导）| 迭代 0 / 1b（0.4.0） | `docs/quick-start.md` | 已实现 |
 | FR-13 版本与影响面 | P1 | `core_router.gates.mark_downstream_stale`（阶段变更影响提示） | 迭代 0（0.1.0） | `check --content` 下游过期提示 | 部分实现 |
@@ -42,6 +42,7 @@
 | 实时预览与界面迭代 | 2.0.1 | `/api/dev/version`、节点分类视觉、17 类演示图 | FR-19、FR-20 |
 | PRD 验收工具链/NFR 基准 | M17（2.5.0） | `check_doc_links.py`、`package_smoke.py`、`bench.py` | FR-20、FR-22 |
 | 项目状态快照与回滚/发行包回滚演练 | M18（2.6.0） | `core_router/rollback.py`、`rollback_drill.py` | FR-21、FR-22 |
+| 索引证据卡接入知识服务 | M22（2.10.0） | `packages/knowledge_service/index_service.py`、CLI `knowledge search --index`、flow `knowledge_search` 节点 `index` 参数、`tests/test_knowledge_index_service.py` | FR-10、FR-12、FR-13 |
 | 知识库索引维护（重建/增量/FTS5 检索） | M21（2.9.0） | `packages/knowledge_service/index_builder.py`、`knowledge-index` 契约、`index` CLI | FR-10、FR-17 |
 | 跨平台 CI/覆盖率/可复现构建/快照回滚 Web | M20（2.8.0） | `scripts/coverage_check.py`、`scripts/repro_check.py`、`.github/workflows/ci.yml`、`/api/rollback/*` | FR-19、FR-21、FR-22 |
 
