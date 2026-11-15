@@ -400,3 +400,11 @@ button.link:hover { text-decoration: underline; }
 .gen-status-failed { color: #f87171; border-color: #b91c1c; }
 .gen-status-dry_run { color: #93c5fd; border-color: #1d4ed8; }
 .gen-status-planned { color: #a0aec0; }
+
+.gen-detail-card { width: 780px; }
+.gen-detail-meta { display: grid; gap: 6px; margin-bottom: 12px; }
+.gen-detail-meta > div { display: grid; grid-template-columns: 140px 1fr; gap: 10px; }
+.gen-detail-meta > div > span { color: #8a94a6; }
+.gen-json { max-height: 320px; overflow: auto; background: #0f1218; border: 1px solid #263041;
+  border-radius: 6px; padding: 12px; font-family: Consolas, "Courier New", monospace;
+  font-size: 12px; line-height: 1.45; color: #c8d3e6; white-space: pre-wrap; word-break: break-all; }

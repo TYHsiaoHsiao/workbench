@@ -21,7 +21,9 @@ from .jobs import (
 from .providers import (
     PROVIDERS_FILE,
     PROVIDERS_SCHEMA,
+    STAGE_DIRS,
     GenerateError,
+    adopt,
     get_provider,
     job_detail,
     load_providers,
@@ -30,6 +32,8 @@ from .providers import (
     refresh,
     refresh_all,
     resolve_prompt,
+    result_url,
+    retry,
     submit,
 )
 
@@ -38,6 +42,8 @@ __all__ = [
     "JobError",
     "PROVIDERS_FILE",
     "PROVIDERS_SCHEMA",
+    "STAGE_DIRS",
+    "adopt",
     "create_job",
     "get_provider",
     "job_detail",
@@ -52,6 +58,8 @@ __all__ = [
     "refresh",
     "refresh_all",
     "resolve_prompt",
+    "result_url",
+    "retry",
     "submit",
     "update_job",
     "write_job",

@@ -38,6 +38,19 @@
     "updated_at": { "type": "string", "minLength": 1 },
     "request": { "type": "object" },
     "response": { "type": "object" },
-    "error": { "type": "string" }
+    "error": { "type": "string" },
+    "retried_from": {
+      "type": "string",
+      "pattern": "^gen-[a-z0-9-]{6,60}$"
+    },
+    "adopted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact", "at"],
+      "properties": {
+        "artifact": { "type": "string", "minLength": 1 },
+        "at": { "type": "string", "minLength": 1 }
+      }
+    }
   }
 }

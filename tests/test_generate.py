@@ -13,7 +13,7 @@ from unittest import mock
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "packages"))
 
-from core_router.project import create_project  # noqa: E402
+from core_router.project import create_project, load_state  # noqa: E402
 from generate import (  # noqa: E402
     GenerateError,
     get_provider,
@@ -22,8 +22,11 @@ from generate import (  # noqa: E402
     load_providers,
     plan,
     provider_ids,
+    adopt,
     refresh,
     refresh_all,
+    result_url,
+    retry,
     submit,
 )
 from generate import providers as generate_providers  # noqa: E402
@@ -273,6 +276,133 @@ class GenerateRefreshTest(unittest.TestCase):
             with self.assertRaises(GenerateError) as ctx:
                 generate_providers._http_status(provider, job)
         self.assertIn("SEEDANCE_API_KEY", str(ctx.exception))
+
+
+class GenerateRetryAdoptTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        report = create_project("回填测试", base=Path(self.tmp.name) / "projects")
+        self.project = Path(report["path"])
+        self.prompt = self.project / "05_shots" / "shot-01-prompt.md"
+        self.prompt.write_text(PROMPT, encoding="utf-8")
+
+    def _job(
+        self,
+        *,
+        status: str = "failed",
+        dry_run: bool = False,
+        response: dict | None = None,
+        prompt_path: str | None = None,
+    ) -> dict:
+        relative = (
+            str(self.prompt.relative_to(self.project))
+            if prompt_path is None
+            else prompt_path
+        )
+        text = self.prompt.read_text(encoding="utf-8")
+        job = create_job(
+            self.project,
+            provider="seedance_2_5",
+            model="seedance-2.5",
+            project="回填测试",
+            shot="01",
+            prompt_path=relative,
+            prompt_sha256=hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            chars=len(text),
+            dry_run=dry_run,
+            status=status,
+        )
+        if status == "failed":
+            job = update_job(self.project, job["job_id"], error="平台失败")
+        if response is not None:
+            job = update_job(self.project, job["job_id"], response=response)
+        return job
+
+    def test_retry_rejects_non_failed_job(self) -> None:
+        job = self._job(
+            status="succeeded", response={"video_url": "https://cdn.test/a.mp4"}
+        )
+        with self.assertRaises(GenerateError) as ctx:
+            retry(self.project, job["job_id"])
+        self.assertIn("failed / canceled", str(ctx.exception))
+
+    def test_retry_creates_dry_run_job_with_retried_from(self) -> None:
+        job = self._job()
+        with mock.patch.dict(os.environ, {}, clear=True):
+            new_job = retry(self.project, job["job_id"])
+        self.assertNotEqual(job["job_id"], new_job["job_id"])
+        self.assertEqual(job["job_id"], new_job["retried_from"])
+        self.assertTrue(new_job["dry_run"])
+        self.assertEqual("dry_run", new_job["status"])
+        self.assertEqual("failed", job_detail(self.project, job["job_id"])["status"])
+
+    def test_retry_live_override_keeps_dry_run(self) -> None:
+        job = self._job(dry_run=True)
+        with mock.patch.dict(os.environ, {}, clear=True):
+            new_job = retry(self.project, job["job_id"], live=False)
+        self.assertTrue(new_job["dry_run"])
+
+    def test_retry_requires_prompt_path(self) -> None:
+        job = self._job(prompt_path="")
+        with self.assertRaises(GenerateError) as ctx:
+            retry(self.project, job["job_id"])
+        self.assertIn("没有提示词文件路径", str(ctx.exception))
+
+    def test_adopt_requires_succeeded(self) -> None:
+        job = self._job()
+        with self.assertRaises(GenerateError) as ctx:
+            adopt(self.project, job["job_id"])
+        self.assertIn("只有 succeeded", str(ctx.exception))
+
+    def test_adopt_writes_receipt_and_registers_artifact(self) -> None:
+        url = "https://cdn.test/out.mp4"
+        job = self._job(status="succeeded", response={"video_url": url})
+        result = adopt(self.project, job["job_id"])
+        artifact = result["artifact"]
+        self.assertEqual(f"05_shots/generations/shot-01__{job['job_id']}.json", artifact)
+        receipt_path = self.project / artifact
+        self.assertTrue(receipt_path.is_file())
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        self.assertEqual(url, receipt["result_url"])
+        self.assertEqual(url, result["result_url"])
+        state = load_state(self.project)
+        self.assertIn(artifact, state["stage_artifacts"]["05"])
+        updated = job_detail(self.project, job["job_id"])
+        self.assertEqual(artifact, updated["adopted"]["artifact"])
+
+    def test_adopt_rejects_second_time(self) -> None:
+        job = self._job(
+            status="succeeded", response={"video_url": "https://cdn.test/b.mp4"}
+        )
+        adopt(self.project, job["job_id"])
+        with self.assertRaises(GenerateError) as ctx:
+            adopt(self.project, job["job_id"])
+        self.assertIn("已回填过", str(ctx.exception))
+
+    def test_adopt_requires_result_url(self) -> None:
+        job = self._job(status="succeeded", response={"id": "platform-9"})
+        with self.assertRaises(GenerateError) as ctx:
+            adopt(self.project, job["job_id"])
+        self.assertIn("没有可回填的结果 URL", str(ctx.exception))
+
+    def test_result_url_extracts_nested_and_list(self) -> None:
+        nested = {
+            "response": {"data": {"outputs": [{"url": "https://cdn.test/nested.mp4"}]}}
+        }
+        self.assertEqual("https://cdn.test/nested.mp4", result_url(nested))
+        listed = {"response": {"videos": ["https://cdn.test/list.mp4"]}}
+        self.assertEqual("https://cdn.test/list.mp4", result_url(listed))
+        self.assertEqual("", result_url({"response": None}))
+        self.assertEqual("", result_url({}))
+
+    def test_adopt_unknown_stage_rejected(self) -> None:
+        job = self._job(
+            status="succeeded", response={"video_url": "https://cdn.test/c.mp4"}
+        )
+        with self.assertRaises(GenerateError) as ctx:
+            adopt(self.project, job["job_id"], stage="99")
+        self.assertIn("未知阶段", str(ctx.exception))
 
 
 if __name__ == "__main__":

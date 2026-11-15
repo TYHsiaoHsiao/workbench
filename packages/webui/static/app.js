@@ -1435,11 +1435,22 @@ function genJobRows() {
   }
   const rows = jobs.map((job) => {
     const canRefresh = !job.dry_run && job.status === "submitted";
-    let action = "";
+    const actions = [
+      '<button class="link" data-gen-detail="' + escapeHtml(job.job_id) + '">详情</button>',
+    ];
     if (canRefresh) {
-      action = '<button class="link" data-gen-refresh="' + escapeHtml(job.job_id) + '">刷新</button>';
-    } else if (job.error) {
-      action = '<span class="err" title="' + escapeHtml(job.error) + '">有错误</span>';
+      actions.push('<button class="link" data-gen-refresh="' + escapeHtml(job.job_id) + '">刷新</button>');
+    }
+    if (job.status === "failed" || job.status === "canceled") {
+      actions.push('<button class="link" data-gen-retry="' + escapeHtml(job.job_id) + '">重试</button>');
+    }
+    if (job.status === "succeeded" && job.adopted) {
+      actions.push('<span class="muted">已回填</span>');
+    } else if (job.status === "succeeded") {
+      actions.push('<button class="link" data-gen-adopt="' + escapeHtml(job.job_id) + '">回填</button>');
+    }
+    if (job.error) {
+      actions.push('<span class="err" title="' + escapeHtml(job.error) + '">有错误</span>');
     }
     return (
       '<tr><td class="mono">' + escapeHtml(job.job_id) + "</td>" +
@@ -1449,7 +1460,7 @@ function genJobRows() {
       "<td>" + escapeHtml(job.shot || "-") + "</td>" +
       "<td>" + (job.chars || 0) + "</td>" +
       "<td>" + escapeHtml(job.created_at || "") + "</td>" +
-      "<td>" + action + "</td></tr>"
+      "<td>" + actions.join(" ") + "</td></tr>"
     );
   }).join("");
   return '<table class="gen-table"><thead><tr><th>任务</th><th>provider / 模型</th><th>状态</th>' +
@@ -1605,6 +1616,90 @@ async function refreshGenerateAll() {
   }
 }
 
+function genJobResultUrl(job) {
+  const response = job && job.response;
+  const keys = ["video_url", "output_url", "result_url", "url"];
+  function find(node) {
+    if (!node || typeof node !== "object") return "";
+    for (const key of keys) {
+      const value = node[key];
+      if (typeof value === "string" && value) return value;
+    }
+    for (const key of ["data", "result"]) {
+      const found = find(node[key]);
+      if (found) return found;
+    }
+    return "";
+  }
+  return find(response);
+}
+
+function openGenDetail(jobId) {
+  const job = (generateCache.jobs || []).find((item) => item.job_id === jobId);
+  if (!job) return;
+  const url = genJobResultUrl(job);
+  const canRetry = job.status === "failed" || job.status === "canceled";
+  const canAdopt = job.status === "succeeded" && !job.adopted;
+  const body = $("#gen-detail-body");
+  body.innerHTML =
+    '<div class="gen-detail-meta">' +
+    "<div><span>任务</span><b class='mono'>" + escapeHtml(job.job_id) + "</b></div>" +
+    "<div><span>provider / 模型</span><b>" + escapeHtml(job.provider + " / " + job.model) + "</b></div>" +
+    "<div><span>状态</span><b><span class='" + genStatusClass(job.status) + "'>" +
+    escapeHtml(job.status) + "</span>" + (job.dry_run ? " <span class='muted'>dry-run</span>" : "") + "</b></div>" +
+    "<div><span>镜头</span><b>" + escapeHtml(job.shot || "-") + "</b></div>" +
+    "<div><span>提示词</span><b class='mono'>" + escapeHtml(job.prompt_path || "-") + "</b></div>" +
+    "<div><span>字数 / 创建</span><b>" + (job.chars || 0) + " / " + escapeHtml(job.created_at || "") + "</b></div>" +
+    (job.retried_from ? "<div><span>重试来源</span><b class='mono'>" + escapeHtml(job.retried_from) + "</b></div>" : "") +
+    (job.adopted ? "<div><span>已回填</span><b class='mono'>" + escapeHtml(job.adopted.artifact) + "</b></div>" : "") +
+    (url ? '<div><span>结果</span><b><a href="' + escapeHtml(url) + '" target="_blank" rel="noreferrer">打开结果</a></b></div>' : "") +
+    (job.error ? '<div><span>错误</span><b class="err">' + escapeHtml(job.error) + "</b></div>" : "") +
+    "</div>" +
+    '<div class="generate-actions">' +
+    (canRetry ? '<button id="btn-gen-detail-retry">重试</button>' : "") +
+    (canAdopt ? '<button id="btn-gen-detail-adopt" class="primary">回填产物</button>' : "") +
+    "</div>" +
+    "<h4>任务记录</h4><pre class='gen-json'>" + escapeHtml(JSON.stringify(job, null, 2)) + "</pre>";
+  $("#gen-detail-panel").classList.remove("hidden");
+  const retryBtn = $("#btn-gen-detail-retry");
+  if (retryBtn) retryBtn.addEventListener("click", () => retryGenerateJob(job.job_id));
+  const adoptBtn = $("#btn-gen-detail-adopt");
+  if (adoptBtn) adoptBtn.addEventListener("click", () => adoptGenerateJob(job.job_id));
+}
+
+function closeGenDetail() {
+  $("#gen-detail-panel").classList.add("hidden");
+}
+
+async function retryGenerateJob(jobId) {
+  try {
+    const data = await api(
+      "/api/generate/jobs/" + encodeURIComponent(jobId) + "/retry",
+      { method: "POST", body: JSON.stringify({ project: state.project }) }
+    );
+    const job = data.job || {};
+    logLine("已重试 " + jobId + " → 新任务 " + job.job_id + "（" + job.status + "）", "ok");
+    closeGenDetail();
+    await renderGenerate();
+  } catch (err) {
+    logLine("重试任务失败：" + err.message, "err");
+  }
+}
+
+async function adoptGenerateJob(jobId) {
+  try {
+    const data = await api(
+      "/api/generate/jobs/" + encodeURIComponent(jobId) + "/adopt",
+      { method: "POST", body: JSON.stringify({ project: state.project, stage: "05" }) }
+    );
+    logLine("已回填任务 " + jobId + " → " + (data.artifact || ""), "ok");
+    closeGenDetail();
+    await renderGenerate();
+  } catch (err) {
+    logLine("回填生成结果失败：" + err.message, "err");
+  }
+}
+
 function bindGeneratePanel() {
   $("#gen-provider").addEventListener("change", syncGenModels);
   syncGenModels();
@@ -1613,6 +1708,15 @@ function bindGeneratePanel() {
   $("#btn-gen-refresh-all").addEventListener("click", () => refreshGenerateAll());
   document.querySelectorAll("#gen-job-table-box [data-gen-refresh]").forEach((button) => {
     button.addEventListener("click", () => refreshGenerateJob(button.dataset.genRefresh));
+  });
+  document.querySelectorAll("#gen-job-table-box [data-gen-detail]").forEach((button) => {
+    button.addEventListener("click", () => openGenDetail(button.dataset.genDetail));
+  });
+  document.querySelectorAll("#gen-job-table-box [data-gen-retry]").forEach((button) => {
+    button.addEventListener("click", () => retryGenerateJob(button.dataset.genRetry));
+  });
+  document.querySelectorAll("#gen-job-table-box [data-gen-adopt]").forEach((button) => {
+    button.addEventListener("click", () => adoptGenerateJob(button.dataset.genAdopt));
   });
 }
 
@@ -1734,6 +1838,7 @@ function bindUi() {
     openGenerate().catch((err) => logLine("打开生成面板失败：" + err.message, "err"))
   );
   $("#btn-close-generate").addEventListener("click", () => closeGenerate());
+  $("#btn-close-gen-detail").addEventListener("click", () => closeGenDetail());
   $("#btn-close-projects").addEventListener("click", () => closeProjects());
   $("#inspector-body").addEventListener("focusin", () => remember());
   $("#run-mode").addEventListener("change", () => renderRun());

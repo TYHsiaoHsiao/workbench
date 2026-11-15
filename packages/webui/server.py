@@ -52,6 +52,7 @@ from flow.store import graph_id_from_name
 from generate import (
     GenerateError,
     JobError,
+    adopt,
     get_provider,
     job_detail,
     list_jobs,
@@ -60,6 +61,7 @@ from generate import (
     provider_ids,
     refresh,
     refresh_all,
+    retry,
     submit,
 )
 
@@ -579,6 +581,41 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             except (GenerateError, JobError) as exc:
                 raise FlowError(str(exc)) from exc
             self._json({"ok": True, "job": job})
+            return
+        if path.startswith("/api/generate/jobs/") and path.endswith("/retry"):
+            project = resolve_project(
+                body.get("project") or str(self.server.project_root)
+            )
+            job_id = unquote(
+                path[len("/api/generate/jobs/"): -len("/retry")]
+            ).strip("/")
+            live = body.get("live")
+            try:
+                job = retry(
+                    project, job_id, live=None if live is None else bool(live)
+                )
+            except (GenerateError, JobError) as exc:
+                raise FlowError(str(exc)) from exc
+            self._json({"ok": True, "job": job})
+            return
+        if path.startswith("/api/generate/jobs/") and path.endswith("/adopt"):
+            project = resolve_project(
+                body.get("project") or str(self.server.project_root)
+            )
+            job_id = unquote(
+                path[len("/api/generate/jobs/"): -len("/adopt")]
+            ).strip("/")
+            try:
+                result = adopt(
+                    project,
+                    job_id,
+                    stage=str(body.get("stage") or "05"),
+                    kind=str(body.get("kind") or "generation"),
+                    note=str(body.get("note") or ""),
+                )
+            except (GenerateError, JobError) as exc:
+                raise FlowError(str(exc)) from exc
+            self._json(result)
             return
         if path == "/api/generate/plan":
             project = resolve_project(

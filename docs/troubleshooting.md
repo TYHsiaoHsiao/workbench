@@ -129,6 +129,9 @@
 - `generate refresh` 报「dry-run 记录，没有平台状态可查询」：只有真实提交（submitted）且非 dry-run 的任务能刷新；mock / dry-run 任务只是本地记录。
 - 刷新报「缺少 …_BASE_URL / …_API_KEY 环境变量」：状态查询需要 provider 的 `base_url_env`（如 `SEEDANCE_BASE_URL`）与 API key；配置环境变量后重试。
 - 刷新后任务仍是 submitted：平台可能仍在排队/生成中；稍后再点刷新或执行 `generate refresh --all`。批量刷新中单个任务失败会返回 `ok=false` 与错误文本，不影响其他任务。
+- `generate retry` 报「只有 failed / canceled 任务可以重试」：重试只针对终态失败任务；排队/成功任务请用 `generate refresh` 或新提交。新任务记录 `retried_from` 指向原任务。
+- `generate adopt` 报「只有 succeeded 任务可以回填结果」/「已回填过」：先 `generate refresh` 确认 succeeded 且未回填；回填默认写 `05_shots/generations/` 凭证并登记 `state.stage_artifacts`，重复回填会被拒绝。
+- 回填报「没有可回填的结果 URL」：平台成功响应里未带 video_url/output_url 等结果字段；用 `generate show <job_id>` 检查 response 结构，必要时从平台手动获取结果后登记产物。
 
 
 

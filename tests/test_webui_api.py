@@ -539,5 +539,59 @@ class WebUIApiTest(unittest.TestCase):
             self.assertEqual("submitted", refreshed[job["job_id"]]["status"])
 
 
+    def _terminal_job(self, status: str, response: dict | None = None) -> dict:
+        prompt = self.project / "05_shots" / "shot-01-prompt.md"
+        prompt.write_text("画面：雨夜霓虹街头，女性侦探背影缓行。\n", encoding="utf-8")
+        relative = str(prompt.relative_to(self.project))
+        job = create_job(
+            self.project,
+            provider="seedance_2_5",
+            model="seedance-2.5",
+            project=self.project.name,
+            shot="1-01",
+            prompt_path=relative,
+            prompt_sha256="a" * 64,
+            chars=20,
+            dry_run=False,
+            status=status,
+        )
+        if status == "failed":
+            job = update_job(self.project, job["job_id"], error="平台拒绝")
+        if response is not None:
+            job = update_job(self.project, job["job_id"], response=response)
+        return job
+
+    def test_generate_job_retry_endpoint(self) -> None:
+        job = self._terminal_job("failed")
+        status, data = self.client.json(
+            "POST",
+            f"/api/generate/jobs/{job['job_id']}/retry",
+            {"project": str(self.project), "live": False},
+        )
+        self.assertEqual(200, status, msg=data)
+        new_job = data["job"]
+        self.assertNotEqual(job["job_id"], new_job["job_id"])
+        self.assertEqual(job["job_id"], new_job["retried_from"])
+        self.assertTrue(new_job["dry_run"])
+
+    def test_generate_job_adopt_endpoint(self) -> None:
+        url = "https://cdn.test/adopted.mp4"
+        job = self._terminal_job("succeeded", response={"video_url": url})
+        status, data = self.client.json(
+            "POST",
+            f"/api/generate/jobs/{job['job_id']}/adopt",
+            {"project": str(self.project), "stage": "05"},
+        )
+        self.assertEqual(200, status, msg=data)
+        artifact = data["artifact"]
+        self.assertTrue(artifact.startswith("05_shots/generations/"))
+        self.assertTrue((self.project / artifact).is_file())
+        status, detail = self.client.json(
+            "GET", self._q(f"/api/generate/jobs/{job['job_id']}")
+        )
+        self.assertEqual(200, status, msg=detail)
+        self.assertEqual(artifact, detail["job"]["adopted"]["artifact"])
+
+
 if __name__ == "__main__":
     unittest.main()

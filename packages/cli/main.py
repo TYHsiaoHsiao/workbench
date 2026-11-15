@@ -93,6 +93,7 @@ from style_service import (
 from generate import (
     GenerateError,
     JobError,
+    adopt,
     get_provider,
     job_detail,
     list_jobs,
@@ -101,6 +102,7 @@ from generate import (
     provider_ids,
     refresh,
     refresh_all,
+    retry,
     submit,
 )
 
@@ -1859,6 +1861,52 @@ def cmd_generate_show(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_generate_retry(args: argparse.Namespace) -> int:
+    project = _resolve_project(args.project)
+    live: bool | None = None
+    if args.live:
+        live = True
+    elif args.dry_run:
+        live = False
+    try:
+        job = retry(project, args.job_id, live=live)
+    except (GenerateError, JobError) as exc:
+        _print(str(exc))
+        return EXIT_FAIL
+    if args.json:
+        _emit(job, True)
+    else:
+        _print(
+            f"已重试任务 {args.job_id} → 新任务 {job['job_id']}"
+            f" · {job['provider']}/{job['model']} · 状态 {job['status']}"
+        )
+        _print(f"retried_from={job.get('retried_from')} · dry_run={job['dry_run']}")
+    return EXIT_OK
+
+
+def cmd_generate_adopt(args: argparse.Namespace) -> int:
+    project = _resolve_project(args.project)
+    try:
+        result = adopt(
+            project,
+            args.job_id,
+            stage=args.stage,
+            kind=args.kind,
+            note=args.note or "",
+        )
+    except (GenerateError, JobError) as exc:
+        _print(str(exc))
+        return EXIT_FAIL
+    if args.json:
+        _emit(result, True)
+    else:
+        _print(f"已回填任务 {result['job']['job_id']} → {result['artifact']}")
+        _print(f"结果 URL: {result['result_url']}")
+        registered = result.get("registered") or {}
+        _print(f"产物登记: {registered.get('summary') or ''}")
+    return EXIT_OK
+
+
 def cmd_generate_refresh(args: argparse.Namespace) -> int:
     project = _resolve_project(args.project)
     if not args.all and not args.job_id:
@@ -2314,6 +2362,26 @@ def build_parser() -> argparse.ArgumentParser:
     gen_show.add_argument("job_id", help="任务 id，如 gen-20261115-101500-ab12cd")
     gen_show.add_argument("--project", required=True, help="项目目录或项目名")
     gen_show.set_defaults(func=cmd_generate_show)
+    gen_retry = generate_sub.add_parser(
+        "retry", help="按原 provider/模型/提示词重试 failed / canceled 任务"
+    )
+    gen_retry.add_argument("job_id", help="要重试的任务 id")
+    gen_retry.add_argument("--project", required=True, help="项目目录或项目名")
+    retry_mode = gen_retry.add_mutually_exclusive_group()
+    retry_mode.add_argument("--live", action="store_true", help="强制真实提交（需 env key）")
+    retry_mode.add_argument("--dry-run", action="store_true", help="强制只记录 dry-run")
+    gen_retry.add_argument("--json", action="store_true", help="输出 JSON")
+    gen_retry.set_defaults(func=cmd_generate_retry)
+    gen_adopt = generate_sub.add_parser(
+        "adopt", help="把 succeeded 任务的结果回填为项目产物（写凭证并登记 state）"
+    )
+    gen_adopt.add_argument("job_id", help="要回填的任务 id")
+    gen_adopt.add_argument("--project", required=True, help="项目目录或项目名")
+    gen_adopt.add_argument("--stage", default="05", help="登记到哪个阶段（默认 05）")
+    gen_adopt.add_argument("--kind", default="generation", help="产物类型（默认 generation）")
+    gen_adopt.add_argument("--note", default="", help="备注")
+    gen_adopt.add_argument("--json", action="store_true", help="输出 JSON")
+    gen_adopt.set_defaults(func=cmd_generate_adopt)
     gen_refresh = generate_sub.add_parser(
         "refresh", help="查询平台任务状态并更新记录（仅 submitted 任务）"
     )

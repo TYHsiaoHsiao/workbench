@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -18,13 +19,23 @@ from typing import Any
 
 from contracts import validate
 
-from .jobs import JobError, create_job, list_jobs, read_job, update_job
+from .jobs import JobError, create_job, list_jobs, now, read_job, update_job
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PROVIDERS_FILE = "generate-providers.json"
 PROVIDERS_SCHEMA = "generate-providers.schema.json"
 DEFAULT_PROVIDERS = REPO_ROOT / "content" / PROVIDERS_FILE
 HTTP_TIMEOUT_S = 30
+STAGE_DIRS = {
+    "01": "01_story",
+    "02": "02_script",
+    "03": "03_assets",
+    "04": "04_performance",
+    "05": "05_shots",
+    "06": "06_prompts",
+    "07": "07_generations",
+    "08": "08_delivery",
+}
 
 
 class GenerateError(Exception):
@@ -487,11 +498,154 @@ def job_detail(project_root: str | Path, job_id: str) -> dict[str, Any]:
         raise GenerateError(str(exc)) from exc
 
 
+def _first_result(payload: dict[str, Any]) -> str:
+    stack: list[Any] = [payload]
+    while stack:
+        item = stack.pop(0)
+        if not isinstance(item, dict):
+            continue
+        for key in _RESULT_KEYS:
+            value = item.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+            if isinstance(value, list):
+                for candidate in value:
+                    if isinstance(candidate, str) and candidate.strip():
+                        return candidate.strip()
+                    if isinstance(candidate, dict):
+                        for url_key in ("url", "video_url", "output_url"):
+                            url = candidate.get(url_key)
+                            if isinstance(url, str) and url.strip():
+                                return url.strip()
+        for key in ("data", "result"):
+            if isinstance(item.get(key), dict):
+                stack.append(item[key])
+    return ""
+
+
+def result_url(job: dict[str, Any]) -> str:
+    """从任务 response 中提取第一个结果 URL（video_url 优先）。"""
+    payload = job.get("response")
+    if not isinstance(payload, dict):
+        return ""
+    return _first_result(payload)
+
+
+def retry(
+    project_root: str | Path, job_id: str, *, live: bool | None = None
+) -> dict[str, Any]:
+    """对 failed / canceled 任务按原 provider/模型/提示词创建新任务。
+
+    ``live`` 为 None 时沿用原任务的提交方式（原任务真实提交则重试也真实提交；
+    原任务是 dry-run 则重试仍为 dry-run）；显式传入 True/False 可覆盖。
+    """
+    job = job_detail(project_root, job_id)
+    status = str(job.get("status") or "")
+    if status not in ("failed", "canceled"):
+        raise GenerateError(
+            f"任务 {job_id} 当前状态为 {status}，只有 failed / canceled 任务可以重试"
+        )
+    prompt_path = str(job.get("prompt_path") or "")
+    if not prompt_path:
+        raise GenerateError(f"任务 {job_id} 没有提示词文件路径，无法重试")
+    provider = get_provider(str(job.get("provider") or ""), load_providers())
+    resolved_live = (not bool(job.get("dry_run"))) if live is None else bool(live)
+    try:
+        new_job = submit(
+            project_root,
+            provider,
+            prompt_path=prompt_path,
+            model=str(job.get("model") or "") or None,
+            shot=str(job.get("shot") or ""),
+            live=resolved_live,
+        )
+    except GenerateError as exc:
+        raise GenerateError(f"重试任务 {job_id} 失败：{exc}") from exc
+    try:
+        return update_job(
+            project_root, str(new_job["job_id"]), retried_from=job_id
+        )
+    except JobError as exc:
+        raise GenerateError(f"重试任务记录更新失败：{exc}") from exc
+
+
+def adopt(
+    project_root: str | Path,
+    job_id: str,
+    *,
+    stage: str = "05",
+    kind: str = "generation",
+    note: str = "",
+) -> dict[str, Any]:
+    """把 succeeded 任务的结果回填为项目产物。
+
+    在 ``<阶段目录>/generations/`` 下写结果凭证 JSON（含任务快照与结果 URL），
+    再通过 ``register_artifacts`` 登记进 ``state.stage_artifacts``，任务记录写入 ``adopted``。
+    """
+    job = job_detail(project_root, job_id)
+    status = str(job.get("status") or "")
+    if status != "succeeded":
+        raise GenerateError(
+            f"任务 {job_id} 当前状态为 {status}，只有 succeeded 任务可以回填结果"
+        )
+    if job.get("adopted"):
+        raise GenerateError(
+            f"任务 {job_id} 已回填过：{job['adopted'].get('artifact')}"
+        )
+    url = result_url(job)
+    if not url:
+        raise GenerateError(f"任务 {job_id} 的 response 中没有可回填的结果 URL")
+    stage = str(stage or "05")
+    directory = STAGE_DIRS.get(stage)
+    if not directory:
+        raise GenerateError(f"未知阶段：{stage}（可选 01-08）")
+    shot = str(job.get("shot") or "").strip()
+    name = f"shot-{shot}__{job_id}.json" if shot else f"{job_id}.json"
+    name = re.sub(r"[^0-9A-Za-z._\u4e00-\u9fff-]", "_", name)
+    root = Path(project_root)
+    receipt = root / directory / "generations" / name
+    receipt.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "job": job,
+        "result_url": url,
+        "adopted_at": now(),
+        "note": note,
+    }
+    receipt.write_text(
+        json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    relative = receipt.relative_to(root).as_posix()
+    from core_router.project import ProjectError, register_artifacts
+
+    try:
+        registered = register_artifacts(
+            root, stage, kind, [relative], note=note or f"生成结果回填 {job_id}"
+        )
+    except ProjectError as exc:
+        receipt.unlink(missing_ok=True)
+        raise GenerateError(f"生成结果登记失败：{exc}") from exc
+    try:
+        updated = update_job(
+            project_root, job_id, adopted={"artifact": relative, "at": now()}
+        )
+    except JobError as exc:
+        raise GenerateError(f"回填任务记录更新失败：{exc}") from exc
+    return {
+        "ok": True,
+        "job": updated,
+        "artifact": relative,
+        "result_url": url,
+        "registered": registered,
+    }
+
+
 __all__ = [
     "DEFAULT_PROVIDERS",
     "GenerateError",
     "PROVIDERS_FILE",
     "PROVIDERS_SCHEMA",
+    "STAGE_DIRS",
+    "adopt",
     "get_provider",
     "job_detail",
     "load_providers",
@@ -500,5 +654,7 @@ __all__ = [
     "refresh",
     "refresh_all",
     "resolve_prompt",
+    "result_url",
+    "retry",
     "submit",
 ]

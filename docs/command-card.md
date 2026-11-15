@@ -1,4 +1,4 @@
-# 命令卡（v1.8.0）
+# 命令卡（v1.9.0）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -93,7 +93,7 @@
 | `python workbench.py flow import --project 项目名 --file flow.json [--graph 新id] [--force]` | 导入流程图（先校验，非法不落盘） |
 | `python workbench.py flow batch --project 项目名 --all [--dry-run/--live] [--yes]` | 批量运行项目内全部流程图 |
 
-## 7.5 生成平台（generate，M8/M9）
+## 7.5 生成平台（generate，M8/M9/M10）
 
 | 命令 | 作用 |
 |---|---|
@@ -104,6 +104,8 @@
 | `python workbench.py generate show <job_id> --project 项目名 [--json]` | 任务详情（状态/请求/错误） |
 | `python workbench.py generate refresh <job_id> --project 项目名 [--json]` | 查询平台任务状态并更新本地记录（仅 submitted 且非 dry-run） |
 | `python workbench.py generate refresh --all --project 项目名 [--limit 20] [--json]` | 批量刷新 submitted 任务（单任务失败容错） |
+| `python workbench.py generate retry <job_id> --project 项目名 [--live/--dry-run] [--json]` | 重试 failed/canceled 任务（默认沿用原提交方式，新任务记录 `retried_from`） |
+| `python workbench.py generate adopt <job_id> --project 项目名 [--stage 05] [--kind generation] [--note 备注] [--json]` | 回填 succeeded 结果：写结果凭证并登记 `state.stage_artifacts` |
 
 ## 8. 契约校验
 

@@ -1,5 +1,16 @@
 # 变更日志
 
+## [1.9.0] - 2026-11-15 — 可视化节点工作台（M10：生成结果回填、失败重试与任务详情抽屉）
+
+- 结果回填：`packages/generate/providers.py` 新增 `result_url()`（从任务 response 提取 video_url/output_url/嵌套 data 等结果 URL 与 `adopt()`（仅 succeeded 且未回填；在 `<阶段目录>/generations/shot-XX__<job_id>.json` 写结果凭证，经 `register_artifacts` 登记 `state.stage_artifacts`，任务记录写 `adopted`）。
+- 失败重试：新增 `retry()`（仅 failed/canceled；按原 provider/模型/提示词创建新任务并记录 `retried_from`；默认沿用原任务提交方式，可传 `live` 覆盖）。
+- 契约：`generate-job` 增加可选 `retried_from`（pattern）与 `adopted`（artifact+at），向后兼容。
+- CLI：「generate retry <job_id>」与「generate adopt <job_id>」（`--stage` 默认 05、`--kind`、`--note`）。
+- Web API：`POST /api/generate/jobs/<job_id>/retry`（body: project/live）、`POST /api/generate/jobs/<job_id>/adopt`（body: project/stage/kind/note）。
+- Web 前端：生成面板任务表增加「详情」任务详情抽屉（状态/重试来源/回填结果/错误/任务 JSON），并提供「重试」「回填」按钮；顶栏「生成…」面板样式完善。
+- 测试：新增 12 项（重试/回填 10、Web API 2），合计 306 项通过；doctor 9 项、本地 CI 全绿、品牌守卫 0 命中。
+- 兼容：契约仍为 1.0；回填只登记凭证 JSON，重试不自动退避/轮询。
+
 ## [1.8.0] - 2026-11-15 — 可视化节点工作台（M9：生成任务状态轮询与 Web 生成面板）
 
 - 任务状态查询：`packages/generate/providers.py` 新增 `_http_status()`（按 provider `status_path` 查询平台，Bearer 认证，平台外部 ID 从任务 `response` 提取）与 `refresh()`（平台状态归一为 running/succeeded/failed，终态任务短路返回，dry-run 与 mock 任务拒绝查询）、`refresh_all()`（批量刷新 submitted 任务，单任务失败不影响其他任务）；`generate` 包导出 `refresh` / `refresh_all`。
