@@ -1,4 +1,4 @@
-# 命令卡（v1.6.0）
+# 命令卡（v1.7.0）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -92,6 +92,16 @@
 | `python workbench.py flow export --project 项目名 --graph 流程id --out flow.json` | 导出流程图 JSON（也可 `--file flow.json` 原样输出） |
 | `python workbench.py flow import --project 项目名 --file flow.json [--graph 新id] [--force]` | 导入流程图（先校验，非法不落盘） |
 | `python workbench.py flow batch --project 项目名 --all [--dry-run/--live] [--yes]` | 批量运行项目内全部流程图 |
+
+## 7.5 生成平台（generate，M8）
+
+| 命令 | 作用 |
+|---|---|
+| `python workbench.py generate providers [--json]` | 列出 4 个 provider 与 env key 设置状态（mock/seedance_2_0/seedance_2_5/minimax_h3） |
+| `python workbench.py generate plan --provider seedance_2_5 --prompt-file 05_shots/shot-01-prompt.md [--shot 1-01] [--model m] [--json]` | 提交前预检：模型白名单、字数上限、sha256、时长估算、是否 dry-run |
+| `python workbench.py generate submit --provider minimax_h3 --prompt-file ... [--live] [--project 项目名]` | 创建生成任务（默认 dry-run 只记录；`--live` 且 key 存在才真实提交） |
+| `python workbench.py generate jobs --project 项目名 [--limit 20] [--json]` | 生成任务列表（created_at 倒序） |
+| `python workbench.py generate show <job_id> --project 项目名 [--json]` | 任务详情（状态/请求/错误） |
 
 ## 8. 契约校验
 

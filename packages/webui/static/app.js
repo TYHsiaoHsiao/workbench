@@ -12,6 +12,8 @@ const PORT_COMPAT = {
   knowledge_card: ["knowledge_card", "card", "text", "log", "artifact", "any"],
   style_card: ["style_card", "card", "text", "log", "artifact", "any"],
   injection: ["injection", "artifact", "log", "text", "any"],
+  reference: ["reference", "artifact", "log", "text", "card", "any"],
+  generation: ["generation", "artifact", "log", "any"],
   any: ["any"],
 };
 

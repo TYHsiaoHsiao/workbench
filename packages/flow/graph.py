@@ -26,6 +26,8 @@ PORT_COMPAT: dict[str, set[str]] = {
     "knowledge_card": {"knowledge_card", "card", "text", "log", "artifact", "any"},
     "style_card": {"style_card", "card", "text", "log", "artifact", "any"},
     "injection": {"injection", "artifact", "log", "text", "any"},
+    "reference": {"reference", "artifact", "log", "text", "card", "any"},
+    "generation": {"generation", "artifact", "log", "any"},
     "true": {"true", "state", "artifact", "log", "text", "card", "any"},
     "false": {"false", "state", "artifact", "log", "text", "card", "any"},
     "body": {"body", "state", "artifact", "log", "any"},

@@ -457,6 +457,180 @@
       "executor": "loop"
     },
     {
+      "type": "knowledge_adopt",
+      "label": "知识卡采纳",
+      "category": "知识",
+      "description": "把已确认的知识卡写入跨阶段参考记忆（参考方法编号、契约校验、state.references 同步）。",
+      "ports": {
+        "in": [
+          "state",
+          "knowledge_card"
+        ],
+        "out": [
+          "reference",
+          "log"
+        ]
+      },
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "card": {
+            "type": "string",
+            "title": "知识卡路径（相对项目）"
+          },
+          "max_entries": {
+            "type": "integer",
+            "title": "最多采纳条数",
+            "minimum": 1,
+            "maximum": 10,
+            "default": 3
+          },
+          "scope": {
+            "type": "string",
+            "title": "使用范围",
+            "enum": [
+              "story_01_05",
+              "image_06",
+              "performance_07",
+              "camera_08",
+              "full"
+            ]
+          },
+          "require_confirmed": {
+            "type": "boolean",
+            "title": "必须已确认",
+            "default": true
+          },
+          "note": {
+            "type": "string",
+            "title": "备注"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "executor": "knowledge_adopt",
+      "parallel_safe": false
+    },
+    {
+      "type": "style_bind",
+      "label": "风格卡绑定",
+      "category": "风格",
+      "description": "把项目已应用的风格卡写入参考记忆（style_reference），并绑定 06/08 使用范围。",
+      "ports": {
+        "in": [
+          "style_card",
+          "state"
+        ],
+        "out": [
+          "reference",
+          "log"
+        ]
+      },
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "style": {
+            "type": "string",
+            "title": "风格编号（未应用时自动应用）"
+          },
+          "tool": {
+            "type": "string",
+            "title": "目标工具",
+            "enum": [
+              "mj",
+              "banana",
+              "sd",
+              "seedance_2_0",
+              "seedance_2_5",
+              "h3",
+              "runway",
+              "pika"
+            ]
+          },
+          "scope": {
+            "type": "array",
+            "title": "使用范围",
+            "items": {
+              "type": "string",
+              "enum": [
+                "image_06",
+                "performance_07",
+                "camera_08",
+                "full"
+              ]
+            },
+            "minItems": 1
+          },
+          "note": {
+            "type": "string",
+            "title": "备注"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "executor": "style_bind",
+      "parallel_safe": false
+    },
+    {
+      "type": "generate",
+      "label": "生成提交",
+      "category": "生成",
+      "description": "通过生成平台适配层提交提示词；默认 dry-run，显式 live 且配置 key 才发起真实请求。",
+      "ports": {
+        "in": [
+          "state",
+          "text"
+        ],
+        "out": [
+          "generation",
+          "log"
+        ]
+      },
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "生成平台",
+            "enum": [
+              "mock",
+              "seedance_2_0",
+              "seedance_2_5",
+              "minimax_h3"
+            ],
+            "default": "mock"
+          },
+          "model": {
+            "type": "string",
+            "title": "模型（留空用默认）"
+          },
+          "prompt_path": {
+            "type": "string",
+            "title": "提示词文件（相对项目）"
+          },
+          "shot": {
+            "type": "string",
+            "title": "镜头编号"
+          },
+          "live": {
+            "type": "boolean",
+            "title": "真实提交",
+            "default": false
+          },
+          "note": {
+            "type": "string",
+            "title": "备注"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "executor": "generate",
+      "parallel_safe": false
+    },
+    {
       "type": "confirm",
       "label": "人工确认",
       "category": "控制",

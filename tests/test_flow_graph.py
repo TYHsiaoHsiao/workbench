@@ -68,7 +68,7 @@ class FlowGraphTest(unittest.TestCase):
         cls.types = load_node_types()
 
     def test_node_types_registry_loads(self) -> None:
-        self.assertEqual(12, len(self.types))
+        self.assertEqual(15, len(self.types))
         self.assertEqual(
             {
                 "start",
@@ -83,6 +83,9 @@ class FlowGraphTest(unittest.TestCase):
                 "end",
                 "condition",
                 "loop",
+                "knowledge_adopt",
+                "style_bind",
+                "generate",
             },
             {item.type for item in self.types.types()},
         )

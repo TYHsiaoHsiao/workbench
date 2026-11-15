@@ -1,0 +1,52 @@
+{
+  "contract_version": "0.1",
+  "providers": [
+    {
+      "provider_id": "mock",
+      "label": "本地模拟（dry-run）",
+      "kind": "mock",
+      "models": ["mock-v1"],
+      "max_chars": 8000,
+      "notes": "仅用于流程联调，不发起网络请求，不产生费用。"
+    },
+    {
+      "provider_id": "seedance_2_0",
+      "label": "Seedance 2.0",
+      "kind": "video",
+      "env_key": "SEEDANCE_API_KEY",
+      "base_url_env": "SEEDANCE_BASE_URL",
+      "models": ["seedance-2.0"],
+      "max_chars": 3000,
+      "max_duration_s": 15,
+      "submit_path": "/v1/video/generations",
+      "status_path": "/v1/video/generations/{job_id}",
+      "notes": "单镜头 3–15 秒；环境变量缺失时自动降级为 dry-run 任务记录。"
+    },
+    {
+      "provider_id": "seedance_2_5",
+      "label": "Seedance 2.5",
+      "kind": "video",
+      "env_key": "SEEDANCE_API_KEY",
+      "base_url_env": "SEEDANCE_BASE_URL",
+      "models": ["seedance-2.5"],
+      "max_chars": 5000,
+      "max_duration_s": 30,
+      "submit_path": "/v1/video/generations",
+      "status_path": "/v1/video/generations/{job_id}",
+      "notes": "支持最多 30 秒；环境变量缺失时自动降级为 dry-run 任务记录。"
+    },
+    {
+      "provider_id": "minimax_h3",
+      "label": "MiniMax H3",
+      "kind": "video",
+      "env_key": "MINIMAX_API_KEY",
+      "base_url_env": "MINIMAX_BASE_URL",
+      "models": ["minimax-h3"],
+      "max_chars": 6000,
+      "max_duration_s": 30,
+      "submit_path": "/v1/video/generations",
+      "status_path": "/v1/video/generations/{job_id}",
+      "notes": "支持中文直投与 overall_soundscape；环境变量缺失时自动降级为 dry-run 任务记录。"
+    }
+  ]
+}

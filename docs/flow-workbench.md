@@ -1,6 +1,6 @@
-# 可视化节点工作台（M1 / M2 / M3 / M4 / M5 / M6 / M7）
+# 可视化节点工作台（M1 / M2 / M3 / M4 / M5 / M6 / M7 / M8）
 
-> 版本：1.6.0 · 状态：M1–M7 已完成 · 适用范围：本地单用户
+> 版本：1.7.0 · 状态：M1–M8 已完成 · 适用范围：本地单用户
 
 ## 1. 定位
 
@@ -67,12 +67,18 @@ packages/flow/            packages/cli/main.py
 core_router（state/门禁/advance） · knowledge_service · style_service · contracts · brand_guard
 ```
 
-## 4. 节点类型（12 类）
+## 4. 节点类型（15 类）
 
 两类 M7 控制流节点（详见 §14）：
 
 - `condition`：输入 state/artifact/text/card/log，输出 `true` / `false` 两支；参数 `when`（默认 `always`，支持 `state.stage`、`state.version`、`iteration` 的比较表达式）。
 - `loop`：输入 state，输出 `body` / `done`；参数 `max_iterations`（1–10，默认 3）与 `until`（默认 `never`）；body 为单链（阶段/知识/风格/产物/检查/导出），运行期按迭代展开，步骤记录 `iteration`、循环节点记录 `iterations`。
+
+三类 M8 复合/生成节点（详见 §15）：
+
+- `knowledge_adopt`：输入 state/knowledge_card，输出 reference/log；读取已确认知识卡（`card` 参数或 state 最近卡），dry-run 只计划，live 时把证据逐条写入参考记忆（编号 `参考方法NNN`），同步 `state.references`、`knowledge_bridge.status=on` 与 `confirmed_references`；需 `confirmed.by` 非空，重复证据自动去重。
+- `style_bind`：输入 style_card/state，输出 reference/log；把风格画像绑定为 `style_reference` 参考记忆（scope 默认 image_06/camera_08），已存在则跳过；可附 `style` 参数先执行风格应用。
+- `generate`：输入 state/text，输出 generation/log；按 `provider`（mock/seedance_2_0/seedance_2_5/minimax_h3）调用生成适配层，默认 dry-run 只建任务记录，`live=true` 且环境变量 key 存在时真实提交；任务记录写 `00_project/generations/jobs/`。
 
 
 | 类型 | 分类 | 输入端口 | 输出端口 | 关键参数 | 执行语义 |
@@ -99,6 +105,8 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 | `confirmed` | `confirmed`、`artifact`、`log`、`any` |
 | `knowledge_card` / `style_card` | 同类、`card`、`text`、`log`、`artifact`、`any` |
 | `injection` | `injection`、`artifact`、`log`、`text`、`any` |
+| `reference` | `reference`、`artifact`、`log`、`text`、`card`、`any` |
+| `generation` | `generation`、`artifact`、`log`、`any` |
 | `any` | `any` |
 
 ## 5. 数据结构
@@ -175,6 +183,11 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 | POST | `/api/runs` | 运行（`{project,graph_id,mode,target_node,dry_run,auto_confirm}`） |
 | POST | `/api/runs/<run_id>/confirm` | 确认/取消断点（`{approved,note}`） |
 | GET | `/api/runs/<run_id>?project=` | 运行记录 |
+| GET | `/api/generate/providers` | 生成平台 provider 列表（4 个，含 env key 状态） |
+| POST | `/api/generate/plan` | 生成预检（provider/prompt_text\|prompt_path/model/shot） |
+| POST | `/api/generate/jobs` | 创建生成任务（默认 dry-run，`live` 需 key） |
+| GET | `/api/generate/jobs?limit=` | 生成任务列表 |
+| GET | `/api/generate/jobs/<job_id>` | 生成任务详情 |
 
 鉴权：默认启用令牌，通过 `?token=` 或请求头 `X-Workbench-Token` 传递；静态页面不拦截（仅本机监听）。
 
@@ -231,7 +244,15 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - 产物快照：`project snapshot --project P [--label L]` 对 01_story…06_prompts 下的文件记录路径、sha256 与大小（不复制内容）；`project snapshots` / `project artifacts-diff [--base ID] [--target ID]` 查看与当前或两份快照的差异；Web 项目预览面板提供「创建产物快照」「产物差异」按钮与差异文本。
 - 摘要缓存：`GET /api/projects/<name>/summary` 按 state/workflows/runs/artifacts 最新 mtime 签名缓存，`?refresh=1` 强制刷新；CLI `project summary` 不受缓存影响。
 
-## 15. 已知限制
+## 15. 复合节点与生成平台（M8）
+
+- 复合节点：`knowledge_adopt` 把已确认知识卡的证据固化为参考记忆（编号 `参考方法NNN`，type 按来源路径映射 screenplay/method_book/other，page_hits 存页码，method 带 160 字摘要），同时更新 `state.references`、`knowledge_bridge.status=on`、`confirmed_references`；`style_bind` 把风格画像写为 `style_reference`（scope 默认 image_06/camera_08），重复运行自动去重。
+- 生成适配层：`packages/generate/providers.py` 读取 `content/generate-providers.json`（契约校验），`plan()` 校验模型白名单/字数上限/时长估算并计算 prompt sha256；`submit()` 默认 dry-run 只写任务记录，`--live` 且 `base_url_env`/`env_key` 存在时用 urllib POST 提交；`jobs.py` 以 `generate-job.schema.json` 记录 `planned/dry_run/submitted/succeeded/failed` 状态，文件存 `00_project/generations/jobs/`。
+- provider：`mock`（本地联调，永远 dry-run）、`seedance_2_0` / `seedance_2_5`（`SEEDANCE_API_KEY`）、`minimax_h3`（`MINIMAX_API_KEY`）；`generate providers` 显示 key 是否设置。
+- CLI/Web：`generate providers/plan/submit/jobs/show`；Web API 见 §8；前端节点库含 15 类节点，`reference`/`generation` 端口可连线；doctor 新增 generate 检查。
+- 安全：默认 dry-run；真实提交必须显式 `--live`（或 Web `live:true`）且 key 存在；任务记录只写项目目录内。
+
+## 16. 已知限制
 
 1. 图与 state 仍为单向（图 → state）；不支持从现有 state 自动反推流程图。
 2. 阶段节点要求当前项目阶段与节点一致；跨阶段自由回退需显式编排并自行确认。
@@ -243,20 +264,24 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 8. 项目预览只读取已登记产物与 `00_project/workflows/` 下的图，不扫描未登记的目录。
 9. 循环只支持单链 body 且不能嵌套；body 内节点不能直接作为运行目标。
 10. 条件表达式只支持预定义比较形式，不支持任意函数/布尔表达式；运行对比按 node_id 对齐，图结构变化大时会出现 added/removed 噪声。
+11. 生成平台适配层只做提交与任务记录，不自动轮询平台状态；真实提交需要环境变量 key 与网络。
+12. 复合节点采纳知识卡时使用卡片 `confirmed.by` 作为确认人；知识卡未确认会直接失败（可用 require_confirmed=false 关闭）。
 
-## 16. 验证
+## 17. 验证
 
 - 新增 22 项 flow 测试（图校验 12、执行引擎 10）+ 12 项 Web API 测试（M1）；M2/M3 新增 18 项（模板 6、能力节点 6、runner 2、Web API 4）。
 - 全量 `Ran 222 tests ... OK`；CLI 冒烟：模板实例化、dry-run、运行历史、批量预演、失败恢复（live 恢复后 01→02）；`doctor` 8 项含 flow 模板检查。
 - M4（1.3.0）新增 5 项回放/导入导出测试 + 2 项 Web API，全量 `Ran 229 tests ... OK`；CLI 冒烟：模板图 → dry-run → replay → export → import → 非法导入被拒。
 - M6（1.5.0）新增 11 项测试（状态锁 5、运行对比 3、并行写锁集成 1、Web API 2），全量 `Ran 247 tests ... OK`；CLI 冒烟：两次 dry-run → `project summary` → `flow diff` → `project list --stats` → `doctor` / `flow validate` 通过。
 - M7（1.6.0）新增 15 项测试（条件 5、基线 2、产物 3、控制流 2、Web API 3），全量 `Ran 262 tests ... OK`；CLI 冒烟：条件剪枝、循环展开、基线回归退出码、产物快照差异。
+- M8（1.7.0）新增 21 项测试（generate 10、复合节点 8、Web API 3），全量 `Ran 283 tests ... OK`；CLI 冒烟：providers / plan / submit mock（job 记录）/ jobs / show；Web API dry-run 提交与任务查询；doctor 9 项全 OK。
 - 本地 CI `scripts/run_ci.py`：compile / tests / doctor / brand-guard 全 PASS；品牌守卫 0 命中。
 
-## 17. 后续（M8 候选）
+## 18. 后续（M9 候选）
 
-- 复合节点（知识卡/风格卡确认后自动写入参考记忆）。
-- 与真实生成平台 API 对接（Seedance / H3 等）。
+- 生成任务轮询与状态同步（平台状态查询、失败重试、批量提交）。
+- Web 生成任务面板（provider 选择、任务列表、状态着色）与结果回填产物登记。
+- 复合节点扩展：风格卡批量绑定、知识卡多阶段采纳、生成结果自动登记。
 - 运行基线的定时巡检与趋势图、缩略图文件缓存落盘。
 - macOS / GitHub Actions 远端矩阵与迁移用例扩充。
 

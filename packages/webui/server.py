@@ -48,6 +48,17 @@ from flow import (
     write_graph_data,
 )
 from flow.store import graph_id_from_name
+from generate import (
+    GenerateError,
+    JobError,
+    get_provider,
+    job_detail,
+    list_jobs,
+    load_providers,
+    plan,
+    provider_ids,
+    submit,
+)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 WORKBENCH_ROOT = Path(__file__).resolve().parents[2]
@@ -401,6 +412,34 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             self.server.summary_cache[cache_key] = (signature, payload)
             self._json(payload)
             return
+        if path == "/api/generate/providers":
+            providers = load_providers()
+            self._json(
+                {
+                    "ok": True,
+                    "providers": [
+                        {
+                            "provider_id": item["provider_id"],
+                            "label": item.get("label") or item["provider_id"],
+                            "kind": item.get("kind"),
+                            "models": item.get("models") or [],
+                            "env_key": item.get("env_key") or "",
+                        }
+                        for item in providers.get("providers") or []
+                    ],
+                }
+            )
+            return
+        if path.startswith("/api/generate/jobs/"):
+            job_id = unquote(path[len("/api/generate/jobs/"):]).strip("/")
+            project = self._project_from(query)
+            self._json({"ok": True, "job": job_detail(project, job_id)})
+            return
+        if path == "/api/generate/jobs":
+            project = self._project_from(query)
+            limit = int((query.get("limit") or ["20"])[0])
+            self._json({"ok": True, "jobs": list_jobs(project, limit=limit)})
+            return
         if path == "/api/node-types":
             registry = load_node_types()
             self._json({"ok": True, **registry.to_dict()})
@@ -509,6 +548,47 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             run = read_run(project, run_id)
             entry = set_baseline(project, graph_id, run_id, run)
             self._json({"ok": True, "project": str(project), "baseline": entry})
+            return
+        if path == "/api/generate/plan":
+            project = resolve_project(
+                body.get("project") or str(self.server.project_root)
+            )
+            try:
+                provider = get_provider(
+                    str(body.get("provider") or "mock"), load_providers()
+                )
+                report = plan(
+                    provider,
+                    project,
+                    prompt_text=body.get("prompt_text"),
+                    prompt_path=body.get("prompt_path"),
+                    model=body.get("model") or None,
+                    shot=str(body.get("shot") or ""),
+                )
+            except GenerateError as exc:
+                raise FlowError(str(exc)) from exc
+            self._json({"ok": True, "plan": report})
+            return
+        if path == "/api/generate/jobs":
+            project = resolve_project(
+                body.get("project") or str(self.server.project_root)
+            )
+            try:
+                provider = get_provider(
+                    str(body.get("provider") or "mock"), load_providers()
+                )
+                job = submit(
+                    project,
+                    provider,
+                    prompt_text=body.get("prompt_text"),
+                    prompt_path=body.get("prompt_path"),
+                    model=body.get("model") or None,
+                    shot=str(body.get("shot") or ""),
+                    live=bool(body.get("live")),
+                )
+            except (GenerateError, JobError) as exc:
+                raise FlowError(str(exc)) from exc
+            self._json({"ok": True, "job": job})
             return
         if path == "/api/workflows/new":
             project = self._project_from(query) if query.get("project") else resolve_project(body.get("project") or str(self.server.project_root))

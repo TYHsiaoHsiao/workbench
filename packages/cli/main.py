@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from datetime import datetime
@@ -88,6 +89,17 @@ from style_service import (
     StyleServiceError,
     load_style_registry,
     validate_prompt,
+)
+from generate import (
+    GenerateError,
+    JobError,
+    get_provider,
+    job_detail,
+    list_jobs,
+    load_providers,
+    plan,
+    provider_ids,
+    submit,
 )
 
 EXIT_OK = 0
@@ -207,6 +219,25 @@ def _check_flow() -> tuple[bool, str]:
     return True, f"流程节点类型 {len(types)} 个、模板 {len(templates)} 个、契约 {len(required)} 份"
 
 
+def _check_generate() -> tuple[bool, str]:
+    try:
+        providers = load_providers()
+    except GenerateError as exc:
+        return False, str(exc)
+    ids = provider_ids(providers)
+    if not ids:
+        return False, "生成平台 provider 列表为空"
+    schemas = set(list_schemas())
+    missing = [
+        name
+        for name in ("generate-providers.schema.json", "generate-job.schema.json")
+        if name not in schemas
+    ]
+    if missing:
+        return False, "缺少生成平台契约: " + ", ".join(missing)
+    return True, f"生成平台 provider {len(ids)} 个（mock 默认 dry-run）· 任务契约 2 份"
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     checks = [
         ("python", _check_python()),
@@ -216,6 +247,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         ("intent-rules", _check_intent()),
         ("style-registry", _check_style_registry()),
         ("flow", _check_flow()),
+        ("generate", _check_generate()),
         ("brand-wordlist", _check_wordlist()),
     ]
     failures = 0
@@ -1708,6 +1740,123 @@ def cmd_flow_serve(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+
+
+def cmd_generate_providers(args: argparse.Namespace) -> int:
+    try:
+        providers = load_providers()
+    except GenerateError as exc:
+        _print(str(exc))
+        return EXIT_FAIL
+    if args.json:
+        _emit(
+            {
+                "ok": True,
+                "providers": [
+                    {
+                        "provider_id": item["provider_id"],
+                        "label": item.get("label") or item["provider_id"],
+                        "kind": item.get("kind"),
+                        "models": item.get("models") or [],
+                    }
+                    for item in providers.get("providers") or []
+                ],
+            },
+            True,
+        )
+    else:
+        _print("生成平台 provider（dry-run 默认，live 需环境变量 key）:")
+        for item in providers.get("providers") or []:
+            env_key = str(item.get("env_key") or "")
+            key_state = "已设置" if env_key and os.environ.get(env_key) else "未设置"
+            _print(
+                f"  {item['provider_id']}: {item.get('label') or ''} · kind={item.get('kind')} · "
+                f"模型 {', '.join(item.get('models') or [])}"
+                + (f" · key {env_key}（{key_state}）" if env_key else "")
+            )
+    return EXIT_OK
+
+
+def cmd_generate_plan(args: argparse.Namespace) -> int:
+    project = _resolve_project(args.project)
+    try:
+        provider = get_provider(args.provider, load_providers())
+        report = plan(
+            provider,
+            project,
+            prompt_text=args.prompt,
+            prompt_path=args.prompt_file,
+            model=args.model,
+            shot=args.shot or "",
+        )
+    except GenerateError as exc:
+        _print(str(exc))
+        return EXIT_FAIL
+    if args.json:
+        _emit(report, True)
+    else:
+        _print(f"provider {report['provider']} / 模型 {report['model']}")
+        _print(f"提示词 {report['chars']} 字 · 估算时长 {report['estimated'].get('duration_s')}s")
+        _print(f"dry_run={report['dry_run']} · sha256={report['prompt_sha256'][:16]}...")
+    return EXIT_OK
+
+
+def cmd_generate_submit(args: argparse.Namespace) -> int:
+    project = _resolve_project(args.project)
+    try:
+        provider = get_provider(args.provider, load_providers())
+        job = submit(
+            project,
+            provider,
+            prompt_text=args.prompt,
+            prompt_path=args.prompt_file,
+            model=args.model,
+            shot=args.shot or "",
+            live=args.live,
+        )
+    except (GenerateError, JobError) as exc:
+        _print(str(exc))
+        return EXIT_FAIL
+    if args.json:
+        _emit(job, True)
+    else:
+        _print(f"生成任务 {job['job_id']} · provider {job['provider']} · 模型 {job['model']}")
+        _print(f"状态 {job['status']} · dry_run={job['dry_run']} · {job['chars']} 字")
+        _print(f"任务记录: 00_project/generations/jobs/{job['job_id']}.json")
+    return EXIT_OK
+
+
+def cmd_generate_jobs(args: argparse.Namespace) -> int:
+    project = _resolve_project(args.project)
+    try:
+        jobs = list_jobs(project, limit=args.limit)
+    except JobError as exc:
+        _print(str(exc))
+        return EXIT_FAIL
+    if args.json:
+        _emit({"ok": True, "jobs": jobs}, True)
+    else:
+        if not jobs:
+            _print("暂无生成任务（generate submit 会登记 00_project/generations/jobs/）")
+        for job in jobs:
+            _print(
+                f"  {job['job_id']} · {job['provider']}/{job['model']} · {job['status']}"
+                f" · dry_run={job['dry_run']} · {job.get('shot') or '-'}"
+            )
+    return EXIT_OK
+
+
+def cmd_generate_show(args: argparse.Namespace) -> int:
+    project = _resolve_project(args.project)
+    try:
+        job = job_detail(project, args.job_id)
+    except (GenerateError, JobError) as exc:
+        _print(str(exc))
+        return EXIT_FAIL
+    _emit(job, True)
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="workbench",
@@ -2096,6 +2245,41 @@ def build_parser() -> argparse.ArgumentParser:
     flow_import.add_argument("--force", action="store_true", help="覆盖同名流程图")
     flow_import.add_argument("--json", action="store_true", help="以 JSON 输出")
     flow_import.set_defaults(func=cmd_flow_import)
+
+    generate = sub.add_parser("generate", help="生成平台适配层：provider / plan / submit / jobs（默认 dry-run）")
+    generate_sub = generate.add_subparsers(dest="generate_cmd", required=True)
+    gen_providers = generate_sub.add_parser("providers", help="列出已注册生成平台 provider")
+    gen_providers.add_argument("--json", action="store_true", help="输出 JSON")
+    gen_providers.set_defaults(func=cmd_generate_providers)
+    gen_plan = generate_sub.add_parser("plan", help="预检提示词（模型/长度/估算，不提交）")
+    gen_plan.add_argument("provider", help="provider_id，如 seedance_2_5")
+    gen_plan.add_argument("--project", required=True, help="项目目录或项目名")
+    gen_plan.add_argument("--prompt", help="提示词正文（与 --prompt-file 二选一）")
+    gen_plan.add_argument("--prompt-file", help="提示词文件路径（项目内相对路径）")
+    gen_plan.add_argument("--model", help="模型（默认 provider 第一个模型）")
+    gen_plan.add_argument("--shot", help="镜号标签，如 01")
+    gen_plan.add_argument("--json", action="store_true", help="输出 JSON")
+    gen_plan.set_defaults(func=cmd_generate_plan)
+    gen_submit = generate_sub.add_parser("submit", help="提交生成任务（默认 dry-run，--live 且 key 存在才真实提交）")
+    gen_submit.add_argument("provider", help="provider_id，如 seedance_2_5")
+    gen_submit.add_argument("--project", required=True, help="项目目录或项目名")
+    gen_submit.add_argument("--prompt", help="提示词正文（与 --prompt-file 二选一）")
+    gen_submit.add_argument("--prompt-file", help="提示词文件路径（项目内相对路径）")
+    gen_submit.add_argument("--model", help="模型（默认 provider 第一个模型）")
+    gen_submit.add_argument("--shot", help="镜号标签，如 01")
+    gen_submit.add_argument("--live", action="store_true", help="允许真实提交（需 provider env key）")
+    gen_submit.add_argument("--json", action="store_true", help="输出 JSON")
+    gen_submit.set_defaults(func=cmd_generate_submit)
+    gen_jobs = generate_sub.add_parser("jobs", help="列出生成任务记录")
+    gen_jobs.add_argument("--project", required=True, help="项目目录或项目名")
+    gen_jobs.add_argument("--limit", type=int, default=20, help="最多条数（默认 20）")
+    gen_jobs.add_argument("--json", action="store_true", help="输出 JSON")
+    gen_jobs.set_defaults(func=cmd_generate_jobs)
+    gen_show = generate_sub.add_parser("show", help="查看单个生成任务详情")
+    gen_show.add_argument("job_id", help="任务 id，如 gen-20261115-101500-ab12cd")
+    gen_show.add_argument("--project", required=True, help="项目目录或项目名")
+    gen_show.set_defaults(func=cmd_generate_show)
+
 
     return parser
 

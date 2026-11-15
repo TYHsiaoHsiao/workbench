@@ -1,5 +1,14 @@
 # 变更日志
 
+## [1.7.0] - 2026-11-15 — 可视化节点工作台（M8：复合节点与生成平台适配层）
+
+- 复合节点：新增 `knowledge_adopt`（读取已确认知识卡，把证据逐条写入参考记忆并同步 `state.references` / 知识桥状态；重复证据去重）与 `style_bind`（把风格画像绑定为 `style_reference` 参考记忆，默认 scope image_06/camera_08）。
+- 生成平台适配层：新增 `packages/generate`（`providers.py` 注册表加载与计划/提交；`jobs.py` 任务记录，存 `00_project/generations/jobs/`）；内置 mock / seedance_2_0 / seedance_2_5 / minimax_h3 四个 provider；默认 dry-run，只有 `--live` 且环境变量 key 存在时才真实提交（urllib，无第三方依赖）。
+- 契约：新增 `generate-providers.schema.json` 与 `generate-job.schema.json`（v0.1）；节点类型 12→15（`knowledge_adopt` / `style_bind` / `generate`），新增 `reference` / `generation` 端口与 PORT_COMPAT 兼容。
+- CLI/Web：`generate providers/plan/submit/jobs/show` 子命令；Web API `GET /api/generate/providers`、`POST /api/generate/plan`、`POST /api/generate/jobs`、`GET /api/generate/jobs[/<id>]`；前端节点库与端口连线自动支持 15 类节点；doctor 新增 generate 检查（9 项全 OK）。
+- 测试：新增 21 项（generate 适配层、复合节点、Web API），合计 283 项通过；doctor 9 项、本地 CI 全绿、品牌守卫 0 命中。
+- 兼容：契约仍为 1.0，生成能力为可选挂载；旧流程图与项目无需迁移。
+
 ## [1.6.0] - 2026-11-15 — 可视化节点工作台（M7：条件分支、循环、运行基线与产物快照）
 
 - 控制流节点：新增 `condition`（`when` 表达式，走 true/false 分支）与 `loop`（`max_iterations` 1–10、`until` 表达式、body 单链）两类节点；新增 `true` / `false` / `body` / `done` 端口；图校验支持条件/循环语义（分支唯一出边、循环 body 白名单、禁止嵌套）。

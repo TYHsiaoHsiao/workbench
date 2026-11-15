@@ -6,6 +6,7 @@ artifact_register / check_content / confirm / export / end）。
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
@@ -21,7 +22,7 @@ from core_router.project import (
 )
 from core_router.registry import load_registry
 
-from .graph import Graph, Node
+from .graph import STAGE_ORDER, Graph, Node
 from .locks import LockError, log_transaction, state_lock
 from .registry import NodeTypeRegistry
 
@@ -395,6 +396,324 @@ def _exec_end(node: Node, ctx: NodeContext) -> NodeResult:
     )
 
 
+
+
+def _next_reference_id(entries: list[dict[str, Any]]) -> int:
+    used: list[int] = []
+    for entry in entries:
+        match = re.fullmatch(r"参考方法([0-9]{3})", str(entry.get("id") or ""))
+        if match:
+            used.append(int(match.group(1)))
+    return (max(used) + 1) if used else 1
+
+
+def _project_rel(ctx: NodeContext, rel_path: str) -> tuple[Path, str]:
+    root = Path(ctx.project_root).resolve()
+    path = Path(rel_path)
+    if not path.is_absolute():
+        path = root / path
+    try:
+        path = path.resolve()
+        relative = path.relative_to(root)
+    except (OSError, ValueError) as exc:
+        raise NodeError(f"路径必须位于项目目录内：{rel_path}") from exc
+    return path, relative.as_posix()
+
+
+def _exec_knowledge_adopt(node: Node, ctx: NodeContext) -> NodeResult:
+    """把已确认知识卡写入参考记忆（契约校验、编号、state.references 同步）。"""
+    from contracts import validate as validate_contract
+    from core_router.memory import load_memory, memory_path, scope_for_stage
+    from core_router.project import now as project_now
+
+    params = node.params
+    max_entries = int(params.get("max_entries", 3))
+    if max_entries < 1:
+        raise NodeError("max_entries 必须 >= 1")
+    if ctx.dry_run:
+        return NodeResult(
+            status="planned",
+            outputs=[f"[dry-run] 将采纳知识卡证据（最多 {max_entries} 条）"],
+            logs=["dry-run 不写参考记忆"],
+        )
+
+    state = load_state(ctx.project_root)
+    card_rel = str(params.get("card") or "")
+    if not card_rel:
+        card_rel = str((state.get("knowledge_bridge") or {}).get("last_card") or "")
+    if not card_rel:
+        raise NodeError("未找到知识卡：请指定 card 参数，或先运行知识检索节点")
+    card_path, rel = _project_rel(ctx, card_rel)
+    if not card_path.is_file():
+        raise NodeError(f"知识卡不存在：{rel}")
+    try:
+        card = json.loads(card_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise NodeError(f"知识卡不是合法 JSON：{exc}") from exc
+    problems = validate_contract(card, schema_name="knowledge-card.schema.json")
+    if problems:
+        raise NodeError("知识卡不符合契约：" + "；".join(problems))
+    confirmed = card.get("confirmed")
+    if params.get("require_confirmed", True) and not (
+        isinstance(confirmed, dict) and str(confirmed.get("by") or "").strip()
+    ):
+        raise NodeError("知识卡尚未确认（confirmed 为空），请先人工确认后再采纳")
+
+    stage = str(card.get("stage") or "01")
+    if stage not in STAGE_ORDER:
+        raise NodeError(f"知识卡阶段非法：{stage}")
+    scope_param = params.get("scope")
+    scopes = [str(scope_param)] if scope_param else list(card.get("scope") or [scope_for_stage(stage)])
+
+    def adopt() -> list[dict[str, Any]]:
+        memory = load_memory(ctx.project_root)
+        entries = list(memory.get("entries") or [])
+        existing = {(str(e.get("local_path")), str(e.get("page_hits"))) for e in entries}
+        added: list[dict[str, Any]] = []
+        for evidence in list(card.get("evidence") or [])[:max_entries]:
+            local_path = str(evidence.get("path") or "")
+            page_hits = str(evidence.get("page") or "")
+            if not local_path or not page_hits:
+                continue
+            if (local_path, page_hits) in existing:
+                continue
+            snippet = str(evidence.get("snippet") or "").strip()[:160]
+            source = Path(local_path).stem or "知识卡"
+            if local_path.startswith(("05-", "06-", "07-")):
+                entry_type = "screenplay"
+            elif local_path.startswith("08-"):
+                entry_type = "method_book"
+            else:
+                entry_type = "other"
+            stamp = project_now()
+            entry = {
+                "id": f"参考方法{_next_reference_id(entries):03d}",
+                "status": "enabled",
+                "source": source,
+                "type": entry_type,
+                "local_path": local_path,
+                "page_hits": page_hits,
+                "method": f"从《{source}》{page_hits}迁移：{snippet}",
+                "scope": scopes,
+                "stage": stage,
+                "binding_facts": [
+                    f"项目：{state.get('project')}",
+                    f"知识卡：{card.get('card_id')}",
+                ],
+                "forbidden": ["照搬原剧情与人物关系", "直接复制对白"],
+                "confirmed": {
+                    "by": str((confirmed or {}).get("by") or "用户"),
+                    "at": stamp,
+                },
+                "change_log": [
+                    {
+                        "at": stamp,
+                        "action": "created",
+                        "note": f"复合节点 knowledge_adopt 从知识卡 {card.get('card_id')} 采纳",
+                    }
+                ],
+            }
+            entries.append(entry)
+            existing.add((local_path, page_hits))
+            added.append(entry)
+        if not added:
+            return []
+        memory["entries"] = entries
+        problems = validate_contract(memory, schema_name="reference-memory.schema.json")
+        if problems:
+            raise NodeError("参考记忆校验失败：" + "；".join(problems))
+        memory_path(ctx.project_root).write_text(
+            json.dumps(memory, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        current = load_state(ctx.project_root)
+        refs = list(current.get("references") or [])
+        bridge = dict(current.get("knowledge_bridge") or {})
+        confirmed_refs = list(bridge.get("confirmed_references") or [])
+        for entry in added:
+            if entry["id"] not in refs:
+                refs.append(entry["id"])
+            if entry["id"] not in confirmed_refs:
+                confirmed_refs.append(entry["id"])
+        current["references"] = refs
+        bridge["status"] = "on"
+        bridge["confirmed_references"] = confirmed_refs
+        if not bridge.get("last_card"):
+            bridge["last_card"] = rel
+        current["knowledge_bridge"] = bridge
+        save_state(ctx.project_root, current)
+        refresh_status_card(ctx.project_root)
+        return added
+
+    added = _locked_mutation(
+        ctx, node, stage, ["reference_memory", "references", "knowledge_bridge"], adopt
+    )
+    if not added:
+        return NodeResult(
+            outputs=[f"知识卡 {rel} 无新的可采纳证据（去重后 0 条）"],
+            logs=["参考记忆未变化"],
+        )
+    ids = "、".join(str(entry["id"]) for entry in added)
+    return NodeResult(
+        outputs=[f"已采纳 {len(added)} 条参考方法：{ids}（{rel}）"],
+        logs=[f"参考记忆条目 +{len(added)}；知识桥状态 → on"],
+    )
+
+
+def _exec_style_bind(node: Node, ctx: NodeContext) -> NodeResult:
+    """把项目已应用的风格卡写入参考记忆（style_reference），绑定 06/08 使用范围。"""
+    from contracts import validate as validate_contract
+    from core_router.memory import load_memory, memory_path
+    from core_router.project import now as project_now
+
+    params = node.params
+    if ctx.dry_run:
+        return NodeResult(
+            status="planned",
+            outputs=[f"[dry-run] 将写入风格参考（{params.get('style') or '项目当前风格'}）"],
+            logs=["dry-run 不写参考记忆"],
+        )
+
+    state = load_state(ctx.project_root)
+    style_state = dict(state.get("style") or {})
+    applied = style_state.get("status") == "on" and bool(style_state.get("profile_path"))
+    if not applied:
+        style = str(params.get("style") or "")
+        if not style:
+            raise NodeError("项目尚未应用风格卡：请先运行风格应用节点，或在此节点给出 style 参数")
+        from style_service import StyleService, StyleServiceError
+
+        try:
+            _locked_mutation(
+                ctx,
+                node,
+                "",
+                ["style_profile"],
+                lambda: StyleService().apply(
+                    ctx.project_root, style, params.get("tool") or None
+                ),
+            )
+        except StyleServiceError as exc:
+            raise NodeError(f"风格应用失败: {exc}") from exc
+        state = load_state(ctx.project_root)
+        style_state = dict(state.get("style") or {})
+
+    profile_rel = str(style_state.get("profile_path") or "")
+    if not profile_rel:
+        raise NodeError("风格卡已应用但 state.style.profile_path 为空")
+    scopes = [str(item) for item in (params.get("scope") or ["image_06", "camera_08"])]
+    stage = str(state.get("stage") or "01")
+    if stage not in STAGE_ORDER:
+        stage = "08"
+
+    def bind() -> dict[str, Any] | None:
+        memory = load_memory(ctx.project_root)
+        entries = list(memory.get("entries") or [])
+        if any(str(entry.get("local_path")) == profile_rel for entry in entries):
+            return None
+        profile_path = Path(ctx.project_root) / profile_rel
+        style_name = str(params.get("style") or "") or Path(profile_rel).stem
+        method = f"风格卡 {profile_rel}"
+        try:
+            profile = json.loads(profile_path.read_text(encoding="utf-8"))
+            style_name = str(profile.get("name") or style_name)
+            palette = [item for item in (profile.get("palette") or []) if isinstance(item, dict)]
+            colors = "、".join(
+                f"{item.get('name')} {item.get('ratio')}%" for item in palette[:6]
+            )
+            method = (
+                f"风格 {style_name}：{str(profile.get('lighting') or '')[:80]}；"
+                f"{str(profile.get('lens') or '')[:80]}；色彩比例 {colors}"
+            )
+        except (OSError, ValueError):
+            method = f"风格卡 {profile_rel}"
+        stamp = project_now()
+        entry = {
+            "id": f"参考方法{_next_reference_id(entries):03d}",
+            "status": "enabled",
+            "source": f"风格卡 {style_name}",
+            "type": "style_reference",
+            "local_path": profile_rel,
+            "page_hits": "色卡/风格画像",
+            "method": method[:500],
+            "scope": scopes,
+            "stage": stage,
+            "binding_facts": [f"项目：{state.get('project')}", f"风格卡：{profile_rel}"],
+            "forbidden": ["把风格卡当作剧情参考", "同片混用多套色卡"],
+            "confirmed": {"by": "用户", "at": stamp},
+            "change_log": [
+                {
+                    "at": stamp,
+                    "action": "created",
+                    "note": "复合节点 style_bind 写入风格参考",
+                }
+            ],
+        }
+        entries.append(entry)
+        memory["entries"] = entries
+        problems = validate_contract(memory, schema_name="reference-memory.schema.json")
+        if problems:
+            raise NodeError("参考记忆校验失败：" + "；".join(problems))
+        memory_path(ctx.project_root).write_text(
+            json.dumps(memory, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        current = load_state(ctx.project_root)
+        refs = list(current.get("references") or [])
+        if entry["id"] not in refs:
+            refs.append(entry["id"])
+        current["references"] = refs
+        save_state(ctx.project_root, current)
+        refresh_status_card(ctx.project_root)
+        return entry
+
+    entry = _locked_mutation(
+        ctx, node, stage, ["reference_memory", "references"], bind
+    )
+    if entry is None:
+        return NodeResult(
+            outputs=[f"风格参考已存在：{profile_rel}（跳过）"],
+            logs=["参考记忆未变化"],
+        )
+    return NodeResult(
+        outputs=[f"已写入风格参考 {entry['id']}：{entry['source']}"],
+        logs=[f"范围 {', '.join(scopes)} · profile {profile_rel}"],
+    )
+
+
+def _exec_generate(node: Node, ctx: NodeContext) -> NodeResult:
+    """通过生成平台适配层提交（默认 dry-run，live 需显式参数与环境 key）。"""
+    params = node.params
+    provider_id = str(params.get("provider") or "mock")
+    prompt_path = str(params.get("prompt_path") or "")
+    if ctx.dry_run:
+        return NodeResult(
+            status="planned",
+            outputs=[f"[dry-run] 将提交生成任务（provider {provider_id}）"],
+            logs=["dry-run 不写生成任务"],
+        )
+    if not prompt_path:
+        raise NodeError("生成节点缺少 prompt_path 参数")
+    from generate import GenerateError, get_provider, load_providers, submit as submit_job
+
+    try:
+        provider = get_provider(provider_id, load_providers())
+        job = submit_job(
+            ctx.project_root,
+            provider,
+            prompt_path=prompt_path,
+            model=params.get("model") or None,
+            shot=str(params.get("shot") or ""),
+            live=bool(params.get("live", False)),
+        )
+    except GenerateError as exc:
+        raise NodeError(f"生成提交失败：{exc}") from exc
+    return NodeResult(
+        outputs=[
+            f"生成任务 {job.get('job_id')}（{job.get('provider')}/{job.get('model')}）状态 {job.get('status')}"
+        ],
+        logs=[f"dry_run={job.get('dry_run')} · shot={job.get('shot') or '-'}"],
+    )
+
+
 EXECUTORS: dict[str, Executor] = {
     "start": _exec_start,
     "stage": _exec_stage,
@@ -406,6 +725,9 @@ EXECUTORS: dict[str, Executor] = {
     "condition": _exec_condition,
     "loop": _exec_loop,
     "confirm": _exec_confirm,
+    "knowledge_adopt": _exec_knowledge_adopt,
+    "style_bind": _exec_style_bind,
+    "generate": _exec_generate,
     "export": _exec_export,
     "end": _exec_end,
 }

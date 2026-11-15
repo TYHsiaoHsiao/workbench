@@ -157,7 +157,7 @@ class WebUIApiTest(unittest.TestCase):
     def test_node_types(self) -> None:
         status, data = self.client.json("GET", "/api/node-types")
         self.assertEqual(200, status)
-        self.assertEqual(12, len(data["types"]))
+        self.assertEqual(15, len(data["types"]))
         self.assertEqual("0.1", data["contract_version"])
 
     def test_workflow_get(self) -> None:
@@ -431,7 +431,59 @@ class WebUIApiTest(unittest.TestCase):
         self.assertEqual(401, status)
         status, data = client.json("GET", "/api/node-types", token=server.token)
         self.assertEqual(200, status)
-        self.assertEqual(12, len(data["types"]))
+        self.assertEqual(15, len(data["types"]))
+
+
+    def test_generate_providers_endpoint(self) -> None:
+        status, data = self.client.json("GET", "/api/generate/providers")
+        self.assertEqual(200, status, msg=data)
+        self.assertTrue(data["ok"])
+        ids = [item["provider_id"] for item in data["providers"]]
+        self.assertEqual(["mock", "seedance_2_0", "seedance_2_5", "minimax_h3"], ids)
+        entry = next(item for item in data["providers"] if item["provider_id"] == "seedance_2_5")
+        self.assertEqual("video", entry["kind"])
+        self.assertIn("seedance-2.5", entry["models"])
+        self.assertEqual("SEEDANCE_API_KEY", entry["env_key"])
+
+    def test_generate_plan_and_job_flow(self) -> None:
+        prompt = self.project / "05_shots" / "shot-01-prompt.md"
+        prompt.write_text("画面：雨夜霓虹街头，女性侦探背影缓步前行，镜头缓推。\n", encoding="utf-8")
+        relative = str(prompt.relative_to(self.project))
+        status, data = self.client.json(
+            "POST",
+            "/api/generate/plan",
+            {"provider": "seedance_2_5", "prompt_path": relative, "shot": "1-01"},
+        )
+        self.assertEqual(200, status, msg=data)
+        plan = data["plan"]
+        self.assertEqual("seedance_2_5", plan["provider"])
+        self.assertTrue(plan["dry_run"])
+        self.assertGreater(plan["chars"], 0)
+        self.assertEqual(64, len(plan["prompt_sha256"]))
+        status, data = self.client.json(
+            "POST",
+            "/api/generate/jobs",
+            {"provider": "mock", "prompt_path": relative, "shot": "1-01", "live": False},
+        )
+        self.assertEqual(200, status, msg=data)
+        job = data["job"]
+        self.assertEqual("dry_run", job["status"])
+        self.assertTrue(job["dry_run"])
+        job_id = job["job_id"]
+        status, data = self.client.json("GET", self._q(f"/api/generate/jobs/{job_id}"))
+        self.assertEqual(200, status, msg=data)
+        self.assertEqual(job_id, data["job"]["job_id"])
+        status, data = self.client.json("GET", self._q("/api/generate/jobs?limit=5"))
+        self.assertEqual(200, status, msg=data)
+        self.assertIn(job_id, [item["job_id"] for item in data["jobs"]])
+
+    def test_generate_plan_invalid_rejected(self) -> None:
+        status, data = self.client.json(
+            "POST", "/api/generate/plan", {"provider": "unknown_platform", "prompt_text": "x"}
+        )
+        self.assertEqual(400, status, msg=data)
+        self.assertFalse(data["ok"])
+        self.assertTrue(data["error"])
 
 
 if __name__ == "__main__":

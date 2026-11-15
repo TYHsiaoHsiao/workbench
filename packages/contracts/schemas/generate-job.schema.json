@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "generate-job.schema.json",
+  "title": "Generate Job v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "job_id",
+    "provider",
+    "model",
+    "project",
+    "shot",
+    "prompt_path",
+    "prompt_sha256",
+    "chars",
+    "status",
+    "dry_run",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "contract_version": { "const": "0.1" },
+    "job_id": { "type": "string", "pattern": "^gen-[a-z0-9-]{6,60}$" },
+    "provider": { "type": "string", "minLength": 1 },
+    "model": { "type": "string", "minLength": 1 },
+    "project": { "type": "string", "minLength": 1 },
+    "shot": { "type": "string" },
+    "prompt_path": { "type": "string" },
+    "prompt_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "chars": { "type": "integer", "minimum": 0 },
+    "status": {
+      "type": "string",
+      "enum": ["planned", "dry_run", "submitted", "succeeded", "failed", "canceled"]
+    },
+    "dry_run": { "type": "boolean" },
+    "created_at": { "type": "string", "minLength": 1 },
+    "updated_at": { "type": "string", "minLength": 1 },
+    "request": { "type": "object" },
+    "response": { "type": "object" },
+    "error": { "type": "string" }
+  }
+}

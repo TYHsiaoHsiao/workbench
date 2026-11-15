@@ -122,6 +122,11 @@
 - 条件/循环图校验报错：`condition` 必须恰好各一条 true/false 出边且不得在循环体内；`loop` 的 body 必须单链、非空、类型在白名单内，且不支持嵌套循环。
 - `flow diff --baseline` 报「基线不存在」：先执行 `flow baseline set --project <项目> --run <run_id>`；回归阈值用 `--max-regressions` / `--max-delta-ms` 调整。
 - 产物快照差异为空：快照只覆盖 01_story…06_prompts 下的文件，且需先执行 `project snapshot`；`?refresh=1` 只影响项目摘要缓存，不影响快照。
+- 复合节点 `knowledge_adopt` 报「知识卡尚未确认」：先人工确认知识卡（`confirmed.by` 非空），或把节点参数 `require_confirmed=false`；重复证据会自动跳过。
+- `style_bind` 提示「风格参考已存在」：同一风格画像已绑定过；如需重建先清理参考记忆中的 `style_reference` 条目。
+- `generate` 节点/CLI 报「缺少环境变量 …API_KEY」：真实提交需要对应平台 key；默认 dry-run 不校验 key，`--live` 才需要。
+- `generate submit` 超时或网络错误：任务会记为 failed 并保留错误文本；用 `generate show <job_id>` 查看，确认平台可达后重试。
+
 
 
 - 回放没有耗时/失败定位：先确认该运行记录含 `started_at` / `ended_at`（旧运行记录缺时间戳时回放只给步骤序列）；`flow replay --json` 可查看原始字段。
