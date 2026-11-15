@@ -117,7 +117,7 @@
 3. 口令先过意图路由：维护口令直接转交知识服务/升级流程，不进入创作；创作口令映射到入口/阶段/修订。
 4. `init`：探测文档目录（可由 `AI_FILM_DOCUMENTS_DIR` 覆盖），按目录约定创建项目，写入 `state.json`（经 `state.schema.json` v2 校验）、`AGENTS.md`、状态卡、参考记忆 JSON/MD。
 5. 阶段执行时：`gate list` 查门禁 → 执行阶段 → `gate pass` 记录确认 → `next` 推进（未过门禁退出码 1）。
-6. 每次提交：CI 依次跑编译、测试、doctor、brand-guard。
+6. 每次提交：CI 依次跑编译、文档链接检查、测试、doctor、CLI 冷启动基准、brand-guard；发行后跑 `scripts/package_smoke.py` 冒烟（SHA256/解压/version/doctor/manifest），对应 PRD §11.3/§11.4。
 
 ## 6. 与现有 Skill 子系统的映射
 

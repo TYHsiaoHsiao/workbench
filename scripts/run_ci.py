@@ -1,4 +1,7 @@
-"""本地 CI：编译检查 -> 单元测试 -> 自检 -> 品牌守卫。"""
+"""本地 CI：编译检查 -> 文档链接 -> 单元测试 -> 自检 -> NFR 基准 -> 品牌守卫。
+
+发行包冒烟在 build_release 之后单独执行：python scripts/package_smoke.py
+"""
 from __future__ import annotations
 
 import subprocess
@@ -19,8 +22,10 @@ def run_step(name: str, command: list[str]) -> bool:
 def main() -> int:
     steps = [
         ("compile", [sys.executable, "-m", "compileall", "-q", "packages", "workbench.py"]),
+        ("doc-links", [sys.executable, "scripts/check_doc_links.py"]),
         ("tests", [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"]),
         ("doctor", [sys.executable, "workbench.py", "doctor"]),
+        ("bench", [sys.executable, "scripts/bench.py", "--enforce", "--max-cold-start", "1.0"]),
         ("brand-guard", [sys.executable, "workbench.py", "brand-guard"]),
     ]
     results = [(name, run_step(name, command)) for name, command in steps]

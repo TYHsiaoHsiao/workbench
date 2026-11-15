@@ -159,4 +159,7 @@
 - 运行对比提示「没有可对比的另一次运行」：至少需要两条运行记录（可先 `flow run --dry-run` 两次，或显式传 `--other-run`）。
 - 节点报「状态锁失败」：确认没有残留 `00_project/.locks/state.lock`（超过 120 秒会自动视为陈旧锁清理）；事务记录见 `00_project/history/transactions.jsonl`。
 - 项目预览为空或 404：`project summary` 只读取已登记产物与 `00_project/workflows/` 下的流程图；先运行一次或 `flow new` 建图。
+- 文档链接检查报 MISSING：按提示的文件:行号修复相对路径，或确认该路径属于运行时目录（`00_project/` 等）而非仓库文件；检查器跳过 URL、`/api/...` 与占位符路径。
+- CLI 冷启动基准超限：多为机器负载或磁盘抖动导致，重跑即可；如持续超 1.0s，检查是否有第三方包被意外引入（运行时零依赖）。
+- 发行包冒烟失败：先看 `dist/workbench-<版本>.sha256` 与 zip 是否匹配；解压目录须含顶层 `workbench/workbench.py`，`manifest.json` 版本须与 `VERSION` 一致；重新执行 `build_manifest.py` 与 `build_release.py`。
 

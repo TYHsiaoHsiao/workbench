@@ -1,5 +1,15 @@
 # 变更日志
 
+## [2.5.0] - 2026-11-15 — PRD 验收对齐：打包冒烟、文档链接检查与 NFR 基准（M17）
+
+- 打包冒烟：新增 `scripts/package_smoke.py`（SHA256 校验 → 解压到临时目录 → `version`/`doctor`/manifest 一致性），对应 PRD §11.3-4 与 §11.4；发行后执行，失败即阻断交付。
+- 文档链接检查：新增 `scripts/check_doc_links.py`（Markdown 链接 + 行内代码中的仓库内路径存在性；跳过 URL、运行时目录与 API 路径），纳入 `scripts/run_ci.py` CI 门禁（PRD §11.3-5）。
+- NFR 基准：新增 `scripts/bench.py`（CLI 冷启动/doctor 耗时，中位数，`--enforce` 超 1.0s 退出码 1），纳入 CI；实测冷启动中位数约 254ms（PRD §7）。
+- PRD 修订：文档版本对齐、变更记录排序与悬空引用修复；§2.5 增加工作台能力指标（M10–M13）；§11.1 增加 E2E-11/12（队列/通知）；§11.2 契约数量更新；§11.3 补齐文档链接/基准/打包冒烟门禁；§9.22 记录本次迭代。
+- 文档一致性：修复 README 迭代表 M15/M16 行错乱；README/命令卡补充发布与 CI 校验命令。
+- 测试：新增 `tests/test_ci_scripts.py` 9 项，合计 368 项；CI 全绿、品牌守卫 0 命中。
+- 兼容性：仅新增脚本/文档与 PRD 内容，运行时代码无行为变化；`VERSION` 升 2.5.0（MINOR）。
+
 ## [2.4.0] - 2026-11-15 — 队列失败重试、通知外送与守护日志（M16）
 
 - 失败重试：`flow-queue` 契约条目新增可选 `attempts`；`retry_entry()` 仅允许 failed 条目重置为 pending（attempts+1、清理批次/结果/通知字段）；`run_queue(retry_failed=N)` 先重置未达上限的失败条目再执行；CLI `flow queue retry`、`flow queue run --retry-failed N`、`flow queue daemon --retry-failed N`；Web `POST /api/queue/<id>/retry` 与前端失败行「重试」按钮。

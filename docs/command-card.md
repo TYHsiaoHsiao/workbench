@@ -1,4 +1,4 @@
-# 命令卡（v2.4.0）
+# 命令卡（v2.5.0）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -150,3 +150,14 @@ python workbench.py flow serve --project 雨夜回声
 python workbench.py flow new --project 雨夜回声 --template tpl-full-flow --name 从零到成片
 python workbench.py flow run --project 雨夜回声 --graph flow-main --dry-run
 ```
+
+## 10. 发布与 CI 校验（M17）
+
+| 命令 | 作用 |
+|---|---|
+| `python scripts/run_ci.py` | 本地 CI：编译 → 文档链接 → 单元测试 → doctor → CLI 冷启动基准 → 品牌守卫 |
+| `python scripts/check_doc_links.py [--json]` | 文档链接检查：Markdown 链接与行内代码中的仓库内路径必须存在 |
+| `python scripts/bench.py [--runs 5] [--max-cold-start 1.0] [--enforce] [--json]` | NFR 基准：CLI 冷启动/doctor 耗时中位数（`--enforce` 超阈值退出 1） |
+| `python scripts/build_manifest.py` | 生成发行清单 `manifest.json`（文件级 SHA256） |
+| `python scripts/build_release.py` | 生成发行包 `dist/workbench-<版本>.zip` 与 `.sha256` |
+| `python scripts/package_smoke.py [--zip <路径>] [--json]` | 发行包冒烟：SHA256 → 解压到临时目录 → `version`/`doctor`/manifest 一致性 |
