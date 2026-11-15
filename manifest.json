@@ -1,8 +1,8 @@
 {
   "version": "1.0.0",
   "contract_version": "1.0",
-  "generated_at": "2026-11-14T17:33:10",
-  "file_count": 86,
+  "generated_at": "2026-11-15T09:10:48",
+  "file_count": 87,
   "files": [
     {
       "path": ".github/workflows/ci.yml",
@@ -98,6 +98,11 @@
       "path": "docs/migration.md",
       "size": 4832,
       "sha256": "377c8ce819cb5d016e6b28d554319e469b069cff59abc5c0ed0f32136c43c79b"
+    },
+    {
+      "path": "docs/pilot-c-report.md",
+      "size": 8592,
+      "sha256": "34b967448a5411e2fe039d39ff7f23757b9636b4ab1e4fb545cb34f82c5c6eb7"
     },
     {
       "path": "docs/pilot-c-trial-log-template.md",
