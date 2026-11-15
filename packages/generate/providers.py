@@ -11,13 +11,14 @@ import hashlib
 import json
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any
 
 from contracts import validate
 
-from .jobs import JobError, create_job, read_job, update_job
+from .jobs import JobError, create_job, list_jobs, read_job, update_job
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PROVIDERS_FILE = "generate-providers.json"
@@ -206,6 +207,202 @@ def _http_submit(
     return parsed if isinstance(parsed, dict) else {"response": parsed}
 
 
+def _response_id(job: dict[str, Any]) -> str:
+    """从任务记录的平台响应里取外部任务 ID。"""
+    response = job.get("response")
+    candidates: list[Any] = [response]
+    if isinstance(response, dict):
+        for key in ("data", "result"):
+            if isinstance(response.get(key), dict):
+                candidates.append(response[key])
+    for item in candidates:
+        if not isinstance(item, dict):
+            continue
+        for key in ("id", "job_id", "task_id", "taskId", "generation_id"):
+            value = item.get(key)
+            if isinstance(value, (str, int)) and str(value).strip():
+                return str(value).strip()
+    return ""
+
+
+def _payload_error(payload: dict[str, Any]) -> str:
+    """从平台响应里提取可读错误信息。"""
+    for key in ("error", "message", "msg", "detail"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        if isinstance(value, dict):
+            nested = _payload_error(value)
+            if nested:
+                return nested
+    for key in ("data", "result"):
+        nested = payload.get(key)
+        if isinstance(nested, dict):
+            text = _payload_error(nested)
+            if text:
+                return text
+    return ""
+
+
+_SUCCESS_STATUS = {
+    "succeeded", "success", "completed", "complete", "done", "finished",
+    "ok", "成功", "已完成",
+}
+_FAILED_STATUS = {
+    "failed", "failure", "error", "errored", "canceled", "cancelled",
+    "rejected", "timeout", "失败", "已失败", "已取消",
+}
+_RUNNING_STATUS = {
+    "queued", "pending", "running", "processing", "submitted", "in_progress",
+    "in-progress", "waiting", "started", "排队中", "处理中", "生成中",
+}
+_RESULT_KEYS = ("video_url", "output_url", "result_url", "url", "video", "videos", "outputs")
+
+
+def _has_result(payload: dict[str, Any]) -> bool:
+    stack: list[Any] = [payload]
+    while stack:
+        item = stack.pop(0)
+        if not isinstance(item, dict):
+            continue
+        for key in _RESULT_KEYS:
+            value = item.get(key)
+            if value:
+                return True
+        for key in ("data", "result"):
+            if isinstance(item.get(key), dict):
+                stack.append(item[key])
+    return False
+
+
+def _normalize_platform_status(payload: dict[str, Any]) -> str:
+    """把平台状态归一为任务契约里的三种状态：submitted / succeeded / failed。"""
+    state = ""
+    stack: list[Any] = [payload]
+    while stack:
+        item = stack.pop(0)
+        if not isinstance(item, dict):
+            continue
+        for key in ("status", "state", "task_status", "taskStatus", "phase"):
+            value = item.get(key)
+            if isinstance(value, str) and value.strip():
+                state = value.strip().lower()
+                break
+        if state:
+            break
+        for key in ("data", "result"):
+            if isinstance(item.get(key), dict):
+                stack.append(item[key])
+    if state in _SUCCESS_STATUS:
+        return "succeeded"
+    if state in _FAILED_STATUS:
+        return "failed"
+    if state in _RUNNING_STATUS:
+        return "submitted"
+    if _has_result(payload):
+        return "succeeded"
+    return "submitted"
+
+
+def _http_status(provider: dict[str, Any], job: dict[str, Any]) -> dict[str, Any]:
+    base = os.environ.get(str(provider.get("base_url_env") or ""), "")
+    if not base:
+        raise GenerateError(
+            f"缺少 {provider.get('base_url_env')} 环境变量，无法查询平台状态"
+        )
+    env_key = str(provider.get("env_key") or "")
+    key = os.environ.get(env_key, "")
+    if not key:
+        raise GenerateError(f"缺少 {env_key} 环境变量，无法查询平台状态")
+    template = str(provider.get("status_path") or "")
+    if not template:
+        raise GenerateError(
+            f"provider {provider.get('provider_id')} 未配置 status_path"
+        )
+    external = _response_id(job) or str(job.get("job_id") or "")
+    if not external:
+        raise GenerateError(f"任务缺少可查询的平台 ID：{job.get('job_id')}")
+    url = base.rstrip("/") + template.replace(
+        "{job_id}", urllib.parse.quote(external, safe="")
+    )
+    request = urllib.request.Request(
+        url,
+        headers={"Authorization": f"Bearer {key}"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_S) as response:
+            body = response.read().decode("utf-8", errors="replace")
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        raise GenerateError(f"查询平台任务状态失败（{url}）：{exc}") from exc
+    try:
+        parsed = json.loads(body)
+    except ValueError:
+        parsed = {"raw": body[:2000]}
+    return parsed if isinstance(parsed, dict) else {"response": parsed}
+
+
+def refresh(
+    project_root: str | Path,
+    job_id: str,
+    *,
+    fetcher: Any | None = None,
+) -> dict[str, Any]:
+    """查询平台任务状态并更新本地任务记录。
+
+    仅对非 dry-run、状态为 ``submitted`` 的任务有效；已终态任务原样返回。
+    ``fetcher`` 仅供测试注入（签名 ``fetcher(provider, job) -> dict``）。
+    """
+    job = job_detail(project_root, job_id)
+    if job.get("dry_run"):
+        raise GenerateError(f"任务 {job_id} 是 dry-run 记录，没有平台状态可查询")
+    current = str(job.get("status") or "")
+    if current in ("succeeded", "failed", "canceled"):
+        return job
+    provider = get_provider(str(job.get("provider") or ""), load_providers())
+    if provider.get("kind") == "mock":
+        raise GenerateError(f"任务 {job_id} 使用 mock provider，没有平台状态可查询")
+    fetch = fetcher or _http_status
+    payload = fetch(provider, job)
+    if not isinstance(payload, dict):
+        raise GenerateError("平台状态响应必须是 JSON 对象")
+    status = _normalize_platform_status(payload)
+    fields: dict[str, Any] = {"response": payload}
+    if status == "failed":
+        fields["status"] = "failed"
+        fields["error"] = _payload_error(payload) or "平台返回失败状态"
+    elif status == "succeeded":
+        fields["status"] = "succeeded"
+    else:
+        fields["status"] = "submitted"
+    return update_job(project_root, job_id, **fields)
+
+
+def refresh_all(
+    project_root: str | Path, *, limit: int = 20, fetcher: Any | None = None
+) -> dict[str, Any]:
+    """刷新项目内所有 submitted 任务；单任务失败不影响其他任务。"""
+    results: list[dict[str, Any]] = []
+    for job in list_jobs(project_root, limit=limit):
+        if job.get("dry_run") or str(job.get("status")) != "submitted":
+            continue
+        job_id = str(job.get("job_id"))
+        try:
+            updated = refresh(project_root, job_id, fetcher=fetcher)
+        except (GenerateError, JobError) as exc:
+            results.append(
+                {
+                    "job_id": job_id,
+                    "ok": False,
+                    "status": job.get("status"),
+                    "error": str(exc),
+                }
+            )
+            continue
+        results.append({"job_id": job_id, "ok": True, "status": updated.get("status")})
+    return {"ok": True, "refreshed": results}
+
+
 def submit(
     project_root: str | Path,
     provider: dict[str, Any] | str,
@@ -300,6 +497,8 @@ __all__ = [
     "load_providers",
     "plan",
     "provider_ids",
+    "refresh",
+    "refresh_all",
     "resolve_prompt",
     "submit",
 ]

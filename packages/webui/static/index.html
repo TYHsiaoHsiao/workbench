@@ -14,6 +14,7 @@
         <select id="project-select"></select>
       </label>
       <button id="btn-projects" title="项目管理面板">项目…</button>
+      <button id="btn-generate" title="生成平台面板（provider/任务/状态刷新）">生成…</button>
       <label>流程图
         <select id="graph-select"></select>
       </label>
@@ -101,6 +102,13 @@
     <div class="panel-card">
       <header><h2>项目管理</h2><button id="btn-close-projects" class="link">关闭</button></header>
       <div id="projects-body" class="projects-body"><p class="hint">加载中…</p></div>
+    </div>
+  </div>
+
+  <div id="generate-panel" class="overlay hidden">
+    <div class="panel-card generate-card">
+      <header><h2>生成平台</h2><button id="btn-close-generate" class="link">关闭</button></header>
+      <div id="generate-body" class="projects-body"><p class="hint">加载中…</p></div>
     </div>
   </div>
 

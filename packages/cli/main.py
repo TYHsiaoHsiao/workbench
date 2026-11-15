@@ -99,6 +99,8 @@ from generate import (
     load_providers,
     plan,
     provider_ids,
+    refresh,
+    refresh_all,
     submit,
 )
 
@@ -1857,6 +1859,39 @@ def cmd_generate_show(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_generate_refresh(args: argparse.Namespace) -> int:
+    project = _resolve_project(args.project)
+    if not args.all and not args.job_id:
+        _print("请提供任务 ID，或使用 --all 刷新全部 submitted 任务")
+        return EXIT_USAGE
+    try:
+        if args.all:
+            result = refresh_all(project, limit=args.limit)
+            if args.json:
+                _emit(result, True)
+            else:
+                items = result.get("refreshed") or []
+                if not items:
+                    _print("没有处于 submitted 状态的任务可刷新")
+                for item in items:
+                    if item.get("ok"):
+                        _print(f"  {item['job_id']} · {item.get('status')}")
+                    else:
+                        _print(f"  {item['job_id']} · 刷新失败：{item.get('error')}")
+            return EXIT_OK
+        job = refresh(project, str(args.job_id))
+    except (GenerateError, JobError) as exc:
+        _print(str(exc))
+        return EXIT_FAIL
+    if args.json:
+        _emit(job, True)
+    else:
+        _print(f"生成任务 {job['job_id']} · provider {job['provider']} · 状态 {job['status']}")
+        if job.get("error"):
+            _print(f"错误：{job['error']}")
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="workbench",
@@ -2279,6 +2314,15 @@ def build_parser() -> argparse.ArgumentParser:
     gen_show.add_argument("job_id", help="任务 id，如 gen-20261115-101500-ab12cd")
     gen_show.add_argument("--project", required=True, help="项目目录或项目名")
     gen_show.set_defaults(func=cmd_generate_show)
+    gen_refresh = generate_sub.add_parser(
+        "refresh", help="查询平台任务状态并更新记录（仅 submitted 任务）"
+    )
+    gen_refresh.add_argument("job_id", nargs="?", help="任务 id（使用 --all 时可省略）")
+    gen_refresh.add_argument("--project", required=True, help="项目目录或项目名")
+    gen_refresh.add_argument("--all", action="store_true", help="刷新项目内全部 submitted 任务")
+    gen_refresh.add_argument("--limit", type=int, default=20, help="--all 时最多扫描条数（默认 20）")
+    gen_refresh.add_argument("--json", action="store_true", help="输出 JSON")
+    gen_refresh.set_defaults(func=cmd_generate_refresh)
 
 
     return parser

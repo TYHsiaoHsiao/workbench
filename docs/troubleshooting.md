@@ -126,6 +126,9 @@
 - `style_bind` 提示「风格参考已存在」：同一风格画像已绑定过；如需重建先清理参考记忆中的 `style_reference` 条目。
 - `generate` 节点/CLI 报「缺少环境变量 …API_KEY」：真实提交需要对应平台 key；默认 dry-run 不校验 key，`--live` 才需要。
 - `generate submit` 超时或网络错误：任务会记为 failed 并保留错误文本；用 `generate show <job_id>` 查看，确认平台可达后重试。
+- `generate refresh` 报「dry-run 记录，没有平台状态可查询」：只有真实提交（submitted）且非 dry-run 的任务能刷新；mock / dry-run 任务只是本地记录。
+- 刷新报「缺少 …_BASE_URL / …_API_KEY 环境变量」：状态查询需要 provider 的 `base_url_env`（如 `SEEDANCE_BASE_URL`）与 API key；配置环境变量后重试。
+- 刷新后任务仍是 submitted：平台可能仍在排队/生成中；稍后再点刷新或执行 `generate refresh --all`。批量刷新中单个任务失败会返回 `ok=false` 与错误文本，不影响其他任务。
 
 
 

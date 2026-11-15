@@ -27,6 +27,8 @@ from .providers import (
     load_providers,
     plan,
     provider_ids,
+    refresh,
+    refresh_all,
     resolve_prompt,
     submit,
 )
@@ -47,6 +49,8 @@ __all__ = [
     "plan",
     "provider_ids",
     "read_job",
+    "refresh",
+    "refresh_all",
     "resolve_prompt",
     "submit",
     "update_job",

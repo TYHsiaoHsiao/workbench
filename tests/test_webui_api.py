@@ -9,6 +9,7 @@ import unittest
 import urllib.error
 import urllib.request
 from pathlib import Path
+from unittest import mock
 from urllib.parse import quote
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +17,7 @@ sys.path.insert(0, str(REPO_ROOT / "packages"))
 
 from core_router.project import create_project, load_state  # noqa: E402
 from flow import write_graph_data  # noqa: E402
+from generate.jobs import create_job, update_job  # noqa: E402
 from webui import create_server  # noqa: E402
 from webui.server import WorkbenchHandler  # noqa: E402
 
@@ -484,6 +486,57 @@ class WebUIApiTest(unittest.TestCase):
         self.assertEqual(400, status, msg=data)
         self.assertFalse(data["ok"])
         self.assertTrue(data["error"])
+
+    def _submitted_job(self, response: dict | None = None) -> dict:
+        prompt = self.project / "05_shots" / "shot-01-prompt.md"
+        prompt.write_text("画面：雨夜霓虹街头，女性侦探背影缓行。\n", encoding="utf-8")
+        relative = str(prompt.relative_to(self.project))
+        job = create_job(
+            self.project,
+            provider="seedance_2_5",
+            model="seedance-2.5",
+            project=self.project.name,
+            shot="1-01",
+            prompt_path=relative,
+            prompt_sha256="a" * 64,
+            chars=20,
+            dry_run=False,
+            status="submitted",
+        )
+        if response is not None:
+            job = update_job(self.project, job["job_id"], response=response)
+        return job
+
+    def test_generate_job_refresh_endpoint(self) -> None:
+        job = self._submitted_job(response={"id": "platform-123"})
+        with mock.patch(
+            "generate.providers._http_status",
+            return_value={"status": "succeeded", "video_url": "https://cdn.test/out.mp4"},
+        ):
+            status, data = self.client.json(
+                "POST",
+                f"/api/generate/jobs/{job['job_id']}/refresh",
+                {"project": str(self.project)},
+            )
+        self.assertEqual(200, status, msg=data)
+        self.assertEqual("succeeded", data["job"]["status"])
+        self.assertEqual("https://cdn.test/out.mp4", data["job"]["response"]["video_url"])
+
+    def test_generate_refresh_all_endpoint(self) -> None:
+        first = self._submitted_job()
+        second = self._submitted_job()
+        with mock.patch(
+            "generate.providers._http_status", return_value={"status": "running"}
+        ):
+            status, data = self.client.json(
+                "POST", "/api/generate/jobs/refresh", {"project": str(self.project)}
+            )
+        self.assertEqual(200, status, msg=data)
+        refreshed = {item["job_id"]: item for item in data["refreshed"]}
+        self.assertEqual(2, len(refreshed))
+        for job in (first, second):
+            self.assertTrue(refreshed[job["job_id"]]["ok"])
+            self.assertEqual("submitted", refreshed[job["job_id"]]["status"])
 
 
 if __name__ == "__main__":

@@ -1,6 +1,8 @@
 """生成平台适配层：provider 注册表、plan 预检、dry-run 提交与 job 契约。"""
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import sys
 import tempfile
@@ -20,9 +22,12 @@ from generate import (  # noqa: E402
     load_providers,
     plan,
     provider_ids,
+    refresh,
+    refresh_all,
     submit,
 )
-from generate.jobs import JobError, jobs_dir, read_job  # noqa: E402
+from generate import providers as generate_providers  # noqa: E402
+from generate.jobs import JobError, create_job, jobs_dir, read_job, update_job  # noqa: E402
 
 PROMPT = "镜头：雨夜巷口，女人回头看向镜头，霓虹反光。\n" * 6
 
@@ -110,6 +115,164 @@ class GenerateProvidersTest(unittest.TestCase):
     def test_read_job_missing_raises(self) -> None:
         with self.assertRaises(JobError):
             read_job(self.project, "gen-20000101-000000-aaaaaa")
+
+
+class GenerateRefreshTest(unittest.TestCase):
+    """M9：平台任务状态轮询（refresh / refresh_all / _http_status）。"""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        base = Path(self.tmp.name) / "projects"
+        report = create_project("刷新测试", base=base)
+        self.project = Path(report["path"])
+        self.prompt = self.project / "05_shots" / "shot-01-prompt.md"
+        self.prompt.write_text(PROMPT, encoding="utf-8")
+        self.providers = load_providers()
+
+    def _submitted_job(
+        self,
+        provider: str = "seedance_2_5",
+        model: str = "seedance-2.5",
+        response: dict | None = None,
+    ) -> dict:
+        relative = str(self.prompt.relative_to(self.project))
+        text = self.prompt.read_text(encoding="utf-8")
+        job = create_job(
+            self.project,
+            provider=provider,
+            model=model,
+            project="刷新测试",
+            shot="01",
+            prompt_path=relative,
+            prompt_sha256=hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            chars=len(text),
+            dry_run=False,
+            status="submitted",
+        )
+        if response is not None:
+            job = update_job(self.project, job["job_id"], response=response)
+        return job
+
+    def test_refresh_rejects_dry_run(self) -> None:
+        provider = get_provider("mock", self.providers)
+        job = submit(self.project, provider, prompt_text=PROMPT)
+        with self.assertRaises(GenerateError) as ctx:
+            refresh(self.project, job["job_id"])
+        self.assertIn("dry-run", str(ctx.exception))
+
+    def test_refresh_terminal_job_is_returned_unchanged(self) -> None:
+        job = self._submitted_job()
+        update_job(self.project, job["job_id"], status="succeeded")
+        called = mock.Mock(side_effect=AssertionError("终态任务不应再查询平台"))
+        result = refresh(self.project, job["job_id"], fetcher=called)
+        called.assert_not_called()
+        self.assertEqual("succeeded", result["status"])
+
+    def test_refresh_running_keeps_submitted(self) -> None:
+        job = self._submitted_job()
+        result = refresh(
+            self.project, job["job_id"], fetcher=lambda provider, job: {"status": "running"}
+        )
+        self.assertEqual("submitted", result["status"])
+
+    def test_refresh_succeeded_records_platform_response(self) -> None:
+        job = self._submitted_job(response={"id": "platform-1"})
+        result = refresh(
+            self.project,
+            job["job_id"],
+            fetcher=lambda provider, job: {
+                "status": "succeeded",
+                "video_url": "https://cdn.test/out.mp4",
+            },
+        )
+        self.assertEqual("succeeded", result["status"])
+        self.assertEqual("https://cdn.test/out.mp4", result["response"]["video_url"])
+
+    def test_refresh_failed_records_error(self) -> None:
+        job = self._submitted_job()
+        result = refresh(
+            self.project,
+            job["job_id"],
+            fetcher=lambda provider, job: {"status": "failed", "error": "content policy"},
+        )
+        self.assertEqual("failed", result["status"])
+        self.assertIn("content policy", result["error"])
+
+    def test_refresh_all_collects_results_and_tolerates_errors(self) -> None:
+        first = self._submitted_job()
+        second = self._submitted_job()
+        dry = submit(self.project, get_provider("mock", self.providers), prompt_text=PROMPT)
+
+        def fetcher(provider: dict, job: dict) -> dict:
+            if job["job_id"] == second["job_id"]:
+                raise GenerateError("平台超时")
+            return {"status": "succeeded"}
+
+        result = refresh_all(self.project, fetcher=fetcher)
+        items = {item["job_id"]: item for item in result["refreshed"]}
+        self.assertTrue(result["ok"])
+        self.assertTrue(items[first["job_id"]]["ok"])
+        self.assertEqual("succeeded", items[first["job_id"]]["status"])
+        self.assertFalse(items[second["job_id"]]["ok"])
+        self.assertIn("平台超时", items[second["job_id"]]["error"])
+        self.assertNotIn(dry["job_id"], items)
+
+    def test_http_status_builds_url_and_bearer_header(self) -> None:
+        job = self._submitted_job(response={"id": "platform-123"})
+        provider = get_provider("seedance_2_5", self.providers)
+        captured: dict[str, object] = {}
+
+        class FakeResponse:
+            def __init__(self, payload: dict) -> None:
+                self.payload = json.dumps(payload).encode("utf-8")
+
+            def read(self) -> bytes:
+                return self.payload
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc) -> bool:
+                return False
+
+        def fake_urlopen(request, timeout=None):
+            captured["url"] = request.full_url
+            captured["auth"] = request.get_header("Authorization")
+            return FakeResponse(
+                {"status": "succeeded", "video_url": "https://cdn.test/x.mp4"}
+            )
+
+        with mock.patch.dict(
+            os.environ,
+            {"SEEDANCE_BASE_URL": "https://api.example.test", "SEEDANCE_API_KEY": "test-key"},
+            clear=False,
+        ):
+            with mock.patch.object(generate_providers.urllib.request, "urlopen", fake_urlopen):
+                payload = generate_providers._http_status(provider, job)
+        self.assertEqual(
+            "https://api.example.test/v1/video/generations/platform-123", captured["url"]
+        )
+        self.assertEqual("Bearer test-key", captured["auth"])
+        self.assertEqual("succeeded", payload["status"])
+
+    def test_http_status_requires_base_url(self) -> None:
+        job = self._submitted_job(response={"id": "platform-123"})
+        provider = get_provider("seedance_2_5", self.providers)
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with self.assertRaises(GenerateError) as ctx:
+                generate_providers._http_status(provider, job)
+        self.assertIn("SEEDANCE_BASE_URL", str(ctx.exception))
+
+    def test_http_status_requires_api_key(self) -> None:
+        job = self._submitted_job(response={"id": "platform-123"})
+        provider = get_provider("seedance_2_5", self.providers)
+        with mock.patch.dict(
+            os.environ, {"SEEDANCE_BASE_URL": "https://api.example.test"}, clear=True
+        ):
+            with self.assertRaises(GenerateError) as ctx:
+                generate_providers._http_status(provider, job)
+        self.assertIn("SEEDANCE_API_KEY", str(ctx.exception))
 
 
 if __name__ == "__main__":

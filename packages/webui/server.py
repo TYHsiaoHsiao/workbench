@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import os
 import re
 import secrets
 import threading
@@ -57,6 +58,8 @@ from generate import (
     load_providers,
     plan,
     provider_ids,
+    refresh,
+    refresh_all,
     submit,
 )
 
@@ -424,6 +427,10 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                             "kind": item.get("kind"),
                             "models": item.get("models") or [],
                             "env_key": item.get("env_key") or "",
+                            "env_set": bool(
+                                item.get("env_key")
+                                and os.environ.get(str(item.get("env_key")))
+                            ),
                         }
                         for item in providers.get("providers") or []
                     ],
@@ -548,6 +555,30 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             run = read_run(project, run_id)
             entry = set_baseline(project, graph_id, run_id, run)
             self._json({"ok": True, "project": str(project), "baseline": entry})
+            return
+        if path == "/api/generate/jobs/refresh":
+            project = resolve_project(
+                body.get("project") or str(self.server.project_root)
+            )
+            try:
+                limit = int(body.get("limit") or 20)
+                result = refresh_all(project, limit=limit)
+            except (GenerateError, JobError, ValueError) as exc:
+                raise FlowError(str(exc)) from exc
+            self._json(result)
+            return
+        if path.startswith("/api/generate/jobs/") and path.endswith("/refresh"):
+            project = resolve_project(
+                body.get("project") or str(self.server.project_root)
+            )
+            job_id = unquote(
+                path[len("/api/generate/jobs/"): -len("/refresh")]
+            ).strip("/")
+            try:
+                job = refresh(project, job_id)
+            except (GenerateError, JobError) as exc:
+                raise FlowError(str(exc)) from exc
+            self._json({"ok": True, "job": job})
             return
         if path == "/api/generate/plan":
             project = resolve_project(

@@ -1396,6 +1396,226 @@ async function runBatch() {
   }
 }
 
+/* ---------------- 生成平台面板 ---------------- */
+
+const generateCache = { providers: [], jobs: [] };
+
+async function openGenerate() {
+  $("#generate-panel").classList.remove("hidden");
+  await renderGenerate();
+}
+
+function closeGenerate() {
+  $("#generate-panel").classList.add("hidden");
+}
+
+function genStatusClass(status) {
+  return "gen-status gen-status-" + String(status || "unknown");
+}
+
+function genProviderRows() {
+  const rows = (generateCache.providers || []).map((p) => {
+    const key = p.env_key ? (p.env_set ? "已设置" : "未设置") : "不需要";
+    return (
+      '<tr><td class="mono">' + escapeHtml(p.provider_id) + "</td>" +
+      "<td>" + escapeHtml(p.label || "") + "</td>" +
+      "<td>" + escapeHtml(p.kind || "") + "</td>" +
+      "<td>" + escapeHtml((p.models || []).join(", ")) + "</td>" +
+      "<td>" + escapeHtml((p.env_key || "—") + " · " + key) + "</td></tr>"
+    );
+  }).join("");
+  return '<table class="gen-table"><thead><tr><th>provider</th><th>名称</th><th>类型</th>' +
+    "<th>模型</th><th>env key</th></tr></thead><tbody>" + rows + "</tbody></table>";
+}
+
+function genJobRows() {
+  const jobs = generateCache.jobs || [];
+  if (!jobs.length) {
+    return '<p class="hint">暂无任务记录。提交后会写入 00_project/generations/jobs/。</p>';
+  }
+  const rows = jobs.map((job) => {
+    const canRefresh = !job.dry_run && job.status === "submitted";
+    let action = "";
+    if (canRefresh) {
+      action = '<button class="link" data-gen-refresh="' + escapeHtml(job.job_id) + '">刷新</button>';
+    } else if (job.error) {
+      action = '<span class="err" title="' + escapeHtml(job.error) + '">有错误</span>';
+    }
+    return (
+      '<tr><td class="mono">' + escapeHtml(job.job_id) + "</td>" +
+      "<td>" + escapeHtml(job.provider + " / " + job.model) + "</td>" +
+      '<td><span class="' + genStatusClass(job.status) + '">' + escapeHtml(job.status) + "</span>" +
+      (job.dry_run ? ' <span class="muted">dry-run</span>' : "") + "</td>" +
+      "<td>" + escapeHtml(job.shot || "-") + "</td>" +
+      "<td>" + (job.chars || 0) + "</td>" +
+      "<td>" + escapeHtml(job.created_at || "") + "</td>" +
+      "<td>" + action + "</td></tr>"
+    );
+  }).join("");
+  return '<table class="gen-table"><thead><tr><th>任务</th><th>provider / 模型</th><th>状态</th>' +
+    "<th>镜头</th><th>字数</th><th>创建</th><th>操作</th></tr></thead><tbody>" + rows + "</tbody></table>";
+}
+
+function genFormHtml() {
+  const options = (generateCache.providers || []).map((p) =>
+    '<option value="' + escapeHtml(p.provider_id) + '" data-models="' +
+    escapeHtml((p.models || []).join(",")) + '">' +
+    escapeHtml((p.label || p.provider_id) + "（" + p.provider_id + "）") + "</option>"
+  ).join("");
+  return (
+    '<div class="generate-grid">' +
+    '<div class="generate-form">' +
+    "<h4>提交任务</h4>" +
+    '<label>provider<select id="gen-provider">' + options + "</select></label>" +
+    '<label>模型<select id="gen-model"></select></label>' +
+    '<label>镜头<input id="gen-shot" placeholder="如 01" /></label>' +
+    '<label>提示词文件（项目内路径）<input id="gen-prompt-path" placeholder="05_shots/shot-01-prompt.md" /></label>' +
+    '<label>提示词正文（可选，与文件二选一）<textarea id="gen-prompt-text" rows="4" placeholder="也可直接粘贴提示词"></textarea></label>' +
+    '<label class="inline-check"><input type="checkbox" id="gen-live" /> 真实提交（live，需 env key，会调用平台）</label>' +
+    '<div class="generate-actions"><button id="btn-gen-plan">预检</button>' +
+    '<button id="btn-gen-submit" class="primary">提交</button></div>' +
+    '<div id="gen-result" class="artifact-diff hidden"></div>' +
+    "</div>" +
+    '<div class="generate-info">' +
+    "<h4>provider 状态</h4>" + genProviderRows() +
+    "<h4>任务记录</h4>" +
+    '<div class="generate-actions"><button id="btn-gen-refresh-all">刷新全部 submitted</button></div>' +
+    '<div id="gen-job-table-box">' + genJobRows() + "</div>" +
+    "</div></div>"
+  );
+}
+
+async function renderGenerate() {
+  const body = $("#generate-body");
+  if (!state.project) {
+    body.innerHTML = '<p class="hint">请先选择项目。</p>';
+    return;
+  }
+  body.innerHTML = '<p class="hint">加载生成平台信息…</p>';
+  try {
+    const results = await Promise.all([
+      api("/api/generate/providers"),
+      api("/api/generate/jobs?project=" + encodeURIComponent(state.project) + "&limit=30"),
+    ]);
+    generateCache.providers = results[0].providers || [];
+    generateCache.jobs = results[1].jobs || [];
+    body.innerHTML = genFormHtml();
+    bindGeneratePanel();
+  } catch (err) {
+    body.innerHTML = '<p class="hint">加载生成平台失败：' + escapeHtml(err.message) + "</p>";
+  }
+}
+
+function syncGenModels() {
+  const select = $("#gen-provider");
+  const modelSelect = $("#gen-model");
+  if (!select || !modelSelect) return;
+  const option = select.options[select.selectedIndex];
+  const models = (option && option.dataset.models ? option.dataset.models.split(",") : []).filter(Boolean);
+  modelSelect.innerHTML = models.map((m) => '<option value="' + escapeHtml(m) + '">' + escapeHtml(m) + "</option>").join("");
+}
+
+function genPayload() {
+  const payload = {
+    project: state.project,
+    provider: $("#gen-provider").value,
+    model: $("#gen-model").value || null,
+    shot: $("#gen-shot").value.trim(),
+  };
+  const promptPath = $("#gen-prompt-path").value.trim();
+  const promptText = $("#gen-prompt-text").value.trim();
+  if (promptPath) payload.prompt_path = promptPath;
+  if (promptText) payload.prompt_text = promptText;
+  return payload;
+}
+
+async function planGenerate() {
+  const box = $("#gen-result");
+  try {
+    const data = await api("/api/generate/plan", {
+      method: "POST",
+      body: JSON.stringify(genPayload()),
+    });
+    const plan = data.plan || {};
+    box.classList.remove("hidden");
+    box.textContent =
+      "预检通过：provider " + plan.provider + " / 模型 " + plan.model + " · " +
+      plan.chars + " 字 · 估算 " + ((plan.estimated || {}).duration_s || "-") + "s · dry_run=" +
+      plan.dry_run + " · sha256=" + String(plan.prompt_sha256 || "").slice(0, 16) + "…";
+    logLine("生成预检通过：" + plan.provider + "/" + plan.model, "ok");
+  } catch (err) {
+    box.classList.remove("hidden");
+    box.textContent = "预检失败：" + err.message;
+    logLine("生成预检失败：" + err.message, "err");
+  }
+}
+
+async function submitGenerate() {
+  const payload = genPayload();
+  const live = $("#gen-live").checked;
+  if (live && !window.confirm("真实提交会调用平台并可能产生费用，确认继续？")) return;
+  payload.live = live;
+  try {
+    const data = await api("/api/generate/jobs", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    const job = data.job || {};
+    logLine("已创建生成任务 " + job.job_id + "（" + job.status + "）", "ok");
+    await renderGenerate();
+  } catch (err) {
+    logLine("提交生成任务失败：" + err.message, "err");
+  }
+}
+
+async function refreshGenerateJob(jobId) {
+  try {
+    const data = await api(
+      "/api/generate/jobs/" + encodeURIComponent(jobId) + "/refresh",
+      { method: "POST", body: JSON.stringify({ project: state.project }) }
+    );
+    const job = data.job || {};
+    logLine("任务 " + job.job_id + " → " + job.status, "ok");
+    await renderGenerate();
+  } catch (err) {
+    logLine("刷新任务失败：" + err.message, "err");
+  }
+}
+
+async function refreshGenerateAll() {
+  try {
+    const data = await api("/api/generate/jobs/refresh", {
+      method: "POST",
+      body: JSON.stringify({ project: state.project, limit: 20 }),
+    });
+    const items = data.refreshed || [];
+    if (!items.length) {
+      logLine("没有处于 submitted 状态的任务可刷新", "warn");
+      return;
+    }
+    for (const item of items) {
+      logLine(
+        "[" + (item.ok ? "OK" : "FAIL") + "] " + item.job_id + " · " + (item.status || item.error),
+        item.ok ? "ok" : "err"
+      );
+    }
+    await renderGenerate();
+  } catch (err) {
+    logLine("批量刷新失败：" + err.message, "err");
+  }
+}
+
+function bindGeneratePanel() {
+  $("#gen-provider").addEventListener("change", syncGenModels);
+  syncGenModels();
+  $("#btn-gen-plan").addEventListener("click", () => planGenerate());
+  $("#btn-gen-submit").addEventListener("click", () => submitGenerate());
+  $("#btn-gen-refresh-all").addEventListener("click", () => refreshGenerateAll());
+  document.querySelectorAll("#gen-job-table-box [data-gen-refresh]").forEach((button) => {
+    button.addEventListener("click", () => refreshGenerateJob(button.dataset.genRefresh));
+  });
+}
+
 /* ---------------- 事件绑定 ---------------- */
 
 async function openProjects() {
@@ -1510,6 +1730,10 @@ function bindUi() {
   $("#btn-undo").addEventListener("click", () => undo());
   $("#btn-redo").addEventListener("click", () => redo());
   $("#btn-projects").addEventListener("click", () => openProjects());
+  $("#btn-generate").addEventListener("click", () =>
+    openGenerate().catch((err) => logLine("打开生成面板失败：" + err.message, "err"))
+  );
+  $("#btn-close-generate").addEventListener("click", () => closeGenerate());
   $("#btn-close-projects").addEventListener("click", () => closeProjects());
   $("#inspector-body").addEventListener("focusin", () => remember());
   $("#run-mode").addEventListener("change", () => renderRun());

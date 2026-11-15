@@ -1,6 +1,6 @@
-# 可视化节点工作台（M1 / M2 / M3 / M4 / M5 / M6 / M7 / M8）
+# 可视化节点工作台（M1 / M2 / M3 / M4 / M5 / M6 / M7 / M8 / M9）
 
-> 版本：1.7.0 · 状态：M1–M8 已完成 · 适用范围：本地单用户
+> 版本：1.8.0 · 状态：M1–M9 已完成 · 适用范围：本地单用户
 
 ## 1. 定位
 
@@ -188,6 +188,8 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 | POST | `/api/generate/jobs` | 创建生成任务（默认 dry-run，`live` 需 key） |
 | GET | `/api/generate/jobs?limit=` | 生成任务列表 |
 | GET | `/api/generate/jobs/<job_id>` | 生成任务详情 |
+| POST | `/api/generate/jobs/<job_id>/refresh` | 查询平台状态并更新任务记录（body: project） |
+| POST | `/api/generate/jobs/refresh` | 批量刷新 submitted 任务（body: project / limit） |
 
 鉴权：默认启用令牌，通过 `?token=` 或请求头 `X-Workbench-Token` 传递；静态页面不拦截（仅本机监听）。
 
@@ -252,6 +254,13 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - CLI/Web：`generate providers/plan/submit/jobs/show`；Web API 见 §8；前端节点库含 15 类节点，`reference`/`generation` 端口可连线；doctor 新增 generate 检查。
 - 安全：默认 dry-run；真实提交必须显式 `--live`（或 Web `live:true`）且 key 存在；任务记录只写项目目录内。
 
+### M9：任务状态轮询与 Web 生成面板（1.8.0）
+
+- 状态查询：CLI `generate refresh <job_id>` / `generate refresh --all`；Web API `POST /api/generate/jobs/<job_id>/refresh` 与 `POST /api/generate/jobs/refresh`；只有非 dry-run 且 `status=submitted` 的任务会请求平台，终态任务原样返回。
+- 平台响应归一：`_http_status()` 按 `status_path` 把 `{job_id}` 替换为平台外部 ID（从任务 `response` 的 id/job_id/task_id 等字段取），GET 带 Bearer；常见 running/succeeded/failed 状态词归一为契约三态，无状态字段但有结果 URL 视为 succeeded；失败时把平台错误写入任务 `error`。
+- Web 生成面板：顶栏「生成…」打开；展示 4 个 provider 的 env key 是否设置、任务表（状态着色 + dry-run 标记）、预检与提交（live 需确认）、单任务刷新与「刷新全部 submitted」。
+- 轮询是显式动作而非后台定时器；批量刷新单任务失败不影响其他任务（返回 `ok=false` 与错误文本）。
+
 ## 16. 已知限制
 
 1. 图与 state 仍为单向（图 → state）；不支持从现有 state 自动反推流程图。
@@ -264,8 +273,9 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 8. 项目预览只读取已登记产物与 `00_project/workflows/` 下的图，不扫描未登记的目录。
 9. 循环只支持单链 body 且不能嵌套；body 内节点不能直接作为运行目标。
 10. 条件表达式只支持预定义比较形式，不支持任意函数/布尔表达式；运行对比按 node_id 对齐，图结构变化大时会出现 added/removed 噪声。
-11. 生成平台适配层只做提交与任务记录，不自动轮询平台状态；真实提交需要环境变量 key 与网络。
+11. 生成平台状态查询只在显式刷新时进行（不后台轮询）；真实查询需要 `base_url_env`/`env_key` 与网络，mock 与 dry-run 任务没有平台状态可查。
 12. 复合节点采纳知识卡时使用卡片 `confirmed.by` 作为确认人；知识卡未确认会直接失败（可用 require_confirmed=false 关闭）。
+13. Web 生成面板不自动定时刷新；页面停留期间任务状态需手动点「刷新」或「刷新全部 submitted」。
 
 ## 17. 验证
 
@@ -275,12 +285,13 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - M6（1.5.0）新增 11 项测试（状态锁 5、运行对比 3、并行写锁集成 1、Web API 2），全量 `Ran 247 tests ... OK`；CLI 冒烟：两次 dry-run → `project summary` → `flow diff` → `project list --stats` → `doctor` / `flow validate` 通过。
 - M7（1.6.0）新增 15 项测试（条件 5、基线 2、产物 3、控制流 2、Web API 3），全量 `Ran 262 tests ... OK`；CLI 冒烟：条件剪枝、循环展开、基线回归退出码、产物快照差异。
 - M8（1.7.0）新增 21 项测试（generate 10、复合节点 8、Web API 3），全量 `Ran 283 tests ... OK`；CLI 冒烟：providers / plan / submit mock（job 记录）/ jobs / show；Web API dry-run 提交与任务查询；doctor 9 项全 OK。
+- M9（1.8.0）新增 11 项测试（状态查询 9：dry-run 拒绝、终态短路、running/succeeded/failed 归一、批量容错、_http_status URL/Bearer/缺 env；Web API 2：单任务刷新、批量刷新），全量 `Ran 294 tests ... OK`；CLI 冒烟：providers / plan / submit mock / jobs / show / refresh --all；Web 生成面板冒烟（provider 表、任务表、预检、提交、刷新）。
 - 本地 CI `scripts/run_ci.py`：compile / tests / doctor / brand-guard 全 PASS；品牌守卫 0 命中。
 
-## 18. 后续（M9 候选）
+## 18. 后续（M10 候选）
 
-- 生成任务轮询与状态同步（平台状态查询、失败重试、批量提交）。
-- Web 生成任务面板（provider 选择、任务列表、状态着色）与结果回填产物登记。
+- 生成结果回填：下载/登记结果产物、失败自动重试与退避。
+- Web 生成面板增强：任务详情抽屉、结果预览、提交历史过滤。
 - 复合节点扩展：风格卡批量绑定、知识卡多阶段采纳、生成结果自动登记。
 - 运行基线的定时巡检与趋势图、缩略图文件缓存落盘。
 - macOS / GitHub Actions 远端矩阵与迁移用例扩充。
