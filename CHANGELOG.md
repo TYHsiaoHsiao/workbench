@@ -1,5 +1,14 @@
 # 变更日志
 
+## [2.2.0] - 2026-11-15 — 批次队列化与失败通知（M14）
+
+- 批次队列：新增 `packages/flow/queue.py` 与 `flow-queue` 契约（v0.1），队列文件 `00_project/workflows/queue.json`；`flow queue add` 入队（`--graphs` / `--all`）、`flow queue list` 查看、`flow queue run` 按创建顺序执行 pending 条目（默认最多 5 条），每条生成批次记录并把批次 ID/结果/失败通知写回队列。
+- 失败通知：条目失败时记录 `notification.failed_graphs` 与 `message`，CLI 逐条打印、前端队列面板显示通知；成功条目保留 `result` 汇总（成功/失败/尝试/耗时）。
+- 跨项目队列：CLI `flow queue run --all-projects` 扫描默认项目根下所有项目排队执行。
+- CLI/Web/前端：`flow queue add/list/run` 子命令；Web API `POST /api/queue`、`POST /api/queue/run`、`GET /api/queue`；Web 运行面板「加入队列」「运行队列」按钮与队列列表（状态/图数/批次/失败通知）。
+- doctor flow 契约检查补 `flow-queue.schema.json`（6 份，contracts 共 15 份）。
+- 新增 10 项测试（队列引擎 8、Web API 2），全量 341 项通过；兼容性：新增契约与可选 API，默认 CLI/Web 行为不变。
+
 ## [2.1.0] - 2026-11-15 — 批次增强（M13：并行预演与失败图恢复）
 
 - 批次并行：`run_batch()` 新增 `parallel`/`workers`（1–8）；并行使用线程池，仅允许 dry-run 预演（live 运行共享项目状态，强制串行并报错），`parallel` 与 `fail_fast` 互斥；批次记录与 `flow-batch` 契约 v0.1 增加可选 `parallel`/`workers` 字段。

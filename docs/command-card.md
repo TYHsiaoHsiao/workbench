@@ -1,4 +1,4 @@
-# 命令卡（v2.1.0）
+# 命令卡（v2.2.0）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -8,7 +8,7 @@
 | 命令 | 作用 |
 |---|---|
 | `python workbench.py version` | 版本号 + 契约版本 |
-| `python workbench.py doctor` | 9 项自检：Python、目录骨架、13 份契约、阶段注册表、意图规则、风格注册表、flow（17 节点/4 模板/4 契约）、generate（4 provider）、品牌词表 |
+| `python workbench.py doctor` | 9 项自检：Python、目录骨架、15 份契约、阶段注册表、意图规则、风格注册表、flow（17 节点/4 模板/6 契约）、generate（4 provider）、品牌词表 |
 | `python workbench.py check` | 校验阶段注册表；`--project <名或路径>` 同时校验项目 `state.json` 与参考记忆 |
 | `python workbench.py check --project 项目名 --content` | 跨阶段内容一致性：风格卡/知识卡/产物文件存在性、`confirmed_references` 子集、treatment↔shot-plan 时长、下游过期提示（1.0.1） |
 | `python workbench.py brand-guard` | 品牌禁用词扫描；`--json` 输出结构化报告 |
@@ -95,6 +95,9 @@
 | `python workbench.py flow batches --project 项目名 [--limit 20] [--json]` | 批次历史（最近批次摘要） |
 | `python workbench.py flow batch-show --project 项目名 --batch batch-id [--json]` | 批次详情（每图状态/尝试/耗时/错误） |
 | `python workbench.py flow batch-recover --project 项目名 --batch batch-id [--dry-run/--live] [--auto-retry N] [--parallel] [--workers N] [--json]` | 重跑批次中的失败图并把新尝试合并进原批次 |
+| `python workbench.py flow queue add --project 项目名 [--graphs a,b / --all] [--dry-run/--live] [--auto-retry N] [--fail-fast] [--parallel] [--workers N] [--json]` | 把批量运行请求加入项目队列（`00_project/workflows/queue.json`） |
+| `python workbench.py flow queue list --project 项目名 [--status pending/succeeded/failed] [--limit 50] [--json]` | 查看队列条目（状态/图数/批次/失败通知） |
+| `python workbench.py flow queue run --project 项目名 [--limit 5] [--json]` 或 `--all-projects` | 顺序执行 pending 条目，逐条生成批次并写回结果/失败通知 |
 
 ## 7.5 生成平台（generate，M8/M9/M10/M11）
 

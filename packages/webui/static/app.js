@@ -39,6 +39,8 @@ const state = {
   run: null,
   awaiting: null,
   replay: null,
+  queue: [],
+  lastBatchId: null,
   templates: [],
   history: [],
   future: [],
@@ -205,6 +207,7 @@ async function chooseProject(path) {
   $("#version").textContent = "v" + info.version;
   await loadWorkflows();
   loadRunHistory();
+  await loadQueue();
 }
 
 async function loadWorkflows() {
@@ -1495,6 +1498,105 @@ async function recoverBatch() {
   }
 }
 
+/* ---------------- 批次队列（M14） ---------------- */
+
+function queueStatusLabel(status) {
+  return { pending: "待运行", running: "运行中", succeeded: "成功", failed: "失败" }[status] || status;
+}
+
+async function loadQueue() {
+  if (!state.project) {
+    state.queue = [];
+    renderQueue();
+    return;
+  }
+  try {
+    const data = await api("/api/queue?project=" + encodeURIComponent(state.project) + "&limit=20");
+    state.queue = data.entries || [];
+    renderQueue();
+  } catch (err) {
+    logLine("加载队列失败：" + err.message, "warn");
+  }
+}
+
+function renderQueue() {
+  const box = $("#queue-box");
+  if (!box) return;
+  const entries = state.queue || [];
+  if (!entries.length) {
+    box.classList.add("hidden");
+    box.innerHTML = "";
+    return;
+  }
+  const pending = entries.filter((e) => e.status === "pending").length;
+  const failed = entries.filter((e) => e.status === "failed").length;
+  const rows = entries.map((entry) => {
+    const cls = entry.status === "failed" ? "failed" : entry.status === "succeeded" ? "succeeded" : "";
+    let html = '<div class="queue-row ' + cls + '">';
+    html += '<span class="queue-id">' + escapeHtml(entry.queue_id) + "</span>";
+    html += '<span class="queue-meta">' + (entry.graphs || []).length + " 图 · " + escapeHtml(queueStatusLabel(entry.status));
+    if (entry.batch_id) html += " · 批次 " + escapeHtml(entry.batch_id);
+    html += "</span></div>";
+    const notif = entry.notification || {};
+    if (notif.message) html += '<div class="queue-notice">' + escapeHtml(notif.message) + "</div>";
+    return html;
+  }).join("");
+  box.classList.remove("hidden");
+  box.innerHTML =
+    '<div class="queue-head"><span>批次队列（待运行 ' + pending + " / 失败 " + failed + "）</span>" +
+    '<button id="btn-queue-refresh" title="刷新队列">刷新</button></div>' + rows;
+  $("#btn-queue-refresh").addEventListener("click", () => loadQueue());
+}
+
+async function addToQueue() {
+  if (!state.project) return;
+  const graphs = state.graphId ? [state.graphId] : [];
+  const all = !graphs.length;
+  const label = graphs.length ? "当前流程图 " + state.graphId : "项目内全部流程图";
+  if (!window.confirm("把" + label + "加入批次队列？（dry-run 预演）")) return;
+  try {
+    const data = await api("/api/queue", {
+      method: "POST",
+      body: JSON.stringify({
+        project: state.project,
+        graph_ids: graphs,
+        all,
+        dry_run: true,
+        auto_confirm: true,
+      }),
+    });
+    logLine("已加入队列：" + data.entry.queue_id, "ok");
+    await loadQueue();
+  } catch (err) {
+    logLine("加入队列失败：" + err.message, "err");
+  }
+}
+
+async function runQueue() {
+  if (!state.project) return;
+  if (!window.confirm("顺序执行队列中待运行的条目（最多 5 条，dry-run）？")) return;
+  try {
+    const data = await api("/api/queue/run", {
+      method: "POST",
+      body: JSON.stringify({ project: state.project, limit: 5 }),
+    });
+    for (const item of data.ran || []) {
+      const ok = item.status === "succeeded";
+      logLine("[" + (ok ? "OK" : "FAIL") + "] " + item.queue_id + " → 批次 " + (item.batch_id || "-"), ok ? "ok" : "err");
+      const notif = item.notification || {};
+      if (notif.message) logLine("通知：" + notif.message, "err");
+      if (item.error) logLine("错误：" + item.error, "err");
+    }
+    const summary = data.summary || {};
+    setStatus(
+      "队列执行完成：成功 " + (summary.succeeded || 0) + " / 失败 " + (summary.failed || 0) + " / 剩余 " + (summary.pending || 0)
+    );
+    await loadQueue();
+  } catch (err) {
+    logLine("运行队列失败：" + err.message, "err");
+  }
+}
+
 /* ---------------- 生成平台面板 ---------------- */
 
 const generateCache = { providers: [], jobs: [], filter: "all" };
@@ -1997,6 +2099,8 @@ function bindUi() {
   $("#btn-baseline-diff").addEventListener("click", () => diffBaseline());
   $("#btn-run-batch").addEventListener("click", () => runBatch());
   $("#btn-batch-recover").addEventListener("click", () => recoverBatch());
+  $("#btn-queue-add").addEventListener("click", () => addToQueue());
+  $("#btn-queue-run").addEventListener("click", () => runQueue());
   $("#btn-undo").addEventListener("click", () => undo());
   $("#btn-redo").addEventListener("click", () => redo());
   $("#btn-projects").addEventListener("click", () => openProjects());

@@ -38,6 +38,7 @@ from flow import (
     list_baselines,
     list_batches,
     list_graphs,
+    list_queue,
     list_runs,
     list_snapshots,
     load_node_types,
@@ -47,8 +48,10 @@ from flow import (
     read_run,
     recover_batch,
     recover_run,
+    enqueue,
     resolve_project,
     run_batch,
+    run_queue,
     validate_graph,
     write_graph_data,
 )
@@ -496,6 +499,24 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     pass
             self._json({"ok": True, "project": str(project), "runs": list_runs(project, limit=limit)})
             return
+        if path == "/api/queue":
+            project = self._project_from(query)
+            status = (query.get("status") or [None])[0] or None
+            limit = 50
+            values = query.get("limit") or []
+            if values:
+                try:
+                    limit = max(1, min(200, int(values[0])))
+                except ValueError:
+                    pass
+            self._json(
+                {
+                    "ok": True,
+                    "project": str(project),
+                    "entries": list_queue(project, status=status, limit=limit),
+                }
+            )
+            return
         if path == "/api/batches":
             project = self._project_from(query)
             limit = 20
@@ -773,6 +794,30 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 target=body.get("target_node") or None,
             )
             self.server.sessions[result["run"]["run_id"]] = runner
+            self._json(result)
+            return
+        if path == "/api/queue":
+            project = resolve_project(body.get("project") or str(self.server.project_root))
+            entry = enqueue(
+                project,
+                body.get("graph_ids") or None,
+                all_graphs=bool(body.get("all")),
+                dry_run=body.get("dry_run"),
+                auto_confirm=bool(body.get("auto_confirm", True)),
+                auto_retry=int(body.get("auto_retry") or 0),
+                fail_fast=bool(body.get("fail_fast")),
+                parallel=bool(body.get("parallel")),
+                workers=int(body.get("workers") or 2),
+            )
+            self._json({"ok": True, "project": str(project), "entry": entry})
+            return
+        if path == "/api/queue/run":
+            project = resolve_project(body.get("project") or str(self.server.project_root))
+            result = run_queue(
+                project,
+                limit=int(body.get("limit") or 5),
+                sessions=self.server.sessions,
+            )
             self._json(result)
             return
         if path.startswith("/api/batches/") and path.endswith("/recover"):

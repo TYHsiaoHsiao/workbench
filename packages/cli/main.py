@@ -65,11 +65,15 @@ from flow import (
     clear_baseline,
     list_baselines,
     list_batches,
+    list_project_roots,
+    list_queue,
     list_snapshots,
     read_batch,
     read_snapshot,
     recover_batch,
     run_batch,
+    enqueue,
+    run_queue,
     set_baseline,
     default_graph,
     format_replay_text,
@@ -220,6 +224,7 @@ def _check_flow() -> tuple[bool, str]:
         "flow-node-types.schema.json",
         "flow-run.schema.json",
         "flow-batch.schema.json",
+        "flow-queue.schema.json",
         "flow-templates.schema.json",
     ]
     schemas = set(list_schemas())
@@ -1470,6 +1475,101 @@ def cmd_flow_batch_recover(args: argparse.Namespace) -> int:
     return EXIT_OK if result["ok"] else EXIT_FAIL
 
 
+def cmd_flow_queue_add(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        graph_ids = None
+        if not args.all:
+            graph_ids = [item.strip() for item in (args.graphs or "").split(",") if item.strip()]
+            if not graph_ids:
+                _print("错误: 请用 --graphs a,b 指定流程图，或使用 --all")
+                return EXIT_USAGE
+        entry = enqueue(
+            project,
+            graph_ids,
+            all_graphs=bool(args.all),
+            dry_run=args.dry_run,
+            auto_confirm=True,
+            auto_retry=args.auto_retry,
+            fail_fast=bool(args.fail_fast),
+            parallel=bool(args.parallel),
+            workers=args.workers,
+        )
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    if args.json:
+        _emit({"ok": True, "project": str(project), "entry": entry}, True)
+    else:
+        mode = "预演" if entry["dry_run"] else "运行"
+        _print(
+            f"已加入队列 {entry['queue_id']}（{mode}）：{len(entry['graphs'])} 个图 "
+            f"{', '.join(entry['graphs'])}"
+        )
+    return EXIT_OK
+
+
+def cmd_flow_queue_list(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        entries = list_queue(project, status=args.status, limit=args.limit)
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    if args.json:
+        _emit({"ok": True, "project": str(project), "count": len(entries), "entries": entries}, True)
+        return EXIT_OK
+    if not entries:
+        _print("队列为空")
+        return EXIT_OK
+    for entry in entries:
+        mode = "预演" if entry.get("dry_run") else "运行"
+        line = f"- {entry['queue_id']}  {entry.get('status')}  {mode}  {len(entry.get('graphs') or [])} 个图"
+        if entry.get("batch_id"):
+            line += f"  批次 {entry['batch_id']}"
+        _print(line)
+        notification = entry.get("notification") or {}
+        if notification.get("message"):
+            _print("  通知: " + str(notification["message"]))
+    return EXIT_OK
+
+
+def cmd_flow_queue_run(args: argparse.Namespace) -> int:
+    try:
+        if args.all_projects:
+            projects = list_project_roots()
+            if not projects:
+                _print("未发现任何项目，无法执行跨项目队列")
+                return EXIT_FAIL
+        else:
+            if not args.project:
+                _print("错误: 请指定 --project，或使用 --all-projects 处理全部项目队列")
+                return EXIT_USAGE
+            projects = [resolve_project(args.project)]
+        results = [run_queue(project, limit=args.limit) for project in projects]
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    if args.json:
+        _emit({"ok": all(result["ok"] for result in results), "results": results}, True)
+        return EXIT_OK if all(result["ok"] for result in results) else EXIT_FAIL
+    for result in results:
+        summary = result["summary"]
+        _print(
+            f"项目 {result['project']}：执行 {summary['total']} 条队列 → 成功 {summary['succeeded']} / "
+            f"失败 {summary['failed']} / 剩余待运行 {summary['pending']}"
+        )
+        for item in result["ran"]:
+            line = f"- {item['queue_id']}  {item['status']}  批次 {item.get('batch_id') or '-'}"
+            if item.get("error"):
+                line += f"  错误: {item['error']}"
+            _print(line)
+            notification = item.get("notification") or {}
+            if notification.get("message"):
+                _print("  通知: " + str(notification["message"]))
+    return EXIT_OK if all(result["ok"] for result in results) else EXIT_FAIL
+
+
 def cmd_flow_replay(args: argparse.Namespace) -> int:
     try:
         project = resolve_project(args.project)
@@ -2431,6 +2531,37 @@ def build_parser() -> argparse.ArgumentParser:
     flow_batch_recover.add_argument("--workers", type=int, default=2, help="并行线程数（1–8，默认 2）")
     flow_batch_recover.add_argument("--json", action="store_true", help="以 JSON 输出")
     flow_batch_recover.set_defaults(func=cmd_flow_batch_recover)
+
+    flow_queue = flow_sub.add_parser("queue", help="批次队列：加入/查看/顺序执行（支持跨项目）")
+    queue_sub = flow_queue.add_subparsers(dest="queue_command", required=True)
+
+    queue_add = queue_sub.add_parser("add", help="把一次批量运行请求加入项目队列")
+    queue_add.add_argument("--project", required=True, help="项目名或项目路径")
+    queue_add.add_argument("--graphs", help="逗号分隔的 graph_id 列表")
+    queue_add.add_argument("--all", action="store_true", help="项目内全部流程图")
+    queue_add_dry = queue_add.add_mutually_exclusive_group()
+    queue_add_dry.add_argument("--dry-run", dest="dry_run", action="store_true", default=None, help="预演（默认）")
+    queue_add_dry.add_argument("--live", dest="dry_run", action="store_false", default=None, help="真实执行并写盘")
+    queue_add.add_argument("--auto-retry", type=int, default=0, help="失败图自动重试次数（0–3）")
+    queue_add.add_argument("--fail-fast", action="store_true", help="首个失败后停止后续图")
+    queue_add.add_argument("--parallel", action="store_true", help="并行预演（仅 dry-run）")
+    queue_add.add_argument("--workers", type=int, default=2, help="并行线程数（1–8，默认 2）")
+    queue_add.add_argument("--json", action="store_true", help="以 JSON 输出")
+    queue_add.set_defaults(func=cmd_flow_queue_add)
+
+    queue_list = queue_sub.add_parser("list", help="查看队列（按创建时间倒序）")
+    queue_list.add_argument("--project", required=True, help="项目名或项目路径")
+    queue_list.add_argument("--status", choices=["pending", "running", "succeeded", "failed"], help="按状态过滤")
+    queue_list.add_argument("--limit", type=int, default=50, help="最多显示条数")
+    queue_list.add_argument("--json", action="store_true", help="以 JSON 输出")
+    queue_list.set_defaults(func=cmd_flow_queue_list)
+
+    queue_run = queue_sub.add_parser("run", help="顺序执行队列中的 pending 条目（可按项目或全部项目）")
+    queue_run.add_argument("--project", help="项目名或项目路径（与 --all-projects 二选一）")
+    queue_run.add_argument("--all-projects", action="store_true", help="依次执行默认项目根下所有项目的队列")
+    queue_run.add_argument("--limit", type=int, default=5, help="本次最多执行条数（默认 5）")
+    queue_run.add_argument("--json", action="store_true", help="以 JSON 输出")
+    queue_run.set_defaults(func=cmd_flow_queue_run)
 
     flow_replay = flow_sub.add_parser("replay", help="查看运行回放（每步耗时与失败定位）")
     flow_replay.add_argument("--project", required=True, help="项目名或项目路径")

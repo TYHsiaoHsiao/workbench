@@ -1,6 +1,6 @@
-# 可视化节点工作台（M1–M13 + 2.0.1 实时预览）
+# 可视化节点工作台（M1–M14 + 2.0.1 实时预览）
 
-> 版本：2.1.0 · 状态：M1–M13 已完成；2.1.0 为批次增强（并行预演与失败图恢复） · 适用范围：本地单用户
+> 版本：2.2.0 · 状态：M1–M14 已完成；2.2.0 为批次队列化与失败通知 · 适用范围：本地单用户
 
 ## 1. 定位
 
@@ -199,6 +199,9 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 | GET | `/api/batches?project=&limit=` | 批次列表（最近批次摘要） |
 | GET | `/api/batches/<batch_id>?project=` | 批次详情（每图状态/尝试/耗时/错误） |
 | POST | `/api/batches/<batch_id>/recover` | 重跑该批次中的失败图并把新尝试合并进原批次（M13） |
+| POST | `/api/queue` | 加入批次队列（body: project / graph_ids / all / dry_run / auto_confirm / auto_retry / fail_fast / parallel / workers） |
+| POST | `/api/queue/run` | 执行项目队列中的 pending 条目（body: project / limit） |
+| GET | `/api/queue?project=&status=&limit=` | 队列条目列表（含批次 ID、结果与失败通知） |
 | GET | `/api/dev/version` | 静态资源签名（`filename:size:mtime_ns` + `latest_mtime_ns`）；前端每 1.2s 轮询，变更后整页刷新（2.0.1） |
 - 兼容别名：`POST /api/runs/batch` 与 `POST /api/workflows/batch` 等价（旧字段 `count`/`results`），前端已迁移到新端点。
 
@@ -302,6 +305,13 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - 并行预演：`run_batch(..., parallel=True, workers=1–8)` 用线程池并行执行多个图，仅支持 dry-run；live 运行强制串行（共享 state 并发写风险），`parallel` 与 `fail_fast` 互斥；批次记录新增 `parallel`/`workers` 字段。
 - 失败恢复：`recover_batch(project, batch_id)` 重跑批次中失败图，把新尝试追加到原批次 `attempts`（编号连续）并重算 status/summary；CLI `flow batch-recover`、Web `POST /api/batches/<batch_id>/recover`、前端失败时显示「恢复失败图」按钮。
 - 边界：恢复沿用原批次记录，不产生新批次；恢复按图整体重跑，不从中途断点继续。
+### M14：批次队列化与失败通知（2.2.0）
+
+- 队列文件：`00_project/workflows/queue.json`（`flow-queue` 契约 v0.1）；`enqueue()` 解析 `--graphs` / `--all` 图列表，去重并校验（并行仅 dry-run），条目状态 pending。
+- 顺序执行：`run_queue()` 按 `created_at` 升序处理 pending 条目，逐条调用 `run_batch` 并把批次 ID、结果汇总（成功/失败/尝试/耗时）写回；失败条目写 `notification.failed_graphs` 与 `message`，异常捕获为 failed。
+- CLI/Web/前端：`flow queue add/list/run`；`--all-projects` 扫描默认项目根下所有项目排队执行；Web API `POST /api/queue`、`POST /api/queue/run`、`GET /api/queue`；运行面板「加入队列」「运行队列」按钮与队列列表（失败行红色 + 通知）。
+- 边界：队列串行执行、不做定时调度；条目不会自动重试（可配合批次的 `auto_retry`）；队列文件在项目目录内（不越界写）。
+
 
 ## 16. 已知限制
 
@@ -326,6 +336,7 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 18. 自动重试是有限次数（0–3）的同步重跑，不含退避/排队等待；生成长任务请配合 generate 节点与显式状态刷新。
 19. 实时预览基于整页刷新，刷新后缩放/选中状态会重置；仅跟踪 3 个内置静态资源，后端 Python 改动需重启 `serve`。
 20. 批次并行仅支持 dry-run 预演；live 运行共享项目状态，必须串行。失败图恢复沿用原批次记录并追加尝试，不创建新批次。
+21. 批次队列只按项目本地顺序执行（不跨进程并发）；不做定时调度与后台守护，运行需显式 `flow queue run` / Web「运行队列」。
 
 ## 17. 验证
 
@@ -342,11 +353,13 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - M12（2.0.0）新增 7 项测试（批次引擎 6：dry-run 批次记录/自动重试/fail_fast/limit/awaiting_confirm/非法批次；Web API 1：批次运行与历史查询），全量 `Ran 323 tests ... OK`；CLI 冒烟：`flow batch --all --dry-run`、`flow batches`、`flow batch --live --auto-retry 1`、`flow batch-show`；doctor 9 项含 5 份 flow 契约。
 - 2.0.1 新增 2 项测试（dev 版本端点、静态文件变更后签名变化），全量 `Ran 325 tests ... OK`；手动验证：`serve` 后修改 `style.css`，约 1–2s 页面自动刷新（服务端日志可 `GET /api/dev/version` 轮询）。
 - M13（2.1.0）新增 6 项测试（批次并行 dry-run、并行拒绝 live/fail-fast、恢复合并尝试、无失败恢复、Web API 并行端点/恢复端点），全量 `Ran 331 tests ... OK`；CLI 冒烟：`flow batch --parallel --workers 2`、`flow batch-recover`（失败图重跑并合并尝试）；doctor 9 项含 5 份 flow 契约。
+- M14（2.2.0）新增 10 项测试（队列引擎 8：入队/过滤/去重/空选择/并行校验/顺序执行/失败通知/limit 与空队列；Web API 2：队列端点、失败通知），全量 `Ran 341 tests ... OK`；CLI 冒烟：`flow queue add/list/run`（含 `--all-projects`）；doctor 9 项含 6 份 flow 契约。
 
-## 18. 后续（M14 候选）
+## 18. 后续（M15 候选）
 
-- 生成面板内选择回填阶段与逐镜批量操作（05/06/07 混合）。
-- 生成任务的等待/轮询/失败分支在流程图中编排；任务详情抽屉的媒体预览与提交历史过滤。
-- 批次队列化调度（跨项目/定时）与失败通知；真实生成平台在线联调。
-- 运行基线定时巡检与趋势图、缩略图文件缓存落盘；macOS / GitHub Actions 远端矩阵与迁移用例扩充。
+- 批次定时调度与后台队列守护（跨会话恢复）；队列条目详情与手动取消/重排。
+- 失败通知的外部通道（桌面通知/日志汇总报告）与队列失败重试策略。
+- 生成面板内选择回填阶段与逐镜批量操作（05/06/07 混合）；任务详情抽屉的媒体预览与提交历史过滤。
+- 批次/队列历史趋势与运行基线定时巡检、缩略图文件缓存落盘。
+- 真实生成平台在线联调；macOS / GitHub Actions 远端矩阵与迁移用例扩充。
 

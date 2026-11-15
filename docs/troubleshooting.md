@@ -141,6 +141,9 @@
 - 「● 实时预览」不显示或轮询 401：URL 缺 token 或 token 失效，重新复制 `flow serve` 打印的带 token 地址。
 - `flow batch --parallel` 报「并行批次仅支持 dry-run 预演」：live 运行共享项目状态，需去掉 `--parallel`（或改用 `--dry-run`）；`--parallel` 与 `--fail-fast` 也互斥。
 - `flow batch-recover` 后仍失败：恢复只重跑原批次中失败图，修复图/参数后再次恢复；`flow batch-show` 可查看每次尝试的 `error`。
+- `flow queue add` 报「没有可加入队列的流程图」：项目内还没有流程图，或 `--graphs` 传了不存在的 id；先 `flow list` 或 `flow new`。
+- `flow queue run` 后条目仍 pending：单次 `--limit` 默认 5，剩余条目保持 pending，可再次执行或调大 `--limit`；`--all-projects` 只扫描默认项目根。
+- 队列条目失败并显示「通知：批次 … 失败 N 个图」：用 `flow batch-show <batch_id>` 查看失败尝试，修复后重跑；队列不做自动重试。
 
 
 

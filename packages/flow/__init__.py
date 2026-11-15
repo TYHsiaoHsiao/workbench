@@ -72,6 +72,16 @@ from .batch import (
     validate_batch,
     write_batch,
 )
+from .queue import (
+    enqueue,
+    list_project_roots,
+    list_queue,
+    load_queue,
+    queue_path,
+    run_queue,
+    validate_queue,
+    write_queue,
+)
 
 __all__ = [
     "PORT_COMPAT",
@@ -137,6 +147,14 @@ __all__ = [
     "run_batch",
     "validate_batch",
     "write_batch",
+    "enqueue",
+    "list_project_roots",
+    "list_queue",
+    "load_queue",
+    "queue_path",
+    "run_queue",
+    "validate_queue",
+    "write_queue",
     "TemplateError",
     "get_template",
     "instantiate",

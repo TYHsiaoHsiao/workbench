@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Flow Queue v0.1",
+  "type": "object",
+  "required": [
+    "contract_version",
+    "project",
+    "entries"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.1"
+    },
+    "project": {
+      "type": "string"
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "queue_id",
+          "project",
+          "graphs",
+          "dry_run",
+          "auto_confirm",
+          "auto_retry",
+          "fail_fast",
+          "status",
+          "created_at"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "queue_id": {
+            "type": "string",
+            "pattern": "^q-[a-z0-9-]{4,80}$"
+          },
+          "project": {
+            "type": "string"
+          },
+          "graphs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dry_run": {
+            "type": "boolean"
+          },
+          "auto_confirm": {
+            "type": "boolean"
+          },
+          "auto_retry": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "fail_fast": {
+            "type": "boolean"
+          },
+          "parallel": {
+            "type": "boolean"
+          },
+          "workers": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "running",
+              "succeeded",
+              "failed"
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": "string"
+          },
+          "finished_at": {
+            "type": "string"
+          },
+          "batch_id": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "result": {
+            "type": "object",
+            "required": [
+              "ok",
+              "total",
+              "succeeded",
+              "failed",
+              "attempts",
+              "duration_ms"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "ok": {
+                "type": "boolean"
+              },
+              "total": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "succeeded": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "failed": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "attempts": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "duration_ms": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "notification": {
+            "type": "object",
+            "required": [
+              "failed_graphs",
+              "message"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "failed_graphs": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

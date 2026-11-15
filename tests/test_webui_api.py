@@ -350,6 +350,51 @@ class WebUIApiTest(unittest.TestCase):
         self.assertEqual("succeeded", data["batch"]["status"])
         self.assertEqual(0, data["batch"]["summary"]["failed"])
 
+    def test_queue_endpoints(self) -> None:
+        status, data = self.client.json(
+            "POST",
+            "/api/queue",
+            {"project": str(self.project), "all": True, "dry_run": True},
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertTrue(data["ok"], msg=data)
+        queue_id = data["entry"]["queue_id"]
+        self.assertEqual("pending", data["entry"]["status"])
+        status, data = self.client.json("GET", self._q("/api/queue"))
+        self.assertEqual(200, status, msg=data)
+        self.assertIn(queue_id, [item["queue_id"] for item in data["entries"]])
+        status, data = self.client.json(
+            "POST",
+            "/api/queue/run",
+            {"project": str(self.project), "limit": 5},
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertTrue(data["ok"], msg=data)
+        self.assertEqual(1, data["summary"]["succeeded"])
+
+    def test_queue_run_endpoint_failure_notification(self) -> None:
+        broken = json.loads(json.dumps(self.graph))
+        broken["graph_id"] = "flow-queue-broken"
+        broken["edges"] = []
+        write_graph_data(self.project, broken)
+        status, data = self.client.json(
+            "POST",
+            "/api/queue",
+            {"project": str(self.project), "graph_ids": ["flow-queue-broken"], "dry_run": True},
+        )
+        self.assertEqual(200, status, msg=data)
+        status, data = self.client.json(
+            "POST",
+            "/api/queue/run",
+            {"project": str(self.project), "limit": 5},
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertFalse(data["ok"], msg=data)
+        self.assertEqual(1, data["summary"]["failed"])
+        entry = data["ran"][0]
+        self.assertEqual("failed", entry["status"])
+        self.assertIn("flow-queue-broken", entry["notification"]["failed_graphs"])
+
     def test_replay_endpoint(self) -> None:
         status, data = self.client.json(
             "POST",
