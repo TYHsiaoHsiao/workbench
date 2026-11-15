@@ -23,6 +23,9 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 from core_router.project import load_state
+from core_router.rollback import create_snapshot as create_state_snapshot
+from core_router.rollback import list_snapshots as list_state_snapshots
+from core_router.rollback import rollback_to as rollback_project_to
 from flow import (
     FlowError,
     Runner,
@@ -554,6 +557,16 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             batch_id = unquote(path[len("/api/batches/"):]).strip("/")
             self._json({"ok": True, "project": str(project), "batch": read_batch(project, batch_id)})
             return
+        if path == "/api/rollback/snapshots":
+            project = self._project_from(query)
+            self._json(
+                {
+                    "ok": True,
+                    "project": str(project),
+                    "snapshots": list_state_snapshots(project),
+                }
+            )
+            return
         if path.startswith("/api/workflows/") and path.endswith("/baseline"):
             project = self._project_from(query)
             graph_id = unquote(path[len("/api/workflows/"): -len("/baseline")]).strip("/")
@@ -620,6 +633,20 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             project = resolve_project(name)
             record = create_snapshot(project, label=str(body.get("label") or "") or None)
             self._json({"ok": True, "project": project.name, "snapshot": record})
+            return
+        if path == "/api/rollback/create":
+            project = resolve_project(str(body.get("project") or self.server.project_root))
+            record = create_state_snapshot(project, label=str(body.get("label") or ""))
+            self._json({"ok": True, "project": str(project), "snapshot": record})
+            return
+        if path == "/api/rollback/apply":
+            project = resolve_project(str(body.get("project") or self.server.project_root))
+            result = rollback_project_to(
+                project,
+                str(body.get("snapshot") or ""),
+                dry_run=bool(body.get("dry_run")),
+            )
+            self._json({"ok": True, "project": str(project), "rollback": result})
             return
         if path.startswith("/api/workflows/") and path.endswith("/baseline/clear"):
             project = self._project_from(query) if query.get("project") else resolve_project(body.get("project") or str(self.server.project_root))

@@ -49,9 +49,14 @@ def build() -> int:
     files = collect()
     if archive.exists():
         archive.unlink()
+    # 固定时间戳/权限，保证同一份源码多次构建得到相同 SHA256（可复现构建，M20）。
+    fixed_time = (1980, 1, 1, 0, 0, 0)
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for rel in files:
-            zf.write(REPO_ROOT / rel, arcname=f"workbench/{rel.as_posix()}")
+            info = zipfile.ZipInfo(f"workbench/{rel.as_posix()}", date_time=fixed_time)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            zf.writestr(info, (REPO_ROOT / rel).read_bytes())
     digest = sha256_file(archive)
     sums = DIST_DIR / f"workbench-{ver}.sha256"
     sums.write_text(f"{digest}  workbench-{ver}.zip\n", encoding="utf-8")

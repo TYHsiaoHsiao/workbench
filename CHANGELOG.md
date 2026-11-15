@@ -1,5 +1,14 @@
 # 变更日志
 
+## [2.8.0] - 2026-11-15 — 跨平台 CI、覆盖率与可复现构建门禁、Web 快照回滚（M20）
+
+- 跨平台 CI：重写 `.github/workflows/ci.yml`（push/pull_request/workflow_dispatch；ubuntu/windows/macos × Python 3.11/3.12 矩阵；run_ci → build_release → package_smoke → upload-artifact）。
+- 覆盖率门禁：新增 `scripts/coverage_check.py`（零依赖 AST 行覆盖率，3.12 `sys.monitoring` / 旧版 `trace` 回退），实测 76.37%（5590/7320 行），CI `--min 75`。
+- 可复现构建：`scripts/build_release.py` 固定 zip 时间戳/权限，新增 `scripts/repro_check.py`（两次构建与 `.sha256` 三方一致），`run_ci.py` 扩为九步。
+- Web 快照回滚：`GET /api/rollback/snapshots`、`POST /api/rollback/create`、`POST /api/rollback/apply` 与前端「创建快照/快照列表/回滚」面板。
+- 测试：新增 5 项（覆盖率 2、可复现 2、Web 回滚 1），合计 387 项；CI 九步全绿、品牌守卫 0 命中。
+- 文档：新增 `docs/ci.md` 与 2.8.0 发行说明；README/命令卡/架构/故障排查/追溯表/PRD v2.18 同步。
+
 ## [2.7.0] - 2026-11-15 — 需求追溯与 FR↔里程碑映射（M19）
 
 - 需求追溯：新增 `docs/requirements-traceability.md`——PRD §6 的 FR-01–FR-22 映射到实现位置、里程碑、验证证据与状态（已实现/部分实现/未实现），并加「扩展能力（M10–M19）」表与维护规则。

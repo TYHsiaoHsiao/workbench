@@ -8,6 +8,7 @@ import shutil
 import sys
 import tempfile
 import unittest
+import unittest.mock
 import zipfile
 from pathlib import Path
 
@@ -17,7 +18,9 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 import bench  # noqa: E402
 import check_doc_links  # noqa: E402
 import check_fr_mapping  # noqa: E402
+import coverage_check  # noqa: E402
 import package_smoke  # noqa: E402
+import repro_check  # noqa: E402
 
 
 class DocLinksTest(unittest.TestCase):
@@ -177,6 +180,80 @@ class FrMappingTest(unittest.TestCase):
         self.assertFalse(report["ok"])
         self.assertEqual(["FR-33"], report["prd_missing"])
         self.assertEqual(["FR-05"], report["prd_extra"])
+
+
+class CoverageTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.mkdtemp(prefix="wb_cov_")
+        self.root = Path(self._tmp)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self._tmp, ignore_errors=True)
+
+    def test_executable_lines_skips_docstring_and_blank(self) -> None:
+        path = self.root / "sample.py"
+        path.write_text(
+            '"""doc"""\n\nif True:\n    x = 1\nelse:\n    x = 2\n',
+            encoding="utf-8",
+        )
+        lines = coverage_check.executable_lines(path)
+        self.assertIn(3, lines)
+        self.assertIn(4, lines)
+        self.assertIn(6, lines)
+        self.assertNotIn(1, lines)
+        self.assertNotIn(2, lines)
+        self.assertNotIn(5, lines)
+
+    def test_summarize_percent_and_sorted_files(self) -> None:
+        summary = coverage_check.summarize(
+            {
+                "/repo/packages/a.py": {"total": 10, "covered": 10, "missing": 0},
+                "/repo/packages/b.py": {"total": 10, "covered": 5, "missing": 5},
+            }
+        )
+        self.assertEqual(15, summary["covered"])
+        self.assertEqual(20, summary["total"])
+        self.assertEqual(75.0, summary["percent"])
+        self.assertEqual(50.0, summary["files"][0]["percent"])
+        self.assertEqual(100.0, summary["files"][1]["percent"])
+
+
+class ReproCheckTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.mkdtemp(prefix="wb_repro_")
+        self.root = Path(self._tmp)
+        self.dist = self.root / "dist"
+        self.dist.mkdir()
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self._tmp, ignore_errors=True)
+
+    def test_version_and_recorded_hash(self) -> None:
+        (self.root / "VERSION").write_text("9.9.9\n", encoding="utf-8")
+        archive = self.dist / "workbench-9.9.9.zip"
+        archive.write_bytes(b"payload")
+        digest = hashlib.sha256(b"payload").hexdigest()
+        (self.dist / "workbench-9.9.9.sha256").write_text(
+            f"{digest}  workbench-9.9.9.zip\n", encoding="utf-8"
+        )
+        with unittest.mock.patch.object(repro_check, "REPO_ROOT", self.root), \
+                unittest.mock.patch.object(repro_check, "DIST_DIR", self.dist):
+            self.assertEqual("9.9.9", repro_check.version())
+            self.assertEqual(digest, repro_check.recorded_hash())
+
+    def test_check_marks_ok_when_hashes_match(self) -> None:
+        (self.root / "VERSION").write_text("9.9.9\n", encoding="utf-8")
+        digest = hashlib.sha256(b"payload").hexdigest()
+        (self.dist / "workbench-9.9.9.sha256").write_text(
+            f"{digest}  workbench-9.9.9.zip\n", encoding="utf-8"
+        )
+        with unittest.mock.patch.object(repro_check, "REPO_ROOT", self.root), \
+                unittest.mock.patch.object(repro_check, "DIST_DIR", self.dist), \
+                unittest.mock.patch.object(repro_check, "build_once", return_value=digest):
+            report = repro_check.check()
+        self.assertTrue(report["ok"], report)
+        self.assertEqual(digest, report["first"])
+        self.assertEqual(digest, report["second"])
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
-# 可视化节点工作台（M1–M16 + 2.0.1 实时预览）
+# 可视化节点工作台（M1–M16 + 2.0.1 实时预览 + M20 快照回滚）
 
-> 版本：2.4.0 · 状态：M1–M16 已完成；2.4.0 为队列失败重试、通知外送与守护日志轮转 · 适用范围：本地单用户
+> 版本：2.8.0 · 状态：M1–M16 + 2.0.1 实时预览 + M20 Web 快照回滚面板已完成 · 适用范围：本地单用户
 
 ## 1. 定位
 
@@ -207,11 +207,16 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 | POST | `/api/queue/<queue_id>/retry` | 重置失败条目为待运行（body: project；M16） |
 | GET | `/api/queue/notifications?project=&limit=` | 失败通知外送日志（JSONL，最近在前；M16） |
 | GET | `/api/dev/version` | 静态资源签名（`filename:size:mtime_ns` + `latest_mtime_ns`）；前端每 1.2s 轮询，变更后整页刷新（2.0.1） |
+| GET | `/api/rollback/snapshots?project=` | 项目状态快照列表（M20） |
+| POST | `/api/rollback/create` | 创建项目状态快照（body: project / label；M20） |
+| POST | `/api/rollback/apply` | 回滚到快照（body: project / snapshot / dry_run；回滚前自动安全快照；M20） |
 - 兼容别名：`POST /api/runs/batch` 与 `POST /api/workflows/batch` 等价（旧字段 `count`/`results`），前端已迁移到新端点。
 
 鉴权：默认启用令牌，通过 `?token=` 或请求头 `X-Workbench-Token` 传递；静态页面不拦截（仅本机监听）。
 
 ## 9. 前端交互
+
+- 快照与回滚（M20）：运行面板「创建快照」「快照列表」列出快照（ID/说明/时间/文件数/大小），可「回滚」或 dry-run 预演；回滚复用 `core_router.rollback`，回滚前自动安全快照。
 
 - 三栏布局：左侧节点库（分类 + 拖拽）、中间 SVG 画布、右侧检查器 + 运行面板。
 - 画布：拖拽节点移动、节点右侧输出端口拖到另一节点输入端口连线、单击连线删除、中键拖动画布、滚轮缩放、Delete 删除所选节点。
@@ -361,6 +366,7 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 24. 失败重试是手动/守护触发的有限次重跑（按 `attempts` 上限），不含指数退避或跨机器队列。
 25. 通知外送为尽力而为：JSONL 写入失败或外部命令超时/不存在时静默跳过，不阻断队列执行。
 26. daemon 日志轮转只保留一份 `.1` 备份；日志文件在项目 `00_project/workflows/` 内。
+27. 快照回滚为整文件覆盖（state/参考记忆/状态卡/流程图），不做内容级合并；回滚前自动创建安全快照，Web 面板需手动刷新。
 
 ## 17. 验证
 
@@ -380,11 +386,11 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - M14（2.2.0）新增 10 项测试（队列引擎 8：入队/过滤/去重/空选择/并行校验/顺序执行/失败通知/limit 与空队列；Web API 2：队列端点、失败通知），全量 `Ran 341 tests ... OK`；CLI 冒烟：`flow queue add/list/run`（含 `--all-projects`）；doctor 9 项含 6 份 flow 契约。
 - M15（2.3.0）新增 10 项测试（定时跳过/计划执行、取消、重排 before/after/index、非法参数；Web API 2：定时+取消、重排），全量 `Ran 351 tests ... OK`；CLI 冒烟：`queue add --at`/`cancel`/`move`/`daemon --until-empty`；doctor 9 项含 6 份 flow 契约。
 - M16（2.4.0）新增 8 项测试（队列重试/通知 6：重试重置、非 failed 拒绝、retry_failed 上限、通知日志、notify-cmd、无失败不通知；Web API 2：重试+通知、retry_failed），全量 `Ran 359 tests ... OK`；CLI 冒烟：`queue retry`、`run --retry-failed 1`、`queue notifications`、daemon 日志参数；doctor 9 项含 6 份 flow 契约。
+- M20（2.8.0）新增 5 项测试（覆盖率 2、可复现构建 2、Web 回滚 1），全量 `Ran 387 tests ... OK`；CI 九步全 PASS（覆盖率 76.37%、repro PASS、品牌守卫 0 命中）；Web 冒烟：快照创建 → 列表 → dry-run → 回滚。
 
-## 18. 后续（M17 候选）
+## 18. 后续（M21 候选）
 
-- 队列条目历史趋势与批量取消、跨会话守护恢复；daemon 开机自启与服务化。
-- 生成面板内选择回填阶段与逐镜批量操作（05/06/07 混合）；任务详情抽屉的媒体预览与提交历史过滤。
-- 批次/队列历史趋势与运行基线定时巡检、缩略图文件缓存落盘。
-- 真实生成平台在线联调；macOS / GitHub Actions 远端矩阵与迁移用例扩充。
-
+- FR-10 索引维护（P0 缺口）：按契约重建索引（方案 B PoC）与增量维护 CLI。
+- 覆盖率从 76.37% 提升至 PRD 目标的 80%（补 webui/queue/batch 低覆盖分支）。
+- GitHub Actions 远端矩阵真实跑通（需配置 remote）与 macOS E2E-02。
+- 快照清理/定时快照策略与 Web 快照 diff 视图。

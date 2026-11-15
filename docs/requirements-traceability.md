@@ -1,6 +1,6 @@
 # 需求追溯表（FR ↔ 实现 ↔ 里程碑 ↔ 证据）
 
-> 版本：2.7.0 · 状态：M19（迭代 22）落盘 · 维护规则见文末
+> 版本：2.8.0 · 状态：M20（迭代 23）落盘 · 维护规则见文末
 
 本文件把 PRD §6 的 22 条功能需求（FR-01–FR-22）映射到工作台实现、里程碑与验证证据，作为需求—实现—验收之间的可审计链路。检查工具：`python scripts/check_fr_mapping.py`（CI 门禁，要求 22 条全覆盖、无重复）。
 
@@ -29,7 +29,7 @@
 | FR-19 诊断与日志 | P1 | `workbench.py doctor`、`troubleshooting.md`、`scripts/bench.py`、daemon 日志轮转 | 迭代 0 / M16–M17 | CI 步骤、`docs/troubleshooting.md` | 已实现 |
 | FR-20 文档体系 | P1 | `docs/`（quick-start/command-card/architecture/flow-workbench/migration/troubleshooting/release notes）+ `scripts/check_doc_links.py` | 迭代 0–M17 | CI doc-links 步骤 | 已实现 |
 | FR-21 迁移与兼容 | P0 | `workbench.py migrate/upgrade`、契约 `contract_version`、快照与回滚（M18） | 迭代 1b（0.4.0）/ M18（2.6.0） | `docs/migration.md`、`docs/release-notes-2.6.0.md` | 已实现 |
-| FR-22 测试与发布自动化 | P0 | `scripts/run_ci.py`（六步门禁）、`build_manifest.py`、`build_release.py`、`package_smoke.py`、`rollback_drill.py` | 迭代 0–M18 | CI 日志、`dist/` 发行包与 SHA256 | 已实现 |
+| FR-22 测试与发布自动化 | P0 | `scripts/run_ci.py`（九步门禁，含覆盖率与可复现构建）、`build_manifest.py`、`build_release.py`、`package_smoke.py`、`rollback_drill.py` | 迭代 0–M18 | CI 日志、`dist/` 发行包与 SHA256 | 已实现 |
 
 ## 2. 扩展能力（PRD 迭代记录中的工作台能力，非 §6 基础 FR）
 
@@ -42,6 +42,7 @@
 | 实时预览与界面迭代 | 2.0.1 | `/api/dev/version`、节点分类视觉、17 类演示图 | FR-19、FR-20 |
 | PRD 验收工具链/NFR 基准 | M17（2.5.0） | `check_doc_links.py`、`package_smoke.py`、`bench.py` | FR-20、FR-22 |
 | 项目状态快照与回滚/发行包回滚演练 | M18（2.6.0） | `core_router/rollback.py`、`rollback_drill.py` | FR-21、FR-22 |
+| 跨平台 CI/覆盖率/可复现构建/快照回滚 Web | M20（2.8.0） | `scripts/coverage_check.py`、`scripts/repro_check.py`、`.github/workflows/ci.yml`、`/api/rollback/*` | FR-19、FR-21、FR-22 |
 
 ## 3. 维护规则
 

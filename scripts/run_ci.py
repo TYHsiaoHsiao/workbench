@@ -1,4 +1,4 @@
-"""本地 CI：编译检查 -> 文档链接 -> 单元测试 -> 自检 -> NFR 基准 -> 品牌守卫。
+"""本地 CI：编译 → 文档链接 → FR 追溯 → 测试 → 覆盖率 → 自检 → NFR 基准 → 品牌守卫 → 可复现构建。
 
 发行包冒烟在 build_release 之后单独执行：python scripts/package_smoke.py
 """
@@ -25,9 +25,11 @@ def main() -> int:
         ("doc-links", [sys.executable, "scripts/check_doc_links.py"]),
         ("fr-mapping", [sys.executable, "scripts/check_fr_mapping.py"]),
         ("tests", [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"]),
+        ("coverage", [sys.executable, "scripts/coverage_check.py", "--min", "75"]),
         ("doctor", [sys.executable, "workbench.py", "doctor"]),
         ("bench", [sys.executable, "scripts/bench.py", "--enforce", "--max-cold-start", "1.0"]),
         ("brand-guard", [sys.executable, "workbench.py", "brand-guard"]),
+        ("repro", [sys.executable, "scripts/repro_check.py"]),
     ]
     results = [(name, run_step(name, command)) for name, command in steps]
     failed = [name for name, ok in results if not ok]

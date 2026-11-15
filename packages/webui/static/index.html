@@ -88,11 +88,14 @@
           <button id="btn-batch-recover" class="hidden" title="重跑上一次批次中的失败图并更新批次记录">恢复失败图</button>
           <button id="btn-queue-add" title="把当前流程图（未选中则为全部）加入批次队列">加入队列</button>
           <button id="btn-queue-run" title="顺序执行队列中的待运行条目">运行队列</button>
+          <button id="btn-snapshot-create" title="创建项目状态快照（含 state/参考记忆/流程图/队列）">创建快照</button>
+          <button id="btn-snapshot-refresh" title="刷新项目快照列表">快照列表</button>
         </div>
         <div id="run-status" class="run-status"></div>
         <div id="run-replay" class="run-replay hidden"></div>
         <div id="run-history" class="run-history"><p class="hint">运行历史加载中…</p></div>
         <div id="queue-box" class="queue-box hidden"></div>
+        <div id="snapshot-box" class="snapshot-box hidden"></div>
       </div>
     </aside>
   </main>

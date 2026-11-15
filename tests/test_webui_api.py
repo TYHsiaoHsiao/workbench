@@ -444,6 +444,35 @@ class WebUIApiTest(unittest.TestCase):
         self.assertEqual(0, orders[ids[1]])
         self.assertEqual(1, orders[ids[0]])
 
+    def test_rollback_endpoints(self) -> None:
+        status, data = self.client.json(
+            "POST",
+            "/api/rollback/create",
+            {"project": str(self.project), "label": "web 快照"},
+        )
+        self.assertEqual(200, status, msg=data)
+        snapshot_id = data["snapshot"]["snapshot_id"]
+        self.assertTrue(snapshot_id.startswith("snap-"))
+        status, data = self.client.json("GET", self._q("/api/rollback/snapshots"))
+        self.assertEqual(200, status, msg=data)
+        self.assertIn(snapshot_id, [row["snapshot_id"] for row in data["snapshots"]])
+        status, data = self.client.json(
+            "POST",
+            "/api/rollback/apply",
+            {"project": str(self.project), "snapshot": snapshot_id, "dry_run": True},
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertTrue(data["rollback"]["dry_run"])
+        status, data = self.client.json(
+            "POST",
+            "/api/rollback/apply",
+            {"project": str(self.project), "snapshot": snapshot_id},
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertFalse(data["rollback"]["dry_run"])
+        self.assertTrue(data["rollback"]["restored_files"])
+        self.assertTrue(str(data["rollback"]["safety_snapshot"]).startswith("snap-"))
+
     def test_queue_retry_and_notifications_endpoint(self) -> None:
         broken = json.loads(json.dumps(self.graph))
         broken["graph_id"] = "flow-queue-retry"

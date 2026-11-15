@@ -208,6 +208,7 @@ async function chooseProject(path) {
   await loadWorkflows();
   loadRunHistory();
   await loadQueue();
+  await loadSnapshots();
 }
 
 async function loadWorkflows() {
@@ -1701,6 +1702,101 @@ async function runQueue() {
   }
 }
 
+/* ---------------- 项目快照与回滚（M20） ---------------- */
+
+function formatBytes(bytes) {
+  const n = Number(bytes) || 0;
+  if (n >= 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + " MB";
+  if (n >= 1024) return (n / 1024).toFixed(1) + " KB";
+  return n + " B";
+}
+
+async function loadSnapshots() {
+  if (!state.project) return;
+  const box = $("#snapshot-box");
+  if (!box) return;
+  try {
+    const data = await api("/api/rollback/snapshots?project=" + encodeURIComponent(state.project));
+    const rows = data.snapshots || [];
+    if (!rows.length) {
+      box.classList.add("hidden");
+      box.innerHTML = "";
+      return;
+    }
+    box.classList.remove("hidden");
+    box.innerHTML =
+      '<div class="snapshot-head"><span>项目快照（' + rows.length + '）</span>' +
+      '<span class="hint">回滚前会自动创建安全快照</span></div>' +
+      rows
+        .map((row) => {
+          const at = escapeHtml(String(row.created_at || "").replace("T", " ").slice(0, 19));
+          const label = escapeHtml(row.label || "未命名");
+          const meta = at + " · " + (row.files || 0) + " 个文件 · " + formatBytes(row.bytes);
+          return (
+            '<div class="snapshot-row">' +
+            '<div class="snapshot-line"><span class="snapshot-id">' + escapeHtml(row.snapshot_id) + '</span>' +
+            '<span class="snapshot-label">' + label + '</span></div>' +
+            '<div class="snapshot-meta">' + meta + '</div>' +
+            '<div class="q-actions">' +
+            '<button class="q-apply" data-snap-dry="' + escapeHtml(row.snapshot_id) + '">回滚预演</button>' +
+            '<button class="q-apply danger" data-snap-rollback="' + escapeHtml(row.snapshot_id) + '">回滚</button>' +
+            "</div></div>"
+          );
+        })
+        .join("");
+    box.querySelectorAll("[data-snap-dry]").forEach((btn) => {
+      btn.addEventListener("click", () => rollbackSnapshot(btn.dataset.snapDry, true));
+    });
+    box.querySelectorAll("[data-snap-rollback]").forEach((btn) => {
+      btn.addEventListener("click", () => rollbackSnapshot(btn.dataset.snapRollback, false));
+    });
+  } catch (err) {
+    logLine("加载快照列表失败：" + err.message, "err");
+  }
+}
+
+async function createSnapshot() {
+  if (!state.project) return;
+  const label = window.prompt("快照说明（可留空）", "");
+  if (label === null) return;
+  try {
+    const data = await api("/api/rollback/create", {
+      method: "POST",
+      body: JSON.stringify({ project: state.project, label: label.trim() }),
+    });
+    logLine("已创建快照：" + data.snapshot.snapshot_id, "ok");
+    await loadSnapshots();
+  } catch (err) {
+    logLine("创建快照失败：" + err.message, "err");
+  }
+}
+
+async function rollbackSnapshot(snapshotId, dryRun) {
+  if (!state.project) return;
+  const text = dryRun
+    ? "预演回滚到 " + snapshotId + "（不写盘）？"
+    : "回滚到 " + snapshotId + "？会先自动创建安全快照，当前状态将被覆盖。";
+  if (!window.confirm(text)) return;
+  try {
+    const data = await api("/api/rollback/apply", {
+      method: "POST",
+      body: JSON.stringify({ project: state.project, snapshot: snapshotId, dry_run: dryRun }),
+    });
+    const result = data.rollback || {};
+    if (result.dry_run) {
+      logLine("回滚预演：将恢复 " + (result.files || []).length + " 个文件（不写盘）", "ok");
+    } else {
+      logLine(
+        "回滚完成：恢复 " + (result.restored_files || []).length + " 个文件，安全快照 " + (result.safety_snapshot || "-"),
+        "ok"
+      );
+    }
+    await loadSnapshots();
+  } catch (err) {
+    logLine("回滚失败：" + err.message, "err");
+  }
+}
+
 /* ---------------- 生成平台面板 ---------------- */
 
 const generateCache = { providers: [], jobs: [], filter: "all" };
@@ -2205,6 +2301,8 @@ function bindUi() {
   $("#btn-batch-recover").addEventListener("click", () => recoverBatch());
   $("#btn-queue-add").addEventListener("click", () => addToQueue());
   $("#btn-queue-run").addEventListener("click", () => runQueue());
+  $("#btn-snapshot-create").addEventListener("click", () => createSnapshot());
+  $("#btn-snapshot-refresh").addEventListener("click", () => loadSnapshots());
   $("#btn-undo").addEventListener("click", () => undo());
   $("#btn-redo").addEventListener("click", () => redo());
   $("#btn-projects").addEventListener("click", () => openProjects());
