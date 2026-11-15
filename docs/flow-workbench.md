@@ -1,6 +1,6 @@
-# 可视化节点工作台（M1 / M2 / M3 / M4）
+# 可视化节点工作台（M1 / M2 / M3 / M4 / M5）
 
-> 版本：1.3.0 · 状态：M1/M2/M3/M4 已完成 · 适用范围：本地单用户
+> 版本：1.4.0 · 状态：M1–M5 已完成 · 适用范围：本地单用户
 
 ## 1. 定位
 
@@ -202,7 +202,15 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - 导入：`flow import --project P --file f.json [--graph 新id] [--force]`；导入前复用 `validate_graph`（契约 + 语义），失败逐条报错且不落盘；成功后重写 `graph_id/project/name`。
 - Web：`POST /api/workflows/import`（body 含 `project` 与 `graph`；非法图返回 422）。
 
-## 12. 已知限制
+## 12. 并行执行与节点级重试（M5）
+
+- 波次调度：`runner._wave_order()` 按拓扑深度把执行顺序切成若干波；单节点波串行。
+- 并行条件：`settings.parallel=true`、波内节点数 >1、且该波所有节点类型都带 `parallel_safe=true`。首版仅 `check_content` 与 `end` 标记并行安全——所有写 `state.json` 的节点保持串行，避免竞态。
+- 重试：节点参数 `retries`（0–3）优先，其次 `settings.node_retries`；执行器抛出 `NodeError`/`FlowError`/未知异常时按次数重试，步骤记录 `attempts` 与失败日志；`flow run --retries N` 覆盖全局默认。
+- 风险提示：对写状态的节点开启重试可能产生重复副作用（例如重复登记产物），默认 0；确认节点不会在并行波内执行。
+- 项目管理面板：`GET /api/projects` 返回每个项目的 artifacts / pending_gates / workflows / runs / last_run 统计；Web 顶栏「项目」抽屉可跨项目对比并切换；CLI `project list --stats` 输出同源数据。
+
+## 13. 已知限制
 
 1. 图与 state 仍为单向（图 → state）；不支持从现有 state 自动反推流程图。
 2. 阶段节点要求当前项目阶段与节点一致；跨阶段自由回退需显式编排并自行确认。
@@ -210,16 +218,17 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 4. 回放依据运行记录时间戳：串行节点精确，并行执行仅为近似。
 5. 图导入导出只含流程图本身，不含项目状态与创作产物（跨项目迁移请用 `export` / `restore`）。
 
-## 13. 验证
+## 14. 验证
 
 - 新增 22 项 flow 测试（图校验 12、执行引擎 10）+ 12 项 Web API 测试（M1）；M2/M3 新增 18 项（模板 6、能力节点 6、runner 2、Web API 4）。
 - 全量 `Ran 222 tests ... OK`；CLI 冒烟：模板实例化、dry-run、运行历史、批量预演、失败恢复（live 恢复后 01→02）；`doctor` 8 项含 flow 模板检查。
 - M4（1.3.0）新增 5 项回放/导入导出测试 + 2 项 Web API，全量 `Ran 229 tests ... OK`；CLI 冒烟：模板图 → dry-run → replay → export → import → 非法导入被拒。
 - 本地 CI `scripts/run_ci.py`：compile / tests / doctor / brand-guard 全 PASS；品牌守卫 0 命中。
 
-## 14. 后续（M5 候选）
+## 15. 后续（M6 候选）
 
-- 并行分支执行与节点级重试。
-- macOS 实跑与 GitHub Actions 远端 CI 矩阵。
-- 项目管理面板（跨项目对比、产物预览、流程图缩略图）。
+- 写状态节点的安全并行（锁/事务日志）与依赖冲突检测。
+- 非线性流程的可视化分支条件与运行对比（两次运行 diff）。
+- 项目面板产物预览与流程图缩略图。
 - 知识卡/风格卡确认后写入参考记忆的一体化节点。
+- macOS 实跑与 GitHub Actions 远端 CI 矩阵。

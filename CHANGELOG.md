@@ -1,5 +1,15 @@
 # 变更日志
 
+## [1.4.0] - 2026-11-15 — 可视化节点工作台（M5：并行执行、节点级重试、项目管理面板）
+
+### 新增
+
+- 并行分支执行：`runner.py` 引入波次（wave）调度——按拓扑深度分批，波内节点全部标记 `parallel_safe` 且 `settings.parallel=true` 时用 `ThreadPoolExecutor` 并发执行，否则串行；有状态节点（start/stage/知识/风格/产物/导出/确认）保持串行，`state.json` 仍是唯一事实来源。
+- 节点级重试：节点可选 `retries`（0–3）、settings 可选 `node_retries`；执行器异常按次数重试并记录 `attempts` 与「第 k 次尝试失败 / 重试耗尽」日志；`flow run --retries N` 可覆盖默认值。
+- 项目管理面板：Web 顶栏「项目」抽屉展示跨项目阶段/版本/待门禁/产物/流程图/运行/更新时间统计，点击切换项目；CLI `project list --stats` 输出同源统计（artifacts/pending_gates/workflows/runs/last_run）。
+- 契约：`flow-run` step 增可选 `attempts`；`flow-graph` settings 增 `parallel`/`node_retries`、node 增 `retries`；`flow-node-types` 增 `parallel_safe`；`check_content`/`end` 为首批并行安全节点。
+- 测试：新增 7 项（graph 3 / runner 3 / CLI 1 / Web 断言），全量 236 项通过；CLI 与 Web 冒烟通过。
+
 ## [1.3.0] - 2026-11-15 — 可视化节点工作台（M4：运行回放与图导入导出）
 
 ### 新增

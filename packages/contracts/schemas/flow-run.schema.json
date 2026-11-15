@@ -109,6 +109,10 @@
           },
           "error": {
             "type": "string"
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 1
           }
         }
       }

@@ -89,6 +89,29 @@ def _list_projects() -> list[dict[str, Any]]:
                 entry["version"] = state.get("version", "?")
                 entry["entry"] = state.get("entry", "?")
                 entry["updated_at"] = state.get("revision_log", [{}])[-1].get("at", "") if state.get("revision_log") else ""
+                entry["artifacts"] = len(state.get("stage_artifacts") or {})
+                entry["pending_gates"] = sum(
+                    1
+                    for gate in (state.get("gates") or [])
+                    if isinstance(gate, dict) and gate.get("status") == "pending"
+                )
+                try:
+                    entry["workflows"] = len(list_graphs(child))
+                except Exception:  # noqa: BLE001 - 统计失败不影响列表
+                    entry["workflows"] = 0
+                try:
+                    run_rows = list_runs(child, limit=20)
+                except Exception:  # noqa: BLE001
+                    run_rows = []
+                entry["runs"] = len(run_rows)
+                entry["last_run"] = (
+                    {
+                        "status": run_rows[0].get("status"),
+                        "at": run_rows[0].get("started_at") or run_rows[0].get("finished_at") or "",
+                    }
+                    if run_rows
+                    else None
+                )
             except (OSError, json.JSONDecodeError):
                 pass
             found.setdefault(str(child), entry)

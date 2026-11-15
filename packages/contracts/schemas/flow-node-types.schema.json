@@ -29,7 +29,8 @@
           },
           "params_schema": { "type": "object" },
           "executor": { "type": "string", "minLength": 1 },
-          "constraints": { "type": "array", "items": { "type": "string" } }
+          "constraints": { "type": "array", "items": { "type": "string" } },
+          "parallel_safe": { "type": "boolean" }
         }
       }
     }

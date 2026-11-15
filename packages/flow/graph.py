@@ -34,6 +34,20 @@ class FlowError(Exception):
     """流程图校验或执行错误。"""
 
 
+def _normalize_settings(settings: dict[str, Any]) -> dict[str, Any]:
+    """保留扩展设置（parallel / node_retries），并统一成引擎可消费的类型。"""
+    normalized: dict[str, Any] = dict(settings or {})
+    normalized["auto_advance"] = bool(normalized.get("auto_advance", False))
+    normalized["allow_skip_stages"] = bool(normalized.get("allow_skip_stages", False))
+    normalized["dry_run_first"] = bool(normalized.get("dry_run_first", True))
+    normalized["parallel"] = bool(normalized.get("parallel", False))
+    try:
+        normalized["node_retries"] = max(0, min(3, int(normalized.get("node_retries", 0) or 0)))
+    except (TypeError, ValueError):
+        normalized["node_retries"] = 0
+    return normalized
+
+
 def port_compatible(out_port: str, in_port: str) -> bool:
     """输出端口能否连接到输入端口（in_port=any 表示任意）。"""
     if in_port == "any":
@@ -50,6 +64,7 @@ class Node:
     params: dict[str, Any] = field(default_factory=dict)
     disabled: bool = False
     note: str = ""
+    retries: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {
@@ -63,6 +78,8 @@ class Node:
             data["disabled"] = True
         if self.note:
             data["note"] = self.note
+        if self.retries:
+            data["retries"] = int(self.retries)
         return data
 
 
@@ -89,7 +106,7 @@ class Graph:
     project: str
     nodes: dict[str, Node]
     edges: list[Edge]
-    settings: dict[str, bool]
+    settings: dict[str, Any]
     created_at: str = ""
     updated_at: str = ""
     canvas: dict[str, Any] = field(default_factory=dict)
@@ -108,6 +125,7 @@ class Graph:
                     params=dict(item.get("params") or {}),
                     disabled=bool(item.get("disabled", False)),
                     note=str(item.get("note") or ""),
+                    retries=int(item.get("retries") or 0),
                 )
                 for item in data["nodes"]
             }
@@ -130,11 +148,7 @@ class Graph:
             project=str(data.get("project") or ""),
             nodes=nodes,
             edges=edges,
-            settings={
-                "auto_advance": bool(settings.get("auto_advance", False)),
-                "allow_skip_stages": bool(settings.get("allow_skip_stages", False)),
-                "dry_run_first": bool(settings.get("dry_run_first", True)),
-            },
+            settings=_normalize_settings(settings),
             created_at=str(data.get("created_at") or ""),
             updated_at=str(data.get("updated_at") or ""),
             canvas=dict(data.get("canvas") or {}),

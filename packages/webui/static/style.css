@@ -319,3 +319,43 @@ button.link:hover { text-decoration: underline; }
   color: #e07b6b;
 }
 
+
+/* 项目管理抽屉 */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.panel-card {
+  background: #161a20;
+  border: 1px solid #2b313a;
+  border-radius: 10px;
+  width: min(1100px, 92vw);
+  max-height: 84vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+}
+.panel-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #232932;
+}
+.panel-card h2 { margin: 0; font-size: 15px; }
+.projects-body { padding: 12px 16px; overflow: auto; }
+.projects-body table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.projects-body th,
+.projects-body td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #232932;
+  text-align: left;
+  white-space: nowrap;
+}
+.projects-body tbody tr { cursor: pointer; }
+.projects-body tbody tr:hover { background: #1d232c; }

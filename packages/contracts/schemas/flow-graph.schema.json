@@ -30,7 +30,9 @@
       "properties": {
         "auto_advance": { "type": "boolean" },
         "allow_skip_stages": { "type": "boolean" },
-        "dry_run_first": { "type": "boolean" }
+        "dry_run_first": { "type": "boolean" },
+        "parallel": { "type": "boolean", "default": false },
+        "node_retries": { "type": "integer", "minimum": 0, "maximum": 3, "default": 0 }
       }
     },
     "nodes": {
@@ -52,7 +54,8 @@
           },
           "params": { "type": "object" },
           "disabled": { "type": "boolean" },
-          "note": { "type": "string" }
+          "note": { "type": "string" },
+          "retries": { "type": "integer", "minimum": 0, "maximum": 3 }
         }
       }
     },

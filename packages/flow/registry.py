@@ -25,6 +25,7 @@ class NodeType:
     params_schema: dict[str, Any]
     executor: str
     constraints: tuple[str, ...] = field(default_factory=tuple)
+    parallel_safe: bool = False
 
     def default_params(self) -> dict[str, Any]:
         """按 params_schema 生成默认参数（enum 取首项、boolean=False、string=""）。"""
@@ -63,6 +64,7 @@ class NodeTypeRegistry:
                 params_schema=dict(item.get("params_schema") or {}),
                 executor=str(item.get("executor") or item["type"]),
                 constraints=tuple(item.get("constraints") or ()),
+                parallel_safe=bool(item.get("parallel_safe", False)),
             )
             self._types[node_type.type] = node_type
 
@@ -110,6 +112,7 @@ class NodeTypeRegistry:
                     "params_schema": node_type.params_schema,
                     "executor": node_type.executor,
                     "constraints": list(node_type.constraints),
+                    "parallel_safe": node_type.parallel_safe,
                 }
                 for node_type in self._types.values()
             ],

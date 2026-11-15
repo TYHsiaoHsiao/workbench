@@ -1182,6 +1182,58 @@ async function runBatch() {
 
 /* ---------------- 事件绑定 ---------------- */
 
+async function openProjects() {
+  try {
+    const data = await api("/api/projects");
+    state.projects = data.projects || [];
+    renderProjects();
+    $("#projects-panel").classList.remove("hidden");
+  } catch (err) {
+    logLine("加载项目面板失败：" + err.message, "err");
+  }
+}
+
+function closeProjects() {
+  $("#projects-panel").classList.add("hidden");
+}
+
+function renderProjects() {
+  const body = $("#projects-body");
+  if (!state.projects.length) {
+    body.innerHTML = '<p class="hint">未发现项目。</p>';
+    return;
+  }
+  const rows = state.projects.map((p) => {
+    const last = p.last_run ? p.last_run.status + " · " + p.last_run.at : "—";
+    return (
+      '<tr data-path="' + escapeHtml(p.path) + '">' +
+      "<td>" + escapeHtml(p.name) + "</td>" +
+      "<td>" + escapeHtml(p.entry || "") + "</td>" +
+      "<td>" + escapeHtml(p.stage || "") + "</td>" +
+      "<td>" + escapeHtml(p.version || "") + "</td>" +
+      "<td>" + (p.pending_gates || 0) + "</td>" +
+      "<td>" + (p.artifacts || 0) + "</td>" +
+      "<td>" + (p.workflows || 0) + "</td>" +
+      "<td>" + (p.runs || 0) + "</td>" +
+      "<td>" + escapeHtml(last) + "</td>" +
+      "<td>" + escapeHtml(p.updated_at || "") + "</td>" +
+      "</tr>"
+    );
+  });
+  body.innerHTML =
+    "<table><thead><tr><th>名称</th><th>入口</th><th>阶段</th><th>版本</th><th>待门禁</th>" +
+    "<th>产物</th><th>流程</th><th>运行</th><th>最近运行</th><th>更新时间</th></tr></thead><tbody>" +
+    rows.join("") +
+    "</tbody></table>";
+  body.querySelectorAll("tr[data-path]").forEach((row) => {
+    row.addEventListener("click", async () => {
+      await chooseProject(row.dataset.path);
+      closeProjects();
+      logLine("已切换项目：" + state.projectName);
+    });
+  });
+}
+
 function bindUi() {
   $("#project-select").addEventListener("change", async (e) => {
     try {
@@ -1230,6 +1282,8 @@ function bindUi() {
   $("#btn-run-batch").addEventListener("click", () => runBatch());
   $("#btn-undo").addEventListener("click", () => undo());
   $("#btn-redo").addEventListener("click", () => redo());
+  $("#btn-projects").addEventListener("click", () => openProjects());
+  $("#btn-close-projects").addEventListener("click", () => closeProjects());
   $("#inspector-body").addEventListener("focusin", () => remember());
   $("#run-mode").addEventListener("change", () => renderRun());
 }

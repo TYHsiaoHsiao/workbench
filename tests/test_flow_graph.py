@@ -239,6 +239,45 @@ class FlowGraphTest(unittest.TestCase):
         with self.assertRaises(FlowError):
             Graph.from_dict({"graph_id": "x"})
 
+    def test_parallel_safe_flags(self) -> None:
+        self.assertTrue(self.types.get("check_content").parallel_safe)
+        self.assertTrue(self.types.get("end").parallel_safe)
+        self.assertFalse(self.types.get("stage").parallel_safe)
+
+    def test_parallel_settings_and_node_retries_valid(self) -> None:
+        graph = make_graph(
+            [
+                make_node("start", "start"),
+                make_node("stage-01", "stage", "01", x=320),
+                make_node("end", "end", x=640),
+            ],
+            [
+                edge("e1", "start", "project", "stage-01", "state"),
+                edge("e2", "stage-01", "artifact", "end", "any"),
+            ],
+        )
+        graph["settings"]["parallel"] = True
+        graph["settings"]["node_retries"] = 2
+        graph["nodes"][1]["retries"] = 1
+        result = validate_graph(graph, self.types)
+        self.assertTrue(result["ok"], msg=result)
+
+    def test_node_retries_out_of_range(self) -> None:
+        graph = make_graph(
+            [
+                make_node("start", "start"),
+                make_node("stage-01", "stage", "01", x=320),
+                make_node("end", "end", x=640),
+            ],
+            [
+                edge("e1", "start", "project", "stage-01", "state"),
+                edge("e2", "stage-01", "artifact", "end", "any"),
+            ],
+        )
+        graph["nodes"][1]["retries"] = 4
+        result = validate_graph(graph, self.types)
+        self.assertFalse(result["ok"])
+
 
 if __name__ == "__main__":
     unittest.main()

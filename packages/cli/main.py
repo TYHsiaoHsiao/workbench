@@ -994,6 +994,32 @@ def cmd_project_list(args: argparse.Namespace) -> int:
                 updated = str(revision[-1]["at"])
             else:
                 updated = datetime.fromtimestamp(state_file.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+            stats = None
+            if getattr(args, "stats", False):
+                gate_rows = [item for item in (state.get("gates") or []) if isinstance(item, dict)]
+                try:
+                    graph_rows = list_graphs(child)
+                except Exception:  # noqa: BLE001 - 统计失败不影响列表
+                    graph_rows = []
+                try:
+                    run_rows = list_runs(child, limit=200)
+                except Exception:  # noqa: BLE001
+                    run_rows = []
+                last_run = None
+                if run_rows:
+                    last_run = {
+                        "status": run_rows[0].get("status"),
+                        "at": run_rows[0].get("started_at") or run_rows[0].get("finished_at") or "",
+                    }
+                stats = {
+                    "artifacts": len(state.get("stage_artifacts") or {}),
+                    "pending_gates": sum(
+                        1 for item in gate_rows if item.get("status") == "pending"
+                    ),
+                    "workflows": len(graph_rows),
+                    "runs": len(run_rows),
+                    "last_run": last_run,
+                }
             rows.append(
                 {
                     "name": child.name,
@@ -1007,6 +1033,7 @@ def cmd_project_list(args: argparse.Namespace) -> int:
                     "updated": updated,
                     "path": str(child),
                     "root": str(root),
+                    **(stats or {}),
                 }
             )
     rows.sort(key=lambda item: item["updated"], reverse=True)
@@ -1022,10 +1049,16 @@ def cmd_project_list(args: argparse.Namespace) -> int:
     else:
         _print(f"项目根目录: {'；'.join(payload['roots'])}（{len(rows)} 个项目）")
         for item in rows:
-            _print(
+            line = (
                 f"- {item['name']}  阶段 {item['stage']}  {item['version']}  入口 {item['entry']}"
                 f"  风格 {item['style']}  知识桥 {item['knowledge']}  更新 {item['updated']}"
             )
+            if "workflows" in item:
+                line += (
+                    f"  产物 {item['artifacts']} · 待门禁 {item['pending_gates']}"
+                    f" · 流程 {item['workflows']} · 运行 {item['runs']}"
+                )
+            _print(line)
         for problem in problems:
             _print(f"  [跳过] {problem}")
     return EXIT_OK
@@ -1131,6 +1164,12 @@ def cmd_flow_run(args: argparse.Namespace) -> int:
     try:
         project = resolve_project(args.project)
         data = read_graph_data(project, args.graph)
+        retries = getattr(args, "retries", None)
+        if retries is not None:
+            data = dict(data)
+            settings = dict(data.get("settings") or {})
+            settings["node_retries"] = max(0, min(3, int(retries)))
+            data["settings"] = settings
         runner = Runner(
             project,
             data,
@@ -1438,6 +1477,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="项目根目录（可多次传入；缺省扫描默认项目根与仓库同级 projects/）",
     )
     project_list.add_argument("--json", action="store_true", help="以 JSON 输出")
+    project_list.add_argument("--stats", action="store_true", help="附带流程/运行/产物统计")
     project_list.set_defaults(func=cmd_project_list)
 
     route = sub.add_parser("route", help="意图路由：维护口令 / 知识库 / 阶段 / 入口 / 修订")
@@ -1669,6 +1709,7 @@ def build_parser() -> argparse.ArgumentParser:
     flow_dry.add_argument("--dry-run", dest="dry_run", action="store_true", default=None, help="只预演不写盘")
     flow_dry.add_argument("--live", dest="dry_run", action="store_false", default=None, help="真实执行并写盘")
     flow_run.add_argument("--yes", action="store_true", help="自动确认 confirm 节点（无人值守）")
+    flow_run.add_argument("--retries", type=int, default=None, help="节点级重试次数覆盖（0-3）")
     flow_run.add_argument("--json", action="store_true", help="以 JSON 输出")
     flow_run.set_defaults(func=cmd_flow_run)
 

@@ -1,4 +1,4 @@
-# 命令卡（v1.0.2）
+# 命令卡（v1.4.0）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -8,7 +8,7 @@
 | 命令 | 作用 |
 |---|---|
 | `python workbench.py version` | 版本号 + 契约版本 |
-| `python workbench.py doctor` | 7 项自检：Python、目录骨架、7 份契约、阶段注册表、意图规则、风格注册表、品牌词表 |
+| `python workbench.py doctor` | 8 项自检：Python、目录骨架、11 份契约、阶段注册表、意图规则、风格注册表、flow（10 节点/4 模板/4 契约）、品牌词表 |
 | `python workbench.py check` | 校验阶段注册表；`--project <名或路径>` 同时校验项目 `state.json` 与参考记忆 |
 | `python workbench.py check --project 项目名 --content` | 跨阶段内容一致性：风格卡/知识卡/产物文件存在性、`confirmed_references` 子集、treatment↔shot-plan 时长、下游过期提示（1.0.1） |
 | `python workbench.py brand-guard` | 品牌禁用词扫描；`--json` 输出结构化报告 |
@@ -19,7 +19,7 @@
 | 命令 | 作用 |
 |---|---|
 | `python workbench.py init 项目名 --entry A` | 创建项目骨架（12 个目录 + `00_project/state.json` + 参考记忆 JSON/MD + 状态卡） |
-| `python workbench.py project list` | 跨项目总览：扫描默认项目根与仓库同级 `projects/`（可多次 `--root`），显示阶段/版本/入口/风格/知识桥/更新时间（1.0.2） |
+| `python workbench.py project list`（加 `--stats` 输出流程/运行/待门禁/产物统计，1.4.0） | 跨项目总览：扫描默认项目根与仓库同级 `projects/`（可多次 `--root`），显示阶段/版本/入口/风格/知识桥/更新时间（1.0.2） |
 | `python workbench.py init 项目名 --entry B --force` | 覆盖已存在项目（默认拒绝覆盖） |
 | `python workbench.py route "只做CINEDANCE"` | 意图路由：维护口令 > 知识库请求 > 直接入口 > 修订 > 阶段 > 入口 |
 | `python workbench.py gate list --project 项目名` | 查看当前阶段门禁状态 |
@@ -78,6 +78,7 @@
 | `python workbench.py flow new --project 项目名 [--template tpl-full-flow] [--graph 流程id] [--force]` | 新建流程图（默认骨架或模板实例化） |
 | `python workbench.py flow list / show / validate --project 项目名 [--graph 流程id]` | 流程列表 / 详情 / 校验（契约 + 语义 8 条） |
 | `python workbench.py flow run --project 项目名 --graph 流程id [--dry-run/--live] [--mode full/to_node/single] [--node 节点id] [--yes]` | 运行（默认按图设置，建议先 dry-run；`--yes` 自动确认断点） |
+| `python workbench.py flow run --project 我的短片 --graph flow-main --live --retries 2` | 真实运行并允许节点失败自动重试（`--retries 0–3`，默认 0；写状态节点重试可能重复副作用） |
 | `python workbench.py flow runs --project 项目名 [--limit 20]` | 运行历史（状态/步骤/失败/恢复来源） |
 | `python workbench.py flow recover --run run-id --project 项目名 [--restore-state] [--yes]` | 失败运行恢复（可选回滚 `state_snapshot_before` 快照后重跑） |
 | `python workbench.py flow replay --run run-id --project 项目名 [--json]` | 运行回放（每步耗时、最慢节点、失败定位） |

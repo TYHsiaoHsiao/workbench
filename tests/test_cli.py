@@ -106,6 +106,21 @@ class CliTest(unittest.TestCase):
             main(["not-a-command"])
         self.assertEqual(2, ctx.exception.code)
 
+    def test_project_list_stats(self) -> None:
+        from core_router.project import create_project
+
+        with tempfile.TemporaryDirectory() as tmp:
+            create_project("统计项目", base=Path(tmp))
+            code, output = run_cli(["project", "list", "--root", tmp, "--json", "--stats"])
+            self.assertEqual(0, code, msg=output)
+            payload = json.loads(output)
+            item = payload["projects"][0]
+            self.assertEqual(0, item["artifacts"])
+            self.assertEqual(0, item["workflows"])
+            self.assertEqual(0, item["runs"])
+            self.assertEqual(2, item["pending_gates"])
+            self.assertIn("last_run", item)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -31,6 +31,22 @@ def _state_snapshot(project_root: Path) -> dict[str, Any]:
         return {}
 
 
+def _wave_order(graph: Graph, order: list[str]) -> list[list[str]]:
+    """按拓扑深度把执行顺序切成波次；同一波次内节点互不依赖。"""
+    position = {node_id: index for index, node_id in enumerate(order)}
+    depths: dict[str, int] = {}
+    for node_id in order:
+        depth = 1
+        for edge in graph.edges:
+            if edge.to_node == node_id and edge.from_node in position:
+                depth = max(depth, depths.get(edge.from_node, 1) + 1)
+        depths[node_id] = depth
+    buckets: dict[int, list[str]] = {}
+    for node_id in order:
+        buckets.setdefault(depths[node_id], []).append(node_id)
+    return [buckets[key] for key in sorted(buckets)]
+
+
 class Runner:
     """一次性运行会话：run() 启动，resume() 在确认断点后继续。"""
 
@@ -119,6 +135,165 @@ class Runner:
         return data
 
     # -- 内部执行 -----------------------------------------------------
+    def _retry_limit(self, node) -> int:
+        value = node.retries or self.graph.settings.get("node_retries", 0)
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            value = 0
+        return max(0, min(3, value))
+
+    def _execute_with_retry(self, node, context):
+        executor = get_executor(node.type)
+        limit = self._retry_limit(node)
+        attempts = 0
+        logs: list[str] = []
+        last_error = ""
+        while attempts <= limit:
+            attempts += 1
+            try:
+                return executor(node, context), attempts, logs, None
+            except (NodeError, FlowError) as exc:
+                last_error = str(exc)
+            except Exception as exc:  # noqa: BLE001 - 引擎兜底，重试耗尽后上报
+                last_error = f"{type(exc).__name__}: {exc}"
+            if attempts <= limit:
+                logs.append(f"第 {attempts} 次尝试失败: {last_error}，准备重试")
+        logs.append(f"重试耗尽（共 {attempts} 次）: {last_error}")
+        return None, attempts, logs, last_error
+
+    def _parallel_safe(self, node_id: str) -> bool:
+        node = self.graph.node(node_id)
+        node_type = self.node_types.get(node.type)
+        return bool(node_type is not None and getattr(node_type, "parallel_safe", False))
+
+    def _begin_step(self, node_id: str, node) -> dict[str, Any]:
+        before = _state_snapshot(self.project_root)
+        step: dict[str, Any] = {
+            "node_id": node_id,
+            "status": "running",
+            "started_at": _now(),
+            "state_before": {"stage": before.get("stage"), "version": before.get("version")},
+            "outputs": [],
+            "logs": [],
+        }
+        self.record["steps"].append(step)
+        self._emit("node_started", {"node_id": node_id, "label": node.label})
+        return step
+
+    def _finish_step(self, step: dict[str, Any]) -> None:
+        step["status"] = "planned" if self.dry_run else "succeeded"
+        step["ended_at"] = _now()
+        step["state_after"] = _state_snapshot(self.project_root)
+        self.cursor += 1
+        self._save()
+        self._emit(
+            "node_finished",
+            {"node_id": step["node_id"], "status": step["status"], "outputs": step["outputs"]},
+        )
+
+    def _run_one(self, node_id: str, context: NodeContext) -> bool:
+        node = self.graph.node(node_id)
+        step = self._begin_step(node_id, node)
+        self._save()
+
+        if node.disabled:
+            step.update(status="skipped", ended_at=_now(), logs=["节点已禁用，跳过"])
+            self._emit("node_skipped", {"node_id": node_id})
+            self.cursor += 1
+            self._save()
+            return True
+
+        result, attempts, retry_logs, last_error = self._execute_with_retry(node, context)
+        step["attempts"] = attempts
+        step["logs"] = list(step["logs"]) + retry_logs
+        if result is None:
+            self._fail(step, last_error)
+            return False
+
+        step["outputs"] = list(result.outputs)
+        step["logs"] = list(step["logs"]) + list(result.logs)
+        if result.error:
+            self._fail(step, result.error)
+            return False
+        if result.status == "waiting_confirmation":
+            if not self.auto_confirm:
+                step["status"] = "waiting_confirmation"
+                step["ended_at"] = _now()
+                step["state_after"] = _state_snapshot(self.project_root)
+                self.waiting_index = len(self.record["steps"]) - 1
+                self.record["status"] = "awaiting_confirm"
+                self.record["summary"] = self._summary()
+                self._save()
+                self._emit(
+                    "awaiting_confirm",
+                    {
+                        "node_id": node_id,
+                        "prompt": result.prompt,
+                        "detail_path": result.detail_path,
+                    },
+                )
+                return False
+            self.record.setdefault("confirmations", []).append(
+                {"node_id": node_id, "approved": True, "at": _now(), "note": "auto_confirm"}
+            )
+            step["logs"] = list(step["logs"]) + ["auto_confirm 自动确认"]
+
+        self._finish_step(step)
+        return True
+
+    def _run_wave_parallel(self, wave: list[str], context: NodeContext) -> bool:
+        from concurrent.futures import ThreadPoolExecutor
+
+        pairs: list[tuple[str, dict[str, Any]]] = []
+        for node_id in wave:
+            node = self.graph.node(node_id)
+            pairs.append((node_id, self._begin_step(node_id, node)))
+        self._save()
+
+        def work(item: tuple[str, dict[str, Any]]):
+            node_id, _step = item
+            return node_id, self._execute_with_retry(self.graph.node(node_id), context)
+
+        results: dict[str, Any] = {}
+        with ThreadPoolExecutor(max_workers=min(4, len(pairs))) as pool:
+            for node_id, payload in pool.map(work, pairs):
+                results[node_id] = payload
+
+        failure: tuple[dict[str, Any], str] | None = None
+        for node_id, step in pairs:
+            result, attempts, retry_logs, last_error = results[node_id]
+            step["attempts"] = attempts
+            step["logs"] = list(step["logs"]) + retry_logs
+            if failure is not None:
+                step["status"] = "skipped"
+                step["ended_at"] = _now()
+                continue
+            if result is None:
+                failure = (step, last_error)
+                continue
+            step["outputs"] = list(result.outputs)
+            step["logs"] = list(step["logs"]) + list(result.logs)
+            if result.error:
+                failure = (step, result.error)
+                continue
+            if result.status == "waiting_confirmation":
+                failure = (step, "并行波次内不允许人工确认节点")
+                continue
+            step["status"] = "planned" if self.dry_run else "succeeded"
+            step["ended_at"] = _now()
+            step["state_after"] = _state_snapshot(self.project_root)
+            self._emit(
+                "node_finished",
+                {"node_id": node_id, "status": step["status"], "outputs": step["outputs"]},
+            )
+        self.cursor += len(pairs)
+        if failure is not None:
+            self._fail(*failure)
+            return False
+        self._save()
+        return True
+
     def _continue(self) -> None:
         context = NodeContext(
             project_root=self.project_root,
@@ -126,76 +301,20 @@ class Runner:
             graph=self.graph,
             dry_run=self.dry_run,
         )
-        while self.cursor < len(self.order):
-            node_id = self.order[self.cursor]
-            node = self.graph.node(node_id)
-            before = _state_snapshot(self.project_root)
-            step: dict[str, Any] = {
-                "node_id": node_id,
-                "status": "running",
-                "started_at": _now(),
-                "state_before": {"stage": before.get("stage"), "version": before.get("version")},
-                "outputs": [],
-                "logs": [],
-            }
-            self.record["steps"].append(step)
-            self._save()
-            self._emit("node_started", {"node_id": node_id, "label": node.label})
-
-            if node.disabled:
-                step.update(status="skipped", ended_at=_now(), logs=["节点已禁用，跳过"])
-                self._emit("node_skipped", {"node_id": node_id})
-                self.cursor += 1
-                self._save()
-                continue
-
-            try:
-                result = get_executor(node.type)(node, context)
-            except (NodeError, FlowError) as exc:
-                self._fail(step, str(exc))
-                return
-            except Exception as exc:  # noqa: BLE001 - 引擎兜底，记录后中止
-                self._fail(step, f"{type(exc).__name__}: {exc}")
-                return
-
-            step["outputs"] = list(result.outputs)
-            step["logs"] = list(result.logs)
-            if result.error:
-                self._fail(step, result.error)
-                return
-            if result.status == "waiting_confirmation":
-                if self.auto_confirm:
-                    self.record.setdefault("confirmations", []).append(
-                        {"node_id": node_id, "approved": True, "at": _now(), "note": "auto_confirm"}
-                    )
-                    step["logs"] = list(step["logs"]) + ["auto_confirm 自动确认"]
-                else:
-                    step["status"] = "waiting_confirmation"
-                    step["ended_at"] = _now()
-                    step["state_after"] = _state_snapshot(self.project_root)
-                    self.waiting_index = len(self.record["steps"]) - 1
-                    self.record["status"] = "awaiting_confirm"
-                    self.record["summary"] = self._summary()
-                    self._save()
-                    self._emit(
-                        "awaiting_confirm",
-                        {
-                            "node_id": node_id,
-                            "prompt": result.prompt,
-                            "detail_path": result.detail_path,
-                        },
-                    )
+        for wave in _wave_order(self.graph, self.order[self.cursor :]):
+            if (
+                len(wave) > 1
+                and bool(self.graph.settings.get("parallel"))
+                and all(self._parallel_safe(node_id) for node_id in wave)
+            ):
+                if not self._run_wave_parallel(wave, context):
                     return
-            step["status"] = "planned" if self.dry_run else "succeeded"
-            step["ended_at"] = _now()
-            step["state_after"] = _state_snapshot(self.project_root)
-            self.cursor += 1
-            self._save()
-            self._emit(
-                "node_finished",
-                {"node_id": node_id, "status": step["status"], "outputs": step["outputs"]},
-            )
+                continue
+            for node_id in wave:
+                if not self._run_one(node_id, context):
+                    return
         self._finish("succeeded")
+
 
     def _fail(self, step: dict[str, Any], message: str) -> None:
         step["status"] = "failed"

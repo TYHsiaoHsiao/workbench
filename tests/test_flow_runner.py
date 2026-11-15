@@ -211,6 +211,98 @@ class FlowRunnerTest(unittest.TestCase):
         backups = list((self.project / "00_project" / "history").glob("state-before-recover-*.json"))
         self.assertTrue(backups)
 
+    def _two_node_graph(self) -> dict:
+        return make_graph(
+            self.project.name,
+            [make_node("start", "start"), make_node("end", "end", x=320)],
+            [edge("e1", "start", "project", "end", "any")],
+        )
+
+    def test_retry_recovers_from_transient_error(self) -> None:
+        from unittest import mock
+
+        from flow import NodeError, NodeResult
+
+        graph = self._two_node_graph()
+        graph["nodes"][0]["retries"] = 2
+        calls: dict[str, int] = {}
+
+        def fake(node, context):
+            calls[node.id] = calls.get(node.id, 0) + 1
+            if node.id == "start" and calls[node.id] == 1:
+                raise NodeError("临时失败")
+            return NodeResult(status="succeeded", outputs=[], logs=[])
+
+        with mock.patch("flow.runner.get_executor", return_value=fake):
+            result = Runner(self.project, graph, dry_run=True).run()
+
+        self.assertEqual("succeeded", result["run"]["status"])
+        start_step = result["run"]["steps"][0]
+        self.assertEqual(2, start_step["attempts"])
+        self.assertTrue(any("准备重试" in line for line in start_step["logs"]))
+
+    def test_retry_exhausted_fails(self) -> None:
+        from unittest import mock
+
+        from flow import NodeError
+
+        graph = self._two_node_graph()
+        graph["nodes"][0]["retries"] = 1
+
+        def fake(node, context):
+            raise NodeError("永久失败")
+
+        with mock.patch("flow.runner.get_executor", return_value=fake):
+            result = Runner(self.project, graph, dry_run=True).run()
+
+        self.assertEqual("failed", result["run"]["status"])
+        start_step = result["run"]["steps"][0]
+        self.assertEqual(2, start_step["attempts"])
+        self.assertTrue(any("重试耗尽" in line for line in start_step["logs"]))
+
+    def test_parallel_wave_runs_concurrently(self) -> None:
+        import threading
+        import time
+        from unittest import mock
+
+        from flow import NodeResult
+
+        graph = make_graph(
+            self.project.name,
+            [
+                make_node("start", "start"),
+                make_node("check-1", "check_content", x=320),
+                make_node("check-2", "check_content", x=500),
+                make_node("end", "end", x=760),
+            ],
+            [
+                edge("e1", "start", "project", "check-1", "state"),
+                edge("e2", "start", "project", "check-2", "state"),
+                edge("e3", "check-1", "log", "end", "any"),
+                edge("e4", "check-2", "log", "end", "any"),
+            ],
+        )
+        graph["settings"]["parallel"] = True
+        seen: list[tuple[str, int]] = []
+
+        def fake(node, context):
+            seen.append((node.id, threading.get_ident()))
+            if node.id.startswith("check"):
+                time.sleep(0.12)
+            return NodeResult(status="succeeded", outputs=[], logs=[])
+
+        started = time.monotonic()
+        with mock.patch("flow.runner.get_executor", return_value=fake):
+            result = Runner(self.project, graph, dry_run=True).run()
+        elapsed = time.monotonic() - started
+
+        self.assertEqual("succeeded", result["run"]["status"])
+        self.assertEqual(["start", "check-1", "check-2", "end"], [s["node_id"] for s in result["run"]["steps"]])
+        check_threads = {thread for node_id, thread in seen if node_id.startswith("check")}
+        self.assertEqual(2, len(check_threads))
+        self.assertGreaterEqual(elapsed, 0.10)
+        self.assertLess(elapsed, 0.30)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -150,6 +150,9 @@ class WebUIApiTest(unittest.TestCase):
         status, data = self.client.json("GET", "/api/projects")
         self.assertEqual(200, status)
         self.assertIsInstance(data["projects"], list)
+        entry = data["projects"][0]
+        for key in ("artifacts", "pending_gates", "workflows", "runs", "last_run"):
+            self.assertIn(key, entry)
 
     def test_node_types(self) -> None:
         status, data = self.client.json("GET", "/api/node-types")

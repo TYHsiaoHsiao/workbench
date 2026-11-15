@@ -117,6 +117,9 @@
 - 运行停在 `awaiting_confirm`：人工确认节点未处理；在页面抽屉点确认，或重新运行验证。
 - 运行失败想重跑：先 `flow runs --project <项目>` 查看记录，再 `flow recover --run <run_id> --project <项目> --yes`；需要回滚状态快照时加 `--restore-state`。
 - 批量运行默认 dry-run，真实执行需显式 `--live`。
+- 并行执行不生效：确认图 `settings.parallel=true`，且该波所有节点类型都带 `parallel_safe`；当前仅 `check_content`/`end` 可并行，其余写状态节点强制串行。
+- 重试没有发生：节点 `retries` 与 `settings.node_retries` 默认均为 0；`flow run --retries N` 只覆盖默认值，节点显式 `retries` 优先。写状态节点重试前请确认幂等性。
+
 
 - 回放没有耗时/失败定位：先确认该运行记录含 `started_at` / `ended_at`（旧运行记录缺时间戳时回放只给步骤序列）；`flow replay --json` 可查看原始字段。
 - 导入流程图报「流程图校验失败」：逐条对照图校验 8 条规则；导入前可先 `flow export` 再 `flow import` 自检；同 id 已存在需 `--force`。
