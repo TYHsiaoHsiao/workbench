@@ -8,12 +8,17 @@
 M15 起条目支持 ``scheduled_at``（计划执行时间，未到期不执行）、``canceled`` 状态
 （取消待运行条目）与 ``order``（手动重排）；``flow queue daemon`` 可周期性执行到期条目。
 ``flow queue run --all-projects`` 可跨项目依次处理各项目队列（本地单用户）。
+
+M16 起支持失败重试策略与通知外送：``retry_entry``/``--retry-failed`` 把失败条目重置为
+pending（``attempts`` 累加），``list_notifications``/``notify_cmd`` 记录或外送失败通知
+（``00_project/workflows/queue-notifications.jsonl``）。
 """
 from __future__ import annotations
 
 import json
 import re
 import secrets
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -34,6 +39,7 @@ from .registry import NodeTypeRegistry
 CONTRACT_VERSION = "0.1"
 QUEUE_SCHEMA = "flow-queue.schema.json"
 QUEUE_FILE_NAME = "queue.json"
+NOTIFY_LOG_NAME = "queue-notifications.jsonl"
 QUEUE_ID_RE = re.compile(r"^q-[a-z0-9-]{4,80}$")
 QUEUE_STATUSES = ("pending", "running", "succeeded", "failed", "canceled")
 
@@ -92,6 +98,21 @@ def _next_order(entries: list[dict[str, Any]]) -> int:
     return (_entry_order(pending[-1]) + 1) if pending else 0
 
 
+def _entry_attempts(entry: dict[str, Any]) -> int:
+    try:
+        return max(0, int(entry.get("attempts") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _reset_to_pending(entry: dict[str, Any]) -> None:
+    """把失败条目重置为待运行，并累加重试次数、清理上次运行结果。"""
+    entry["attempts"] = _entry_attempts(entry) + 1
+    entry["status"] = "pending"
+    for key in ("batch_id", "result", "notification", "error", "finished_at", "started_at"):
+        entry.pop(key, None)
+
+
 def new_queue_id() -> str:
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     return f"q-{stamp}-{secrets.token_hex(3)}"
@@ -99,6 +120,66 @@ def new_queue_id() -> str:
 
 def queue_path(project_root: str | Path) -> Path:
     return store.workflows_dir(Path(project_root)) / QUEUE_FILE_NAME
+
+
+def notify_path(project_root: str | Path) -> Path:
+    """失败通知日志路径：``00_project/workflows/queue-notifications.jsonl``。"""
+    return store.workflows_dir(Path(project_root)) / NOTIFY_LOG_NAME
+
+
+def _append_notification(project: Path, payload: dict[str, Any]) -> None:
+    """把一条失败通知追加到 JSONL 通知日志（写失败不影响队列执行）。"""
+    path = notify_path(project)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    except OSError:
+        return
+
+
+def list_notifications(project_root: str | Path, *, limit: int = 20) -> list[dict[str, Any]]:
+    """读取最近的通知记录（新→旧），供 CLI/Web 查看外送记录。"""
+    project = _require_project(project_root)
+    path = notify_path(project)
+    if not path.is_file():
+        return []
+    limit = max(1, min(200, int(limit)))
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    records: list[dict[str, Any]] = []
+    for line in reversed(lines[-200:]):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(record, dict):
+            records.append(record)
+        if len(records) >= limit:
+            break
+    return records
+
+
+def _notify_external(notify_cmd: list[str] | None, message: str) -> bool:
+    """调用外部命令外送通知（如桌面通知脚本），命令最后一个参数为通知文本。"""
+    if not notify_cmd:
+        return False
+    try:
+        subprocess.run(
+            list(notify_cmd) + [message],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+            check=False,
+        )
+        return True
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
 def _empty_doc(project: Path) -> dict[str, Any]:
@@ -220,15 +301,30 @@ def run_queue(
     project_root: str | Path,
     *,
     limit: int = 5,
+    retry_failed: int = 0,
+    notify_cmd: list[str] | None = None,
     node_types: NodeTypeRegistry | None = None,
     sessions: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """按 order/创建顺序执行队列中已到期的 pending 条目，返回本次结果与失败通知。"""
+    """按 order/创建顺序执行队列中已到期的 pending 条目，返回本次结果与失败通知。
+
+    ``retry_failed`` > 0 时，先把重试次数未用尽的失败条目重置为 pending 再执行；
+    有失败时追加 JSONL 通知记录，并可用 ``notify_cmd`` 外送通知（命令末尾追加通知文本）。
+    """
     project = _require_project(project_root)
     doc = load_queue(project)
     limit = max(1, min(50, int(limit)))
     entries = [item for item in doc.get("entries") or [] if isinstance(item, dict)]
     now = datetime.now().astimezone()
+    retry_limit = max(0, min(10, int(retry_failed or 0)))
+    retried: list[str] = []
+    if retry_limit:
+        for entry in entries:
+            if entry.get("status") == "failed" and _entry_attempts(entry) < retry_limit:
+                _reset_to_pending(entry)
+                retried.append(str(entry.get("queue_id")))
+        if retried:
+            _save(project, doc)
     pending_all = _sorted_pending(entries)
     pending = [item for item in pending_all if _is_due(item, now)][:limit]
 
@@ -298,10 +394,41 @@ def run_queue(
         1 for item in final_entries if item.get("status") == "pending" and not _is_due(item)
     )
     canceled = sum(1 for item in final_entries if item.get("status") == "canceled")
+    failed_items = [item for item in ran if item.get("status") == "failed"]
+    notified = False
+    if failed_items:
+        failed_graphs: list[str] = []
+        for item in failed_items:
+            for graph_id in (item.get("notification") or {}).get("failed_graphs") or []:
+                graph_id = str(graph_id)
+                if graph_id not in failed_graphs:
+                    failed_graphs.append(graph_id)
+        message = (
+            f"队列运行失败 {len(failed_items)} 条（共执行 {len(ran)} 条）"
+            + (f"：{', '.join(failed_graphs)}" if failed_graphs else "")
+        )
+        _append_notification(
+            project,
+            {
+                "at": now_iso(),
+                "event": "queue.run",
+                "project": project.name,
+                "status": "failed",
+                "message": message,
+                "failed_graphs": failed_graphs,
+                "ran": [
+                    {"queue_id": item.get("queue_id"), "status": item.get("status")}
+                    for item in ran
+                ],
+            },
+        )
+        notified = _notify_external(notify_cmd, message)
     return {
         "ok": all(item.get("status") != "failed" for item in ran),
         "project": str(project),
         "ran": ran,
+        "retried": retried,
+        "notified": notified,
         "summary": {
             **_aggregate_ran(ran),
             "pending": remaining,
@@ -331,6 +458,18 @@ def cancel_entry(project_root: str | Path, queue_id: str) -> dict[str, Any]:
     entry["status"] = "canceled"
     entry["finished_at"] = now_iso()
     entry["notification"] = {"failed_graphs": [], "message": f"队列条目 {queue_id} 已取消"}
+    _save(project, doc)
+    return entry
+
+
+def retry_entry(project_root: str | Path, queue_id: str) -> dict[str, Any]:
+    """把失败条目重置为待运行（attempts+1），供手动或守护进程重试。"""
+    project = _require_project(project_root)
+    doc = load_queue(project)
+    entry = _find_entry(doc, queue_id)
+    if entry.get("status") != "failed":
+        raise FlowError(f"只能重试失败条目（当前 {entry.get('status')}）：{queue_id}")
+    _reset_to_pending(entry)
     _save(project, doc)
     return entry
 
@@ -394,15 +533,19 @@ def list_project_roots() -> list[Path]:
 
 
 __all__ = [
+    "NOTIFY_LOG_NAME",
     "QUEUE_SCHEMA",
     "cancel_entry",
+    "list_notifications",
     "list_project_roots",
     "list_queue",
     "load_queue",
     "move_entry",
     "new_queue_id",
     "normalize_schedule",
+    "notify_path",
     "queue_path",
+    "retry_entry",
     "run_queue",
     "validate_queue",
     "write_queue",

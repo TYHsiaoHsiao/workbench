@@ -90,6 +90,11 @@
             "minimum": 0,
             "description": "待运行条目内的执行顺序（越小越先；可移动调整）"
           },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "失败重试次数（手动 retry 或 daemon --retry-failed 累加；达到上限后不再自动重试）"
+          },
           "started_at": {
             "type": "string"
           },

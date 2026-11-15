@@ -1542,6 +1542,7 @@ function renderQueue() {
     html += '<span class="queue-meta">' + (entry.graphs || []).length + " 图 · " + escapeHtml(queueStatusLabel(entry.status));
     if (entry.status === "pending" && entry.order !== undefined) html += " · 顺序 " + escapeHtml(String(entry.order));
     if (entry.scheduled_at) html += " · 计划 " + escapeHtml(entry.scheduled_at);
+    if (entry.attempts) html += " · 重试 " + escapeHtml(String(entry.attempts));
     if (entry.batch_id) html += " · 批次 " + escapeHtml(entry.batch_id);
     html += "</span>";
     if (entry.status === "pending") {
@@ -1551,6 +1552,8 @@ function renderQueue() {
       html += '<button data-q-down="' + escapeHtml(entry.queue_id) + '"' + (pos === pendingEntries.length - 1 ? " disabled" : "") + ">下移</button>";
       html += '<button data-q-cancel="' + escapeHtml(entry.queue_id) + '">取消</button>';
       html += "</span>";
+    } else if (entry.status === "failed") {
+      html += '<span class="q-actions"><button data-q-retry="' + escapeHtml(entry.queue_id) + '">重试</button></span>';
     }
     html += "</div>";
     const notif = entry.notification || {};
@@ -1572,6 +1575,23 @@ function renderQueue() {
   box.querySelectorAll("[data-q-down]").forEach((btn) =>
     btn.addEventListener("click", () => moveQueueEntry(btn.dataset.qDown, "down"))
   );
+  box.querySelectorAll("[data-q-retry]").forEach((btn) =>
+    btn.addEventListener("click", () => retryQueueEntry(btn.dataset.qRetry))
+  );
+}
+
+async function retryQueueEntry(queueId) {
+  if (!window.confirm("把失败条目 " + queueId + " 重置为待运行？（下次运行或守护会再次执行）")) return;
+  try {
+    await api("/api/queue/" + encodeURIComponent(queueId) + "/retry", {
+      method: "POST",
+      body: JSON.stringify({ project: state.project }),
+    });
+    logLine("已重置待运行：" + queueId, "ok");
+    await loadQueue();
+  } catch (err) {
+    logLine("重置失败：" + err.message, "err");
+  }
 }
 
 async function cancelQueueEntry(queueId) {

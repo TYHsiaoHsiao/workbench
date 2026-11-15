@@ -1,6 +1,6 @@
-# 可视化节点工作台（M1–M15 + 2.0.1 实时预览）
+# 可视化节点工作台（M1–M16 + 2.0.1 实时预览）
 
-> 版本：2.3.0 · 状态：M1–M15 已完成；2.3.0 为队列定时调度、取消/重排与后台守护 · 适用范围：本地单用户
+> 版本：2.4.0 · 状态：M1–M16 已完成；2.4.0 为队列失败重试、通知外送与守护日志轮转 · 适用范围：本地单用户
 
 ## 1. 定位
 
@@ -204,6 +204,8 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 | GET | `/api/queue?project=&status=&limit=` | 队列条目列表（含批次 ID、结果与失败通知） |
 | POST | `/api/queue/<queue_id>/cancel` | 取消待运行队列条目（body: project） |
 | POST | `/api/queue/<queue_id>/move` | 重排队列条目（body: project / before / after / index） |
+| POST | `/api/queue/<queue_id>/retry` | 重置失败条目为待运行（body: project；M16） |
+| GET | `/api/queue/notifications?project=&limit=` | 失败通知外送日志（JSONL，最近在前；M16） |
 | GET | `/api/dev/version` | 静态资源签名（`filename:size:mtime_ns` + `latest_mtime_ns`）；前端每 1.2s 轮询，变更后整页刷新（2.0.1） |
 - 兼容别名：`POST /api/runs/batch` 与 `POST /api/workflows/batch` 等价（旧字段 `count`/`results`），前端已迁移到新端点。
 
@@ -323,6 +325,13 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - CLI/Web/前端：queue add 支持 `--at`；Web API `POST /api/queue/<id>/cancel`、`POST /api/queue/<id>/move`；前端队列列表显示顺序/计划时间与上移/下移/取消按钮。
 - 边界：定时基于本机时钟，daemon 需保持进程运行；不自动重试失败条目；契约新增可选字段（向后兼容）。
 
+### M16：队列失败重试与通知外送（2.4.0）
+
+- 失败重试：`flow-queue` 契约条目新增可选 `attempts`（已重试次数）；`retry_entry()` 仅允许 failed 条目重置为 pending（attempts+1、清理批次/结果/通知字段）；`run_queue(..., retry_failed=N)` 先把 `failed 且 attempts<N` 的条目重置再执行；CLI `flow queue retry`、`flow queue run --retry-failed N`、`flow queue daemon --retry-failed N`；Web `POST /api/queue/<id>/retry` 与前端失败行「重试」按钮。
+- 通知外送：失败运行写 JSONL 通知日志 `00_project/workflows/queue-notifications.jsonl`（at/event/status/message/failed_graphs/ran）；`notify_cmd` 可选外部命令（`--notify-cmd`，消息作为最后参数，超时 10s、失败静默）；CLI `flow queue notifications` 查询最近通知；Web `GET /api/queue/notifications`。
+- 守护日志：`flow queue daemon --log-file/--rotate-bytes`（默认 `00_project/workflows/daemon.log`，超阈值轮转为 `.1`），每轮记录执行/重试/通知摘要与退出原因。
+- 边界：重试为有限手动/守护触发，不含指数退避；通知日志与守护日志均在项目内；默认行为不变，契约只增可选字段。
+
 ## 16. 已知限制
 
 1. 图与 state 仍为单向（图 → state）；不支持从现有 state 自动反推流程图。
@@ -349,6 +358,9 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 21. 批次队列按项目本地顺序执行（不跨进程并发）；定时条目需 `flow queue daemon` 或显式 `flow queue run` 触发，daemon 停止后不会自动执行。
 22. 队列定时与后台守护依赖本机时钟与常驻进程；daemon 不自动重启失败条目，也不跨机器同步。
 23. 取消/重排只作用于 pending 条目；running/succeeded/failed/canceled 条目不可取消或移动。
+24. 失败重试是手动/守护触发的有限次重跑（按 `attempts` 上限），不含指数退避或跨机器队列。
+25. 通知外送为尽力而为：JSONL 写入失败或外部命令超时/不存在时静默跳过，不阻断队列执行。
+26. daemon 日志轮转只保留一份 `.1` 备份；日志文件在项目 `00_project/workflows/` 内。
 
 ## 17. 验证
 
@@ -367,11 +379,11 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - M13（2.1.0）新增 6 项测试（批次并行 dry-run、并行拒绝 live/fail-fast、恢复合并尝试、无失败恢复、Web API 并行端点/恢复端点），全量 `Ran 331 tests ... OK`；CLI 冒烟：`flow batch --parallel --workers 2`、`flow batch-recover`（失败图重跑并合并尝试）；doctor 9 项含 5 份 flow 契约。
 - M14（2.2.0）新增 10 项测试（队列引擎 8：入队/过滤/去重/空选择/并行校验/顺序执行/失败通知/limit 与空队列；Web API 2：队列端点、失败通知），全量 `Ran 341 tests ... OK`；CLI 冒烟：`flow queue add/list/run`（含 `--all-projects`）；doctor 9 项含 6 份 flow 契约。
 - M15（2.3.0）新增 10 项测试（定时跳过/计划执行、取消、重排 before/after/index、非法参数；Web API 2：定时+取消、重排），全量 `Ran 351 tests ... OK`；CLI 冒烟：`queue add --at`/`cancel`/`move`/`daemon --until-empty`；doctor 9 项含 6 份 flow 契约。
+- M16（2.4.0）新增 8 项测试（队列重试/通知 6：重试重置、非 failed 拒绝、retry_failed 上限、通知日志、notify-cmd、无失败不通知；Web API 2：重试+通知、retry_failed），全量 `Ran 359 tests ... OK`；CLI 冒烟：`queue retry`、`run --retry-failed 1`、`queue notifications`、daemon 日志参数；doctor 9 项含 6 份 flow 契约。
 
-## 18. 后续（M16 候选）
+## 18. 后续（M17 候选）
 
-- 队列失败重试策略与失败通知外部通道（桌面通知/日志汇总报告）、daemon 开机自启与日志轮转。
-- 队列条目历史趋势与批量取消、跨会话守护恢复。
+- 队列条目历史趋势与批量取消、跨会话守护恢复；daemon 开机自启与服务化。
 - 生成面板内选择回填阶段与逐镜批量操作（05/06/07 混合）；任务详情抽屉的媒体预览与提交历史过滤。
 - 批次/队列历史趋势与运行基线定时巡检、缩略图文件缓存落盘。
 - 真实生成平台在线联调；macOS / GitHub Actions 远端矩阵与迁移用例扩充。

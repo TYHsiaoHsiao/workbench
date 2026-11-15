@@ -147,6 +147,9 @@
 - `flow queue add --at` 报「无法解析计划时间 …」：用 ISO 8601（如 `2026-11-15T20:00`），留空表示立即执行。
 - 到点条目仍显示「计划中」未执行：`flow queue run` 不会自动等待，需启动 `flow queue daemon`（保持进程运行）或手动 run；`flow queue list` 可查看 `scheduled_at`。
 - `flow queue cancel/move` 报错：只能操作 pending 条目，先 `flow queue list --status pending` 确认条目状态。
+- `flow queue retry` 报「只能重试失败条目」：仅 failed 可重置，pending/running 无需重试；用 `flow queue list --status failed` 确认。
+- `--retry-failed` 没有效果：仅重置 `attempts < N` 的失败条目；达到上限后不再重试，需手动 `flow queue retry` 或调大 N。
+- `--notify-cmd` 未收到通知：命令按 `shlex` 拆分且消息作为最后一个参数传入，超时 10 秒；失败静默跳过，可用 `flow queue notifications` 查看 JSONL 日志确认通知是否已生成。
 
 
 

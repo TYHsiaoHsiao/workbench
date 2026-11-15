@@ -15,11 +15,14 @@ from flow.queue import (  # noqa: E402
     QUEUE_FILE_NAME,
     cancel_entry,
     enqueue,
+    list_notifications,
     list_queue,
     load_queue,
     move_entry,
     normalize_schedule,
+    notify_path,
     queue_path,
+    retry_entry,
     run_queue,
 )
 
@@ -235,6 +238,92 @@ class FlowQueueM15Test(unittest.TestCase):
             normalize_schedule("不是时间")
         with self.assertRaises(FlowError):
             enqueue(self.project, ["flow-a"], scheduled_at="不是时间")
+
+
+class FlowQueueM16Test(unittest.TestCase):
+    """M16：失败重试与通知外送（JSONL 日志 + 外部命令）。"""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.base = Path(self.tmp.name)
+        report = create_project("队列重试测试", base=self.base / "projects")
+        self.project = Path(report["path"])
+
+    def _write(self, graph_id: str) -> None:
+        write_graph_data(self.project, make_graph(graph_id, self.project.name))
+
+    def _write_broken(self, graph_id: str) -> None:
+        data = make_graph(graph_id, self.project.name)
+        data["edges"] = []
+        write_graph_data(self.project, data)
+
+    def _fail_once(self, graph_id: str = "flow-bad") -> dict:
+        self._write_broken(graph_id)
+        entry = enqueue(self.project, [graph_id])
+        result = run_queue(self.project)
+        self.assertFalse(result["ok"], result)
+        return entry
+
+    def test_retry_entry_resets_failed(self) -> None:
+        entry = self._fail_once()
+        retried = retry_entry(self.project, entry["queue_id"])
+        self.assertEqual("pending", retried["status"])
+        self.assertEqual(1, retried["attempts"])
+        for key in ("batch_id", "result", "notification", "error", "finished_at", "started_at"):
+            self.assertNotIn(key, retried)
+        self.assertEqual("pending", list_queue(self.project)[0]["status"])
+
+    def test_retry_non_failed_rejected(self) -> None:
+        self._write("flow-a")
+        entry = enqueue(self.project, ["flow-a"])
+        with self.assertRaises(FlowError):
+            retry_entry(self.project, entry["queue_id"])
+        with self.assertRaises(FlowError):
+            retry_entry(self.project, "q-00000000-000000-abcdef")
+
+    def test_run_queue_retry_failed_bounded(self) -> None:
+        entry = self._fail_once()
+        result = run_queue(self.project, retry_failed=1)
+        self.assertEqual([entry["queue_id"]], result["retried"])
+        self.assertFalse(result["ok"])
+        items = list_queue(self.project)
+        self.assertEqual(1, items[0]["attempts"])
+        self.assertEqual("failed", items[0]["status"])
+        again = run_queue(self.project, retry_failed=1)
+        self.assertEqual([], again["retried"])
+        self.assertEqual([], again["ran"])
+
+    def test_notifications_log_written_on_failure(self) -> None:
+        self._fail_once()
+        notes = list_notifications(self.project)
+        self.assertEqual(1, len(notes))
+        self.assertEqual("failed", notes[0]["status"])
+        self.assertIn("flow-bad", notes[0]["failed_graphs"])
+        self.assertIn("队列运行失败", notes[0]["message"])
+        self.assertTrue(notify_path(self.project).is_file())
+
+    def test_notify_cmd_receives_message(self) -> None:
+        script = self.base / "notify.py"
+        out = self.base / "notify.out"
+        script.write_text(
+            "import sys\nopen(sys.argv[1], 'w', encoding='utf-8').write(sys.argv[2])\n",
+            encoding="utf-8",
+        )
+        self._fail_once()
+        enqueue(self.project, ["flow-bad"])
+        result = run_queue(self.project, notify_cmd=[sys.executable, str(script), str(out)])
+        self.assertTrue(result["notified"], result)
+        self.assertIn("队列运行失败", out.read_text(encoding="utf-8"))
+
+    def test_notifications_empty_without_failures(self) -> None:
+        self._write("flow-ok")
+        enqueue(self.project, ["flow-ok"])
+        result = run_queue(self.project)
+        self.assertTrue(result["ok"], result)
+        self.assertFalse(result["notified"])
+        self.assertEqual([], list_notifications(self.project))
+        self.assertFalse(notify_path(self.project).is_file())
 
 
 if __name__ == "__main__":

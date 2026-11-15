@@ -1,5 +1,13 @@
 # 变更日志
 
+## [2.4.0] - 2026-11-15 — 队列失败重试、通知外送与守护日志（M16）
+
+- 失败重试：`flow-queue` 契约条目新增可选 `attempts`；`retry_entry()` 仅允许 failed 条目重置为 pending（attempts+1、清理批次/结果/通知字段）；`run_queue(retry_failed=N)` 先重置未达上限的失败条目再执行；CLI `flow queue retry`、`flow queue run --retry-failed N`、`flow queue daemon --retry-failed N`；Web `POST /api/queue/<id>/retry` 与前端失败行「重试」按钮。
+- 通知外送：失败运行写 JSONL 通知日志 `00_project/workflows/queue-notifications.jsonl`（at/event/status/message/failed_graphs/ran）；`--notify-cmd` 外部命令外送（超时 10s、失败不阻断）；CLI `flow queue notifications` 与 Web `GET /api/queue/notifications`。
+- 守护日志：`flow queue daemon --log-file/--rotate-bytes`（默认 `00_project/workflows/daemon.log`，超阈值轮转为 `.1`）。
+- 测试：新增 8 项（队列重试/通知 6、Web API 2），合计 359 项；CI 全绿、品牌守卫 0 命中。
+- 兼容性：契约新增可选字段与端点，默认行为不变；`VERSION` 升 2.4.0（MINOR）。
+
 ## [2.3.0] - 2026-11-15 — 队列定时调度、取消/重排与后台守护（M15）
 
 - 定时执行：`flow-queue` 契约条目新增可选 `scheduled_at`（ISO 8601）与 `order`；`flow queue add --at <时间>` 入队后到点才执行；`run_queue()` 只处理到期条目，summary 增加 `scheduled`/`canceled` 计数。

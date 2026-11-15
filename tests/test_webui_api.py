@@ -444,6 +444,68 @@ class WebUIApiTest(unittest.TestCase):
         self.assertEqual(0, orders[ids[1]])
         self.assertEqual(1, orders[ids[0]])
 
+    def test_queue_retry_and_notifications_endpoint(self) -> None:
+        broken = json.loads(json.dumps(self.graph))
+        broken["graph_id"] = "flow-queue-retry"
+        broken["edges"] = []
+        write_graph_data(self.project, broken)
+        status, data = self.client.json(
+            "POST",
+            "/api/queue",
+            {"project": str(self.project), "graph_ids": ["flow-queue-retry"], "dry_run": True},
+        )
+        self.assertEqual(200, status, msg=data)
+        queue_id = data["entry"]["queue_id"]
+        status, data = self.client.json(
+            "POST",
+            "/api/queue/run",
+            {"project": str(self.project), "limit": 5},
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertFalse(data["ok"], msg=data)
+        status, data = self.client.json("GET", self._q("/api/queue/notifications") + "&limit=5")
+        self.assertEqual(200, status, msg=data)
+        self.assertEqual(1, len(data["notifications"]), msg=data)
+        self.assertIn("flow-queue-retry", data["notifications"][0]["failed_graphs"])
+        status, data = self.client.json(
+            "POST",
+            f"/api/queue/{queue_id}/retry",
+            {"project": str(self.project)},
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertEqual("pending", data["entry"]["status"])
+        self.assertEqual(1, data["entry"]["attempts"])
+
+    def test_queue_run_retry_failed_endpoint(self) -> None:
+        broken = json.loads(json.dumps(self.graph))
+        broken["graph_id"] = "flow-queue-retry2"
+        broken["edges"] = []
+        write_graph_data(self.project, broken)
+        status, data = self.client.json(
+            "POST",
+            "/api/queue",
+            {"project": str(self.project), "graph_ids": ["flow-queue-retry2"], "dry_run": True},
+        )
+        self.assertEqual(200, status, msg=data)
+        queue_id = data["entry"]["queue_id"]
+        status, data = self.client.json(
+            "POST",
+            "/api/queue/run",
+            {"project": str(self.project), "limit": 5},
+        )
+        self.assertFalse(data["ok"], msg=data)
+        status, data = self.client.json(
+            "POST",
+            "/api/queue/run",
+            {"project": str(self.project), "limit": 5, "retry_failed": 1},
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertEqual([queue_id], data["retried"], msg=data)
+        self.assertFalse(data["ok"], msg=data)
+        status, data = self.client.json("GET", self._q("/api/queue/notifications") + "&limit=5")
+        self.assertEqual(200, status, msg=data)
+        self.assertEqual(2, len(data["notifications"]), msg=data)
+
     def test_replay_endpoint(self) -> None:
         status, data = self.client.json(
             "POST",

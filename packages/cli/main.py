@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import sys
 import time
 from datetime import datetime
@@ -67,13 +68,16 @@ from flow import (
     clear_baseline,
     list_baselines,
     list_batches,
+    list_notifications,
     list_project_roots,
     list_queue,
     list_snapshots,
     move_entry,
+    notify_path,
     read_batch,
     read_snapshot,
     recover_batch,
+    retry_entry,
     run_batch,
     enqueue,
     run_queue,
@@ -1533,6 +1537,8 @@ def cmd_flow_queue_list(args: argparse.Namespace) -> int:
             line += f"  顺序 {entry['order']}"
         if entry.get("scheduled_at"):
             line += f"  计划 {entry['scheduled_at']}"
+        if entry.get("attempts"):
+            line += f"  重试 {entry['attempts']} 次"
         if entry.get("batch_id"):
             line += f"  批次 {entry['batch_id']}"
         _print(line)
@@ -1554,7 +1560,16 @@ def cmd_flow_queue_run(args: argparse.Namespace) -> int:
                 _print("错误: 请指定 --project，或使用 --all-projects 处理全部项目队列")
                 return EXIT_USAGE
             projects = [resolve_project(args.project)]
-        results = [run_queue(project, limit=args.limit) for project in projects]
+        notify_cmd = shlex.split(args.notify_cmd) if getattr(args, "notify_cmd", None) else None
+        results = [
+            run_queue(
+                project,
+                limit=args.limit,
+                retry_failed=max(0, int(getattr(args, "retry_failed", 0) or 0)),
+                notify_cmd=notify_cmd,
+            )
+            for project in projects
+        ]
     except FlowError as exc:
         _print(f"错误: {exc}")
         return EXIT_FAIL
@@ -1567,6 +1582,10 @@ def cmd_flow_queue_run(args: argparse.Namespace) -> int:
             f"项目 {result['project']}：执行 {summary['total']} 条队列 → 成功 {summary['succeeded']} / "
             f"失败 {summary['failed']} / 剩余待运行 {summary['pending']}"
         )
+        if result.get("retried"):
+            _print("  已重置重试：" + ", ".join(result["retried"]))
+        if result.get("notified"):
+            _print("  已外送失败通知")
         for item in result["ran"]:
             line = f"- {item['queue_id']}  {item['status']}  批次 {item.get('batch_id') or '-'}"
             if item.get("error"):
@@ -1614,6 +1633,61 @@ def cmd_flow_queue_move(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_flow_queue_retry(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        entry = retry_entry(project, args.queue_id)
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    if args.json:
+        _emit({"ok": True, "project": str(project), "entry": entry}, True)
+    else:
+        _print(f"已重置为待运行 {entry['queue_id']}（第 {entry.get('attempts', 0)} 次重试，等待执行）")
+    return EXIT_OK
+
+
+def cmd_flow_queue_notifications(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        records = list_notifications(project, limit=args.limit)
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    if args.json:
+        _emit({"ok": True, "project": str(project), "count": len(records), "notifications": records}, True)
+        return EXIT_OK
+    if not records:
+        _print("暂无失败通知记录")
+        return EXIT_OK
+    for record in records:
+        failed = ", ".join(record.get("failed_graphs") or [])
+        _print(f"- [{record.get('at')}] {record.get('status')}  {record.get('message')}")
+        if failed:
+            _print("  失败图: " + failed)
+    return EXIT_OK
+
+
+def _append_daemon_log(project: Path, line: str, log_file: str | None, rotate_bytes: int) -> None:
+    path = Path(log_file) if log_file else (Path(project) / "00_project" / "workflows" / "daemon.log")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if rotate_bytes > 0 and path.is_file() and path.stat().st_size >= rotate_bytes:
+            rotated = path.with_suffix(path.suffix + ".1")
+            try:
+                rotated.unlink(missing_ok=True)
+            except OSError:
+                pass
+            try:
+                path.replace(rotated)
+            except OSError:
+                pass
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(f"[{datetime.now().isoformat(timespec='seconds')}] {line}\n")
+    except OSError:
+        return
+
+
 def cmd_flow_queue_daemon(args: argparse.Namespace) -> int:
     try:
         if args.all_projects:
@@ -1631,28 +1705,47 @@ def cmd_flow_queue_daemon(args: argparse.Namespace) -> int:
         return EXIT_FAIL
     interval = max(1, min(3600, int(args.interval)))
     limit = max(1, min(50, int(args.limit)))
+    retry_failed = max(0, min(10, int(getattr(args, "retry_failed", 0) or 0)))
+    rotate_bytes = max(0, int(getattr(args, "rotate_bytes", 0) or 0))
+    log_file = getattr(args, "log_file", None)
+    notify_cmd = shlex.split(args.notify_cmd) if getattr(args, "notify_cmd", None) else None
     _print(
         f"队列守护已启动：间隔 {interval}s / 每次最多 {limit} 条 / "
-        f"项目 {len(projects)} 个" + ("（队列空时退出）" if args.until_empty else "") + "；Ctrl+C 停止"
+        f"项目 {len(projects)} 个"
+        + (f" / 失败重试上限 {retry_failed}" if retry_failed else "")
+        + ("（队列空时退出）" if args.until_empty else "")
+        + "；Ctrl+C 停止"
     )
     try:
         while True:
-            results = [run_queue(project, limit=limit) for project in projects]
-            for result in results:
+            results = [
+                run_queue(project, limit=limit, retry_failed=retry_failed, notify_cmd=notify_cmd)
+                for project in projects
+            ]
+            for project, result in zip(projects, results):
                 summary = result["summary"]
+                line = (
+                    f"{result['project']}：执行 {summary['total']} 条 → 成功 {summary['succeeded']} / "
+                    f"失败 {summary['failed']} / 待运行 {summary['pending']}（计划中 {summary.get('scheduled', 0)}）"
+                )
+                _append_daemon_log(project, line, log_file, rotate_bytes)
+                if result.get("retried"):
+                    retried = "重置重试: " + ", ".join(result["retried"])
+                    _append_daemon_log(project, retried, log_file, rotate_bytes)
+                    _print(retried)
                 if result["ran"]:
-                    _print(
-                        f"[{datetime.now().strftime('%H:%M:%S')}] {result['project']}：执行 {summary['total']} 条 → "
-                        f"成功 {summary['succeeded']} / 失败 {summary['failed']} / 待运行 {summary['pending']} "
-                        f"（计划中 {summary.get('scheduled', 0)}）"
-                    )
+                    _print(f"[{datetime.now().strftime('%H:%M:%S')}] {line}")
                     for item in result["ran"]:
-                        line = f"- {item['queue_id']}  {item['status']}  批次 {item.get('batch_id') or '-'}"
-                        _print(line)
+                        item_line = f"- {item['queue_id']}  {item['status']}  批次 {item.get('batch_id') or '-'}"
+                        _print(item_line)
                         notification = item.get("notification") or {}
                         if notification.get("message"):
                             _print("  通知: " + str(notification["message"]))
+                    if result.get("notified"):
+                        _print("  已外送失败通知")
             if args.until_empty and sum(result["summary"]["pending"] for result in results) == 0:
+                for project in projects:
+                    _append_daemon_log(project, "队列已空，守护退出", log_file, rotate_bytes)
                 _print("队列已空，守护退出")
                 return EXIT_OK
             time.sleep(interval)
@@ -2652,10 +2745,18 @@ def build_parser() -> argparse.ArgumentParser:
     queue_list.add_argument("--json", action="store_true", help="以 JSON 输出")
     queue_list.set_defaults(func=cmd_flow_queue_list)
 
+    queue_notifications = queue_sub.add_parser("notifications", help="查看失败通知外送记录（JSONL 日志）")
+    queue_notifications.add_argument("--project", required=True, help="项目名或项目路径")
+    queue_notifications.add_argument("--limit", type=int, default=20, help="最多显示条数（默认 20）")
+    queue_notifications.add_argument("--json", action="store_true", help="以 JSON 输出")
+    queue_notifications.set_defaults(func=cmd_flow_queue_notifications)
+
     queue_run = queue_sub.add_parser("run", help="顺序执行队列中已到期的 pending 条目（可按项目或全部项目）")
     queue_run.add_argument("--project", help="项目名或项目路径（与 --all-projects 二选一）")
     queue_run.add_argument("--all-projects", action="store_true", help="依次执行默认项目根下所有项目的队列")
     queue_run.add_argument("--limit", type=int, default=5, help="本次最多执行条数（默认 5）")
+    queue_run.add_argument("--retry-failed", type=int, default=0, help="先把失败条目重置重试（上限 0–10，默认 0 关闭）")
+    queue_run.add_argument("--notify-cmd", help="失败通知外送命令（末尾追加通知文本，如 powershell -c ...）")
     queue_run.add_argument("--json", action="store_true", help="以 JSON 输出")
     queue_run.set_defaults(func=cmd_flow_queue_run)
 
@@ -2664,6 +2765,12 @@ def build_parser() -> argparse.ArgumentParser:
     queue_cancel.add_argument("--project", required=True, help="项目名或项目路径")
     queue_cancel.add_argument("--json", action="store_true", help="以 JSON 输出")
     queue_cancel.set_defaults(func=cmd_flow_queue_cancel)
+
+    queue_retry = queue_sub.add_parser("retry", help="把失败条目重置为待运行（attempts+1，等待下次执行）")
+    queue_retry.add_argument("queue_id", help="队列条目 ID（q-...）")
+    queue_retry.add_argument("--project", required=True, help="项目名或项目路径")
+    queue_retry.add_argument("--json", action="store_true", help="以 JSON 输出")
+    queue_retry.set_defaults(func=cmd_flow_queue_retry)
 
     queue_move = queue_sub.add_parser("move", help="重排待运行条目（--before / --after / --index 三选一）")
     queue_move.add_argument("queue_id", help="要移动的队列条目 ID")
@@ -2681,6 +2788,10 @@ def build_parser() -> argparse.ArgumentParser:
     queue_daemon.add_argument("--interval", type=int, default=30, help="轮询间隔秒数（1–3600，默认 30）")
     queue_daemon.add_argument("--limit", type=int, default=5, help="每次最多执行条数（默认 5）")
     queue_daemon.add_argument("--until-empty", action="store_true", help="队列中没有待运行条目后退出")
+    queue_daemon.add_argument("--retry-failed", type=int, default=0, help="失败条目自动重置重试上限（0–10，默认 0 关闭）")
+    queue_daemon.add_argument("--notify-cmd", help="失败通知外送命令（末尾追加通知文本）")
+    queue_daemon.add_argument("--log-file", help="守护日志文件（默认 00_project/workflows/daemon.log）")
+    queue_daemon.add_argument("--rotate-bytes", type=int, default=1048576, help="日志轮转阈值字节（超限重命名为 .1，默认 1MB）")
     queue_daemon.set_defaults(func=cmd_flow_queue_daemon)
 
     flow_replay = flow_sub.add_parser("replay", help="查看运行回放（每步耗时与失败定位）")

@@ -38,6 +38,7 @@ from flow import (
     list_baselines,
     list_batches,
     list_graphs,
+    list_notifications,
     list_queue,
     list_runs,
     list_snapshots,
@@ -52,6 +53,7 @@ from flow import (
     recover_run,
     enqueue,
     resolve_project,
+    retry_entry,
     run_batch,
     run_queue,
     validate_graph,
@@ -519,6 +521,23 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 }
             )
             return
+        if path == "/api/queue/notifications":
+            project = self._project_from(query)
+            limit = 20
+            values = query.get("limit") or []
+            if values:
+                try:
+                    limit = max(1, min(200, int(values[0])))
+                except ValueError:
+                    pass
+            self._json(
+                {
+                    "ok": True,
+                    "project": str(project),
+                    "notifications": list_notifications(project, limit=limit),
+                }
+            )
+            return
         if path == "/api/batches":
             project = self._project_from(query)
             limit = 20
@@ -820,6 +839,12 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             entry = cancel_entry(project, queue_id)
             self._json({"ok": True, "project": str(project), "entry": entry})
             return
+        if path.startswith("/api/queue/") and path.endswith("/retry"):
+            queue_id = unquote(path[len("/api/queue/"): -len("/retry")]).strip("/")
+            project = resolve_project(body.get("project") or str(self.server.project_root))
+            entry = retry_entry(project, queue_id)
+            self._json({"ok": True, "project": str(project), "entry": entry})
+            return
         if path.startswith("/api/queue/") and path.endswith("/move"):
             queue_id = unquote(path[len("/api/queue/"): -len("/move")]).strip("/")
             project = resolve_project(body.get("project") or str(self.server.project_root))
@@ -837,6 +862,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             result = run_queue(
                 project,
                 limit=int(body.get("limit") or 5),
+                retry_failed=int(body.get("retry_failed") or 0),
                 sessions=self.server.sessions,
             )
             self._json(result)
