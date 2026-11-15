@@ -36,6 +36,7 @@ const state = {
   saveTimer: null,
   run: null,
   awaiting: null,
+  replay: null,
   templates: [],
   history: [],
   future: [],
@@ -993,12 +994,144 @@ async function loadRunHistory() {
       const item = document.createElement("div");
       item.className = "run-history-item " + (run.status || "");
       item.textContent = run.run_id + " · " + run.status + (run.failed ? " · 失败 " + run.failed : "");
-      item.title = "点击恢复重跑";
-      item.addEventListener("click", () => recoverRun(run.run_id));
+      item.title = "点击查看回放";
+      item.addEventListener("click", () => openReplay(run.run_id));
+      const recover = document.createElement("button");
+      recover.className = "link";
+      recover.textContent = "恢复";
+      recover.title = "恢复重跑该运行";
+      recover.addEventListener("click", (event) => {
+        event.stopPropagation();
+        recoverRun(run.run_id);
+      });
+      item.appendChild(recover);
       box.appendChild(item);
     }
   } catch (err) {
     box.innerHTML = "<p class='hint'>运行历史加载失败：" + escapeHtml(err.message) + "</p>";
+  }
+}
+
+/* ---------------- 图导入 / 导出 ---------------- */
+
+function exportGraph() {
+  if (!state.graph || !state.graphId) {
+    logLine("没有可导出的流程图", "warn");
+    return;
+  }
+  const text = JSON.stringify(state.graph, null, 2) + "\n";
+  const blob = new Blob([text], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = state.graphId + ".json";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  logLine("已导出 " + state.graphId + ".json");
+}
+
+async function importGraph(file) {
+  if (!file) return;
+  if (!state.project) {
+    logLine("请先选择项目", "warn");
+    return;
+  }
+  let graph = null;
+  try {
+    graph = JSON.parse(await file.text());
+  } catch (err) {
+    logLine("导入失败：不是合法 JSON（" + err.message + "）", "err");
+    return;
+  }
+  if (!window.confirm("导入该流程图到当前项目？\n" + (graph.name || graph.graph_id || "未命名"))) return;
+  try {
+    const data = await api("/api/workflows/import", {
+      method: "POST",
+      body: JSON.stringify({ project: state.project, graph }),
+    });
+    logLine("已导入流程图 " + data.graph_id, "ok");
+    setStatus("已导入 " + data.graph_id);
+    await loadWorkflows();
+    await loadGraph(data.graph_id);
+  } catch (err) {
+    logLine("导入失败：" + err.message, "err");
+  }
+}
+
+/* ---------------- 运行回放 ---------------- */
+
+function fmtMs(ms) {
+  if (ms == null) return "-";
+  return ms < 1000 ? ms + " ms" : (ms / 1000).toFixed(1) + " s";
+}
+
+async function openReplay(runId) {
+  if (!state.project) return;
+  try {
+    const data = await api("/api/runs/" + encodeURIComponent(runId) + "/replay?project=" + encodeURIComponent(state.project));
+    state.replay = data.replay;
+    renderReplay();
+    logLine("已加载回放 " + runId);
+  } catch (err) {
+    logLine("回放加载失败：" + err.message, "err");
+  }
+}
+
+function renderReplay() {
+  const box = $("#run-replay");
+  if (!box) return;
+  const replay = state.replay;
+  if (!replay) {
+    box.classList.add("hidden");
+    box.innerHTML = "";
+    return;
+  }
+  box.classList.remove("hidden");
+  box.innerHTML = "";
+  const head = document.createElement("div");
+  head.className = "replay-head";
+  const title = document.createElement("b");
+  title.textContent = "回放 " + replay.run_id;
+  const close = document.createElement("button");
+  close.className = "link";
+  close.textContent = "关闭";
+  close.addEventListener("click", () => {
+    state.replay = null;
+    renderReplay();
+  });
+  head.appendChild(title);
+  head.appendChild(close);
+  box.appendChild(head);
+  const meta = document.createElement("div");
+  meta.className = "hint";
+  meta.textContent =
+    "状态 " + replay.status + " · 总耗时 " + fmtMs(replay.total_duration_ms) +
+    " · 步骤合计 " + fmtMs(replay.step_duration_ms) +
+    (replay.slowest_node_id ? " · 最慢 " + replay.slowest_node_id + "（" + fmtMs(replay.slowest_duration_ms) + "）" : "") +
+    (replay.recovered_from ? " · 恢复自 " + replay.recovered_from : "");
+  box.appendChild(meta);
+  if (replay.failed_node_id) {
+    const fail = document.createElement("div");
+    fail.className = "replay-failure";
+    fail.textContent = "失败节点 " + replay.failed_node_id + "：" + (replay.failed_error || "");
+    box.appendChild(fail);
+  }
+  for (const step of replay.steps || []) {
+    const row = document.createElement("div");
+    row.className = "replay-step " + step.status + (step.node_id === replay.failed_node_id ? " failed-node" : "");
+    row.innerHTML = "<span class='idx'>" + String(step.index).padStart(2, "0") + "</span>" +
+      "<span class='name'>" + escapeHtml(step.label) + "</span>" +
+      "<span class='dur'>" + fmtMs(step.duration_ms) + "</span>";
+    if (step.error) row.title = step.error;
+    row.addEventListener("click", () => {
+      if (!step.node_id) return;
+      state.selection = step.node_id;
+      renderGraph();
+      renderInspector();
+    });
+    box.appendChild(row);
   }
 }
 
@@ -1068,6 +1201,13 @@ function bindUi() {
   $("#btn-new-graph").addEventListener("click", () => newGraph().catch((err) => logLine("新建失败：" + err.message, "err")));
   $("#btn-save").addEventListener("click", () => saveGraph());
   $("#btn-validate").addEventListener("click", () => validateGraph());
+  $("#btn-export").addEventListener("click", () => exportGraph());
+  $("#btn-import").addEventListener("click", () => $("#file-import").click());
+  $("#file-import").addEventListener("change", async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    await importGraph(file);
+  });
   $("#btn-autolayout").addEventListener("click", () => autoLayout());
   $("#btn-zoom-in").addEventListener("click", () => {
     state.scale = Math.min(2.2, state.scale * 1.15);

@@ -19,6 +19,9 @@
       <button id="btn-new-graph" title="新建流程图">＋ 新建</button>
       <button id="btn-save" title="保存（Ctrl+S）">保存</button>
       <button id="btn-validate" title="校验流程图">校验</button>
+      <button id="btn-export" title="导出流程图 JSON">导出</button>
+      <button id="btn-import" title="从 JSON 导入流程图">导入</button>
+      <input type="file" id="file-import" accept="application/json,.json" class="hidden" />
       <button id="btn-autolayout" title="自动布局">自动布局</button>
       <button id="btn-undo" title="撤销（Ctrl+Z）">撤销</button>
       <button id="btn-redo" title="重做（Ctrl+Y）">重做</button>
@@ -79,6 +82,7 @@
           <button id="btn-run-batch" title="批量预演全部流程图">批量预演</button>
         </div>
         <div id="run-status" class="run-status"></div>
+        <div id="run-replay" class="run-replay hidden"></div>
         <div id="run-history" class="run-history"><p class="hint">运行历史加载中…</p></div>
       </div>
     </aside>

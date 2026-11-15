@@ -275,6 +275,45 @@ class WebUIApiTest(unittest.TestCase):
         self.assertTrue(data["ok"], msg=data)
         self.assertGreaterEqual(data["count"], 1)
 
+    def test_replay_endpoint(self) -> None:
+        status, data = self.client.json(
+            "POST",
+            "/api/runs",
+            {"project": str(self.project), "graph_id": "flow-test", "dry_run": True},
+        )
+        self.assertEqual(200, status, msg=data)
+        run_id = data["run"]["run_id"]
+        status, data = self.client.json("GET", self._q(f"/api/runs/{run_id}/replay"))
+        self.assertEqual(200, status, msg=data)
+        replay = data["replay"]
+        self.assertEqual(run_id, replay["run_id"])
+        self.assertEqual(3, len(replay["steps"]))
+        for item in replay["steps"]:
+            self.assertIn("duration_ms", item)
+            self.assertIn("label", item)
+        self.assertIn("total_duration_ms", replay)
+
+    def test_workflow_import_endpoint(self) -> None:
+        graph = json.loads(json.dumps(self.graph))
+        graph["name"] = "外部导入流程"
+        status, data = self.client.json(
+            "POST",
+            "/api/workflows/import",
+            {"project": str(self.project), "graph": graph, "graph_id": "imported-flow"},
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertEqual("imported-flow", data["graph_id"])
+        status, data = self.client.json("GET", self._q("/api/workflows/imported-flow"))
+        self.assertEqual(200, status)
+        self.assertEqual("外部导入流程", data["graph"]["name"])
+        status, data = self.client.json(
+            "POST",
+            "/api/workflows/import",
+            {"project": str(self.project), "graph": {"contract_version": "0.1", "graph_id": "bad"}},
+        )
+        self.assertEqual(422, status)
+        self.assertFalse(data["ok"])
+
     def test_unknown_api_404(self) -> None:
         status, _ = self.client.request("GET", self._q("/api/unknown"))
         self.assertEqual(404, status)

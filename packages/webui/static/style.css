@@ -264,3 +264,58 @@ button.danger { background: #7f1d1d; border-color: #991b1b; }
 .run-history-item.succeeded {
   color: #7fc98f;
 }
+
+/* ---- M4：回放、导入导出 ---- */
+button.link {
+  background: none;
+  border: none;
+  padding: 0 0 0 8px;
+  color: #6ea8fe;
+  cursor: pointer;
+  font: inherit;
+}
+button.link:hover { text-decoration: underline; }
+.run-history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.run-replay {
+  margin-top: 10px;
+  border: 1px solid var(--line, #333);
+  border-radius: 8px;
+  padding: 8px;
+  max-height: 240px;
+  overflow: auto;
+  font-size: 12px;
+}
+.replay-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.replay-step {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 3px 4px;
+  border-bottom: 1px dashed var(--line, #333);
+  cursor: pointer;
+}
+.replay-step:hover { background: rgba(255, 255, 255, 0.06); }
+.replay-step .idx { color: #6b7785; width: 22px; }
+.replay-step .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.replay-step .dur { color: #9aa7b4; }
+.replay-step.failed,
+.replay-step.failed-node { color: #e07b6b; }
+.replay-step.waiting_confirmation { color: #e5b567; }
+.replay-failure {
+  margin: 6px 0;
+  padding: 6px;
+  border-radius: 6px;
+  background: rgba(192, 57, 43, 0.12);
+  color: #e07b6b;
+}
+

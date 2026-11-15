@@ -23,6 +23,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from flow import (
     FlowError,
     Runner,
+    build_replay,
     default_graph,
     instantiate_template,
     list_graphs,
@@ -284,6 +285,19 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             graph_id = unquote(path[len("/api/workflows/"):]).strip("/")
             self._json({"ok": True, "project": str(project), "graph": read_graph_data(project, graph_id)})
             return
+        if path.startswith("/api/runs/") and path.endswith("/replay"):
+            project = self._project_from(query)
+            run_id = unquote(path[len("/api/runs/"): -len("/replay")]).strip("/")
+            run = read_run(project, run_id)
+            graph = None
+            graph_id = str(run.get("graph_id") or "")
+            if graph_id:
+                try:
+                    graph = read_graph_data(project, graph_id)
+                except FlowError:
+                    graph = None
+            self._json({"ok": True, "project": str(project), "replay": build_replay(run, graph)})
+            return
         if path.startswith("/api/runs/"):
             project = self._project_from(query)
             run_id = unquote(path[len("/api/runs/"):]).strip("/")
@@ -307,6 +321,25 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 data["nodes"][0]["params"]["project"] = project.name
             write_graph_data(project, data)
             self._json({"ok": True, "graph_id": graph_id, "graph": data})
+            return
+        if path == "/api/workflows/import":
+            project = resolve_project(body.get("project") or str(self.server.project_root))
+            graph = body.get("graph") or {}
+            if not isinstance(graph, dict):
+                raise FlowError("graph 必须是流程图 JSON 对象")
+            result = validate_graph(graph, load_node_types())
+            if not result["ok"]:
+                self._json({"ok": False, **result}, HTTPStatus.UNPROCESSABLE_ENTITY)
+                return
+            graph_id = str(body.get("graph_id") or graph.get("graph_id") or "").strip()
+            if not graph_id:
+                raise FlowError("缺少 graph_id")
+            graph = dict(graph)
+            graph["graph_id"] = graph_id
+            graph["project"] = project.name
+            graph["name"] = str(graph.get("name") or graph_id)
+            write_graph_data(project, graph)
+            self._json({"ok": True, "project": str(project), "graph_id": graph_id, "graph": graph})
             return
         if path == "/api/workflows/validate":
             graph = body.get("graph") or body

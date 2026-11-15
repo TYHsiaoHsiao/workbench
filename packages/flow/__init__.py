@@ -22,6 +22,7 @@ from .graph import (
 )
 from .nodes import NodeContext, NodeError, NodeResult
 from .registry import NodeType, NodeTypeRegistry, load_node_types, parse_node_types
+from .replay import build_replay, format_replay_text
 from .runner import Runner, recover_run, run_flow
 from .templates import (
     TemplateError,
@@ -57,7 +58,9 @@ __all__ = [
     "NodeTypeRegistry",
     "Runner",
     "ancestors",
+    "build_replay",
     "default_graph",
+    "format_replay_text",
     "graph_path",
     "list_graphs",
     "load_node_types",

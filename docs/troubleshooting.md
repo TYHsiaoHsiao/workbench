@@ -117,3 +117,8 @@
 - 运行停在 `awaiting_confirm`：人工确认节点未处理；在页面抽屉点确认，或重新运行验证。
 - 运行失败想重跑：先 `flow runs --project <项目>` 查看记录，再 `flow recover --run <run_id> --project <项目> --yes`；需要回滚状态快照时加 `--restore-state`。
 - 批量运行默认 dry-run，真实执行需显式 `--live`。
+
+- 回放没有耗时/失败定位：先确认该运行记录含 `started_at` / `ended_at`（旧运行记录缺时间戳时回放只给步骤序列）；`flow replay --json` 可查看原始字段。
+- 导入流程图报「流程图校验失败」：逐条对照图校验 8 条规则；导入前可先 `flow export` 再 `flow import` 自检；同 id 已存在需 `--force`。
+- 导入后运行失败：导入只含流程图，项目状态仍以当前项目 `state.json` 为准；跨项目迁移请用 `export` / `restore`。
+

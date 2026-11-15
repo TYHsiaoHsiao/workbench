@@ -69,13 +69,29 @@
 | `python workbench.py style inject-batch --project 项目名 --batch batch.json [--out-dir 目录]` | 批量注入：整批校验、失败整批拒绝、写一份 `*-batch.json` 批量记录（1.0.1） |
 | `python workbench.py style inject-batch ... --per-shot-records` | 额外写逐镜注入记录 `style-<id>-injection-<stage>-<tool>-<shot>.json`（1.0.2） |
 
-## 7. 契约校验
+## 7. 可视化节点工作流（flow）
+
+| 命令 | 作用 |
+|---|---|
+| `python workbench.py flow serve --project 项目名 [--port 8899]` | 启动本机可视化工作台（打印带 token 的 URL；`--no-token` 仅本机调试） |
+| `python workbench.py flow templates [--json]` | 模板库（4 套：从零到成片 / 入口接力 / 知识增强 / 风格注入） |
+| `python workbench.py flow new --project 项目名 [--template tpl-full-flow] [--graph 流程id] [--force]` | 新建流程图（默认骨架或模板实例化） |
+| `python workbench.py flow list / show / validate --project 项目名 [--graph 流程id]` | 流程列表 / 详情 / 校验（契约 + 语义 8 条） |
+| `python workbench.py flow run --project 项目名 --graph 流程id [--dry-run/--live] [--mode full/to_node/single] [--node 节点id] [--yes]` | 运行（默认按图设置，建议先 dry-run；`--yes` 自动确认断点） |
+| `python workbench.py flow runs --project 项目名 [--limit 20]` | 运行历史（状态/步骤/失败/恢复来源） |
+| `python workbench.py flow recover --run run-id --project 项目名 [--restore-state] [--yes]` | 失败运行恢复（可选回滚 `state_snapshot_before` 快照后重跑） |
+| `python workbench.py flow replay --run run-id --project 项目名 [--json]` | 运行回放（每步耗时、最慢节点、失败定位） |
+| `python workbench.py flow export --project 项目名 --graph 流程id --out flow.json` | 导出流程图 JSON（也可 `--file flow.json` 原样输出） |
+| `python workbench.py flow import --project 项目名 --file flow.json [--graph 新id] [--force]` | 导入流程图（先校验，非法不落盘） |
+| `python workbench.py flow batch --project 项目名 --all [--dry-run/--live] [--yes]` | 批量运行项目内全部流程图 |
+
+## 8. 契约校验
 
 | 命令 | 作用 |
 |---|---|
 | `python workbench.py validate 文件.json --schema state.schema.json` | 按契约校验任意 JSON |
 
-## 8. 典型工作流
+## 9. 典型工作流
 
 ```bash
 # 从零到 08
@@ -94,4 +110,9 @@ python workbench.py knowledge search --project 旧剧本接管 --stage 05 \
 # 风格注入（06/08）
 python workbench.py style apply 001 --project 雨夜回声
 python workbench.py style inject 001 --project 雨夜回声 --stage 06 --tool mj --prompt-file p06.txt
+
+# 可视化节点工作流（先预演，再 live）
+python workbench.py flow serve --project 雨夜回声
+python workbench.py flow new --project 雨夜回声 --template tpl-full-flow --name 从零到成片
+python workbench.py flow run --project 雨夜回声 --graph flow-main --dry-run
 ```

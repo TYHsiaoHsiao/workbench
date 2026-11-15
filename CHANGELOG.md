@@ -1,5 +1,20 @@
 # 变更日志
 
+## [1.3.0] - 2026-11-15 — 可视化节点工作台（M4：运行回放与图导入导出）
+
+### 新增
+
+- 运行回放：`packages/flow/replay.py`（`build_replay` / `format_replay_text`）把运行记录整理为时间线，含每步耗时、输出、错误与状态变更，并给出总耗时/步骤合计/最慢节点/失败节点定位；CLI `flow replay --project --run [--json]`；Web API `GET /api/runs/<id>/replay`。
+- 流程图导入导出：CLI `flow export [--file | --project + --graph] [--out]` 与 `flow import --project --file [--graph] [--force]`；Web API `POST /api/workflows/import`；导入前复用 `validate_graph`（非法图 Web 返回 422、CLI exit 1），导入后归一化 graph_id/project/name。
+- WebUI：顶栏「导出 / 导入」按钮（Blob 下载、文件选择上传）；运行历史点击打开回放抽屉（每步耗时、失败节点高亮、点击跳转节点），历史条目内附「恢复」按钮；新增回放样式。
+- 测试：新增 `tests/test_flow_replay.py`（回放 3 + CLI 导入导出 2）与 Web API 2 项（`/replay`、`/import`），全量 229 项通过。
+
+### 变更
+
+- `flow` 包导出 `build_replay`、`format_replay_text`；`flow-run` 契约无需变更（回放是运行记录的派生视图）。
+- 文档：`docs/flow-workbench.md` 升 1.3.0（回放、导入导出、限制更新）；README、command-card、troubleshooting、architecture 同步；新增 `docs/release-notes-1.3.0.md`。
+- 版本进入 `1.3.0`（契约仍为 `1.0`，无破坏性变更）。
+
 ## [1.2.0] - 2026-11-15 — 可视化节点工作台（M2 + M3）
 
 ### 新增

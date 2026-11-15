@@ -53,13 +53,16 @@ from knowledge_service import KnowledgeService, KnowledgeServiceError
 from flow import (
     FlowError,
     Runner,
+    build_replay,
     default_graph,
+    format_replay_text,
     instantiate_template,
     list_graphs,
     list_runs,
     load_node_types,
     load_templates,
     read_graph_data,
+    read_run,
     recover_run,
     resolve_project,
     validate_graph,
@@ -1282,6 +1285,98 @@ def cmd_flow_batch(args: argparse.Namespace) -> int:
     return EXIT_OK if ok else EXIT_FAIL
 
 
+def cmd_flow_replay(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        run = read_run(project, args.run)
+        graph = None
+        graph_id = str(run.get("graph_id") or "")
+        if graph_id:
+            try:
+                graph = read_graph_data(project, graph_id)
+            except FlowError:
+                graph = None
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    replay = build_replay(run, graph)
+    if args.json:
+        _emit({"ok": True, "project": str(project), "replay": replay}, True)
+    else:
+        _print(format_replay_text(replay))
+    return EXIT_OK
+
+
+def cmd_flow_export(args: argparse.Namespace) -> int:
+    try:
+        data = _flow_read(args)
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+    out = getattr(args, "out", None)
+    if not out:
+        _print(text)
+        return EXIT_OK
+    path = Path(out)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    except OSError as exc:
+        _print(f"写入失败: {exc}")
+        return EXIT_ENV
+    _print(f"已导出流程图 {data.get('graph_id')} → {path}")
+    return EXIT_OK
+
+
+def cmd_flow_import(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        source = Path(args.file)
+        if not source.is_file():
+            raise FlowError(f"导入文件不存在: {source}")
+        try:
+            data = json.loads(source.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise FlowError(f"导入文件读取失败: {exc}") from exc
+        if not isinstance(data, dict):
+            raise FlowError("导入文件必须是流程图 JSON 对象")
+        result = validate_graph(data, load_node_types())
+        if not result["ok"]:
+            _print("流程图校验失败：")
+            for item in result["errors"]:
+                _print(f"- {item}")
+            return EXIT_FAIL
+        graph_id = str(getattr(args, "graph", None) or data.get("graph_id") or "").strip()
+        if not graph_id:
+            raise FlowError("导入文件缺少 graph_id，请用 --graph 指定")
+        data["graph_id"] = graph_id
+        data["project"] = project.name
+        data["name"] = str(data.get("name") or graph_id)
+        target = project / "00_project" / "workflows" / f"{graph_id}.json"
+        if target.is_file() and not args.force:
+            _print(f"错误: 流程图已存在: {graph_id}（使用 --force 覆盖）")
+            return EXIT_FAIL
+        write_graph_data(project, data)
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    payload = {
+        "ok": True,
+        "project": str(project),
+        "graph_id": graph_id,
+        "name": data.get("name"),
+        "nodes": len(data.get("nodes") or []),
+        "edges": len(data.get("edges") or []),
+        "path": str(target),
+    }
+    if args.json:
+        _emit(payload, True)
+    else:
+        _print(f"已导入流程图 {graph_id}（{payload['nodes']} 节点 / {payload['edges']} 连线）→ {target}")
+    return EXIT_OK
+
+
 def cmd_flow_serve(args: argparse.Namespace) -> int:
     try:
         project = resolve_project(args.project)
@@ -1612,6 +1707,27 @@ def build_parser() -> argparse.ArgumentParser:
     flow_batch.add_argument("--yes", action="store_true", help="自动确认 confirm 节点")
     flow_batch.add_argument("--json", action="store_true", help="以 JSON 输出")
     flow_batch.set_defaults(func=cmd_flow_batch)
+
+    flow_replay = flow_sub.add_parser("replay", help="查看运行回放（每步耗时与失败定位）")
+    flow_replay.add_argument("--project", required=True, help="项目名或项目路径")
+    flow_replay.add_argument("--run", required=True, help="run_id")
+    flow_replay.add_argument("--json", action="store_true", help="以 JSON 输出")
+    flow_replay.set_defaults(func=cmd_flow_replay)
+
+    flow_export = flow_sub.add_parser("export", help="导出流程图 JSON（stdout 或 --out）")
+    flow_export.add_argument("--file", help="直接导出指定流程图 JSON 文件")
+    flow_export.add_argument("--project", help="项目名或项目路径")
+    flow_export.add_argument("--graph", help="graph_id")
+    flow_export.add_argument("--out", help="输出文件路径（缺省打印到标准输出）")
+    flow_export.set_defaults(func=cmd_flow_export)
+
+    flow_import = flow_sub.add_parser("import", help="从 JSON 文件导入流程图")
+    flow_import.add_argument("--project", required=True, help="项目名或项目路径")
+    flow_import.add_argument("--file", required=True, help="流程图 JSON 文件")
+    flow_import.add_argument("--graph", help="导入后的 graph_id（缺省用文件内 graph_id）")
+    flow_import.add_argument("--force", action="store_true", help="覆盖同名流程图")
+    flow_import.add_argument("--json", action="store_true", help="以 JSON 输出")
+    flow_import.set_defaults(func=cmd_flow_import)
 
     return parser
 

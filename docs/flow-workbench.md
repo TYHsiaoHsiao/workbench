@@ -1,6 +1,6 @@
-# 可视化节点工作台（M1 / M2 / M3）
+# 可视化节点工作台（M1 / M2 / M3 / M4）
 
-> 版本：1.2.0 · 状态：M1/M2/M3 已完成 · 适用范围：本地单用户
+> 版本：1.3.0 · 状态：M1/M2/M3/M4 已完成 · 适用范围：本地单用户
 
 ## 1. 定位
 
@@ -38,6 +38,13 @@ python workbench.py flow show --project 死亡外科医生 --graph flow-main
 python workbench.py flow validate --project 死亡外科医生 --graph flow-main
 python workbench.py flow run --project 死亡外科医生 --graph flow-main --dry-run
 python workbench.py flow run --project 死亡外科医生 --graph flow-main --live --yes
+
+# 运行回放（每步耗时、失败节点定位）
+python workbench.py flow replay --project 死亡外科医生 --run <run_id>
+
+# 流程图导入 / 导出（JSON 即契约）
+python workbench.py flow export --project 死亡外科医生 --graph flow-main --out flow.json
+python workbench.py flow import --project 死亡外科医生 --file flow.json --graph imported-flow
 ```
 
 ## 3. 架构
@@ -181,23 +188,38 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - 写操作限制：流程图存于项目 `00_project/workflows/`，运行记录存于 `runs/`；不提供任意文件读写 API。
 - live 运行会真实推进 state/门禁，属于显式操作（默认 dry-run 兜底）。
 
-## 11. 已知限制
+## 11. 回放与图导入导出（M4）
 
-1. 首版仅 4 类节点（start/stage/confirm/end）；知识检索、风格注入、产物登记、内容检查、导出等能力节点在 M2 接入。
-2. 不支持撤销/重做、复制粘贴、框选多选、模板库。
-3. 图与 state 为单向（图 → state）；不支持从现有 state 自动反推流程图。
-4. 阶段节点要求当前项目阶段与节点一致，从零项目需按阶段顺序编排。
-5. 断点确认会话存于服务内存，服务重启后需重新运行。
+运行回放由 `packages/flow/replay.py` 从运行记录派生，不额外写项目文件：
 
-## 12. 验证
+- 时间线：每步 `node_id` / 节点类型 / 状态 / 开始结束时间 / `duration_ms` / 输出 / 错误 / `state_before`→`state_after`；
+- 汇总：`total_duration_ms`、`step_duration_ms`、最慢节点、失败节点与错误、`recovered_from`；
+- 入口：CLI `flow replay --project --run [--json]`；Web API `GET /api/runs/<id>/replay`；前端运行历史点击条目打开回放抽屉。
+
+图导入导出（JSON 文件即契约）：
+
+- 导出：`flow export --project P --graph G [--out f.json]` 或 `flow export --file f.json`；输出为 `flow-graph` JSON。
+- 导入：`flow import --project P --file f.json [--graph 新id] [--force]`；导入前复用 `validate_graph`（契约 + 语义），失败逐条报错且不落盘；成功后重写 `graph_id/project/name`。
+- Web：`POST /api/workflows/import`（body 含 `project` 与 `graph`；非法图返回 422）。
+
+## 12. 已知限制
+
+1. 图与 state 仍为单向（图 → state）；不支持从现有 state 自动反推流程图。
+2. 阶段节点要求当前项目阶段与节点一致；跨阶段自由回退需显式编排并自行确认。
+3. 断点确认会话存于服务内存，服务重启后需重新运行。
+4. 回放依据运行记录时间戳：串行节点精确，并行执行仅为近似。
+5. 图导入导出只含流程图本身，不含项目状态与创作产物（跨项目迁移请用 `export` / `restore`）。
+
+## 13. 验证
 
 - 新增 22 项 flow 测试（图校验 12、执行引擎 10）+ 12 项 Web API 测试（M1）；M2/M3 新增 18 项（模板 6、能力节点 6、runner 2、Web API 4）。
 - 全量 `Ran 222 tests ... OK`；CLI 冒烟：模板实例化、dry-run、运行历史、批量预演、失败恢复（live 恢复后 01→02）；`doctor` 8 项含 flow 模板检查。
+- M4（1.3.0）新增 5 项回放/导入导出测试 + 2 项 Web API，全量 `Ran 229 tests ... OK`；CLI 冒烟：模板图 → dry-run → replay → export → import → 非法导入被拒。
 - 本地 CI `scripts/run_ci.py`：compile / tests / doctor / brand-guard 全 PASS；品牌守卫 0 命中。
 
-## 13. 后续（M4 候选）
+## 14. 后续（M5 候选）
 
-- 运行回放与节点耗时统计；失败节点可视化定位到日志行。
-- 更多节点：批量产物登记、跨项目对比、知识卡确认后写入参考记忆的一体化节点。
-- 图模板市场与导入/导出（JSON 文件即契约）。
+- 并行分支执行与节点级重试。
 - macOS 实跑与 GitHub Actions 远端 CI 矩阵。
+- 项目管理面板（跨项目对比、产物预览、流程图缩略图）。
+- 知识卡/风格卡确认后写入参考记忆的一体化节点。
