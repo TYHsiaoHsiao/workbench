@@ -101,7 +101,7 @@ def search_index_card(
     query_modes: dict[str, str] = {}
     for item in raw_queries:
         query = item["query"]
-        result = search_index(out_dir, query, limit=per_query_limit)
+        result = search_index(out_dir, query, limit=per_query_limit, mode="hybrid")
         query_modes[query] = result["mode"]
         for hit in result["results"]:
             heading = (hit.get("heading") or "").strip()
@@ -124,15 +124,16 @@ def search_index_card(
         key = (entry["path"], entry["page"], snippet_key)
         if key not in deduped:
             deduped[key] = entry
-    ordered = sorted(
-        deduped.values(),
-        key=lambda e: (
-            0 if e["mode"] == "fts" else 1,
-            e["score"] if e["score"] is not None else 0.0,
-            e["path"],
-            e["page"],
-        ),
-    )
+    def _rank_key(entry: dict[str, Any]) -> tuple[int, float, str, str]:
+        score = entry.get("score")
+        if score is None:
+            return (1, 0.0, entry["path"], entry["page"])
+        value = float(score)
+        if entry.get("mode") == "hybrid":
+            return (0, -value, entry["path"], entry["page"])
+        return (0, value, entry["path"], entry["page"])
+
+    ordered = sorted(deduped.values(), key=_rank_key)
     evidence = [
         {
             "path": entry["path"],

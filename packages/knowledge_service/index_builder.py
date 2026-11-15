@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import secrets
 import sqlite3
 from datetime import datetime, timezone
@@ -33,6 +34,11 @@ CHUNK_OVERLAP = 80
 SOURCE_EXTENSIONS = {".md", ".markdown", ".txt"}
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".pytest_cache", ".mypy_cache"}
 MIN_FTS_QUERY_CHARS = 3
+SEARCH_MODES = ("auto", "fts", "like", "hybrid")
+HYBRID_HEADING_BONUS = 2.0
+HYBRID_PATH_BONUS = 1.0
+HYBRID_PHRASE_BONUS = 1.5
+HYBRID_TERM_COVERAGE_BONUS = 1.0
 
 
 class KnowledgeIndexError(RuntimeError):
@@ -407,67 +413,171 @@ def _like_pattern(query: str) -> str:
     return "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
 
 
+def _clean_fragment(value: Any) -> str:
+    return " ".join(str(value or "").replace("[", " ").replace("]", " ").split())
+
+
+def _query_terms(text: str) -> list[str]:
+    terms: list[str] = []
+    for token in re.split(r"[^0-9A-Za-z\u4e00-\u9fff]+", text):
+        if not token:
+            continue
+        if token.isascii():
+            if len(token) >= 2:
+                terms.append(token.lower())
+            continue
+        if len(token) == 1:
+            terms.append(token)
+        else:
+            terms.extend(token[i : i + 2] for i in range(len(token) - 1))
+    unique: list[str] = []
+    for term in terms:
+        if term not in unique:
+            unique.append(term)
+    return unique[:12] or [text]
+
+
+def _rank_candidate(text: str, path: str, heading: str, snippet: str, base: float) -> float:
+    """混合排序打分：基础分 + 标题/路径/短语命中 + 查询词项覆盖率。"""
+    heading_text = _clean_fragment(heading)
+    snippet_text = _clean_fragment(snippet)
+    score = float(base)
+    if text and text in heading_text:
+        score += HYBRID_HEADING_BONUS
+    if text and text in path:
+        score += HYBRID_PATH_BONUS
+    if text and text in snippet_text:
+        score += HYBRID_PHRASE_BONUS
+    terms = _query_terms(text)
+    if terms:
+        hits = sum(1 for term in terms if term in heading_text or term in snippet_text or term in path)
+        score += HYBRID_TERM_COVERAGE_BONUS * (hits / len(terms))
+    return round(score, 6)
+
+
+def _candidate_key(path: str, heading: str, snippet: str) -> tuple[str, str]:
+    # FTS 与 LIKE 的片段窗口不同（前者围绕命中词、后者从段首截断），
+    # 因此按「文件 + 段落标题」去重，保留同一段落中得分最高的一条。
+    return (str(path or ""), str(heading or ""))
+
+
+def _fts_rows(conn: sqlite3.Connection, text: str, limit: int):
+    expression = '"' + text.replace('"', '""') + '"'
+    return conn.execute(
+        "SELECT path, heading, snippet(chunks_fts, 2, '[', ']', '…', 12) AS snippet,"
+        " bm25(chunks_fts) AS score FROM chunks_fts"
+        " WHERE chunks_fts MATCH ? ORDER BY score LIMIT ?",
+        (expression, limit),
+    ).fetchall()
+
+
+def _like_rows(conn: sqlite3.Connection, text: str, limit: int) -> list[dict[str, Any]]:
+    pattern = _like_pattern(text)
+    rows = conn.execute(
+        "SELECT path, heading, text FROM chunks"
+        " WHERE text LIKE ? ESCAPE '\\' OR heading LIKE ? ESCAPE '\\'"
+        " ORDER BY path LIMIT ?",
+        (pattern, pattern, limit),
+    ).fetchall()
+    results: list[dict[str, Any]] = []
+    for row in rows:
+        body = str(row["text"]).replace("\n", " ")
+        results.append(
+            {
+                "path": row["path"],
+                "heading": row["heading"],
+                "snippet": body[:160],
+                "score": None,
+            }
+        )
+    return results
+
+
 def search_index(
     out_dir: str | Path,
     query: str,
     *,
     limit: int = 8,
+    mode: str = "auto",
 ) -> dict[str, Any]:
-    """检索索引：>=3 字符走 FTS5 trigram，否则 LIKE 回退。"""
+    """检索索引。
+
+    ``mode``：auto（默认，>=3 字符走 FTS5 trigram、否则 LIKE 回退）、
+    fts（强制 FTS，短查询报错）、like（强制 LIKE）、
+    hybrid（M24：FTS + LIKE 候选合并，按标题/路径/短语/词项覆盖率加权排序）。
+    """
     text = (query or "").strip()
     if not text:
         raise KnowledgeIndexError("查询词不能为空")
     if limit <= 0:
         raise KnowledgeIndexError("limit 必须为正整数")
+    if mode not in SEARCH_MODES:
+        raise KnowledgeIndexError(
+            f"检索模式无效: {mode!r}（可选 auto/fts/like/hybrid）"
+        )
     out = Path(out_dir).expanduser()
     db_file = _db_path(out)
     if not db_file.is_file():
         raise KnowledgeIndexError(f"索引数据库不存在: {db_file}（请先运行 index build）")
-    results: list[dict[str, Any]] = []
     conn = sqlite3.connect(f"file:{db_file.as_posix()}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     try:
-        if len(text) >= MIN_FTS_QUERY_CHARS:
-            expression = '"' + text.replace('"', '""') + '"'
-            rows = conn.execute(
-                "SELECT path, heading, snippet(chunks_fts, 2, '[', ']', '…', 12) AS snippet,"
-                " bm25(chunks_fts) AS score FROM chunks_fts"
-                " WHERE chunks_fts MATCH ? ORDER BY score LIMIT ?",
-                (expression, limit),
-            ).fetchall()
-            for row in rows:
-                results.append(
-                    {
-                        "path": row["path"],
-                        "heading": row["heading"],
-                        "snippet": row["snippet"],
-                        "score": round(float(row["score"]), 6),
-                    }
+        if mode == "fts" and len(text) < MIN_FTS_QUERY_CHARS:
+            raise KnowledgeIndexError("FTS 查询至少需要 3 个字符；短查询请用 like 或 hybrid 模式")
+        if mode in ("auto", "fts") and len(text) >= MIN_FTS_QUERY_CHARS:
+            rows = _fts_rows(conn, text, limit)
+            results = [
+                {
+                    "path": row["path"],
+                    "heading": row["heading"],
+                    "snippet": row["snippet"],
+                    "score": round(float(row["score"]), 6),
+                }
+                for row in rows
+            ]
+            actual = "fts"
+        elif mode == "hybrid":
+            candidates: list[dict[str, Any]] = []
+            if len(text) >= MIN_FTS_QUERY_CHARS:
+                for row in _fts_rows(conn, text, limit * 3):
+                    candidates.append(
+                        {
+                            "path": row["path"],
+                            "heading": row["heading"],
+                            "snippet": row["snippet"],
+                            "base": max(0.0, -float(row["score"])),
+                        }
+                    )
+            for item in _like_rows(conn, text, limit * 2):
+                candidates.append({**item, "base": 1.0})
+            ranked: dict[tuple[str, str, str], dict[str, Any]] = {}
+            for item in candidates:
+                score = _rank_candidate(
+                    text, item["path"], item["heading"], item["snippet"], item["base"]
                 )
+                key = _candidate_key(item["path"], item["heading"], item["snippet"])
+                current = ranked.get(key)
+                if current is None or score > current["score"]:
+                    ranked[key] = {
+                        "path": item["path"],
+                        "heading": item["heading"],
+                        "snippet": item["snippet"],
+                        "score": score,
+                    }
+            results = sorted(
+                ranked.values(),
+                key=lambda item: (-float(item["score"]), str(item["path"]), str(item["heading"])),
+            )[:limit]
+            actual = "hybrid"
         else:
-            pattern = _like_pattern(text)
-            rows = conn.execute(
-                "SELECT path, heading, text FROM chunks"
-                " WHERE text LIKE ? ESCAPE '\\' OR heading LIKE ? ESCAPE '\\'"
-                " ORDER BY path LIMIT ?",
-                (pattern, pattern, limit),
-            ).fetchall()
-            for row in rows:
-                body = str(row["text"]).replace("\n", " ")
-                results.append(
-                    {
-                        "path": row["path"],
-                        "heading": row["heading"],
-                        "snippet": body[:160],
-                        "score": None,
-                    }
-                )
+            results = _like_rows(conn, text, limit)
+            actual = "like"
     finally:
         conn.close()
     return {
         "ok": True,
         "query": text,
         "count": len(results),
-        "mode": "fts" if len(text) >= MIN_FTS_QUERY_CHARS else "like",
+        "mode": actual,
         "results": results,
     }

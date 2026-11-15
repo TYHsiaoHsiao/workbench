@@ -1,3 +1,10 @@
+## [2.12.0] - 2026-11-15 — 索引混合排序与队列 webhook 通知（M24）
+
+- `index search` 新增 `--mode auto|fts|like|hybrid`（默认 hybrid）：合并 FTS 与 LIKE 候选，按 (path, heading) 去重后按加权分降序（基础分 + 标题命中 2 / 路径命中 1 / 短语命中 1.5 / 词项覆盖率 1）；非法模式与强制 fts 短查询返回可读错误
+- `knowledge_service/index_service.py` 证据卡检索改用 hybrid 排序，短查询由 LIKE 候选兜底
+- `flow queue run/daemon` 新增 `--webhook-url`：失败汇总 JSON POST（timeout 10s、失败仅记录 `webhook.error` 不阻断队列，未配置为 no-op）；`run_queue` 返回值新增 `webhook` 字段
+- 新增 9 项测试（hybrid 6 项 + webhook 3 项）合计 429 项；行覆盖率 80.84%；无破坏性契约变更
+
 ## [2.11.0] - 2026-11-15 — 覆盖率提升与 80% CI 门禁（M23）
 
 - 新增 `tests/test_cli_coverage.py`（6 组 in-process CLI 广覆盖：项目列表/摘要/快照/产物差异/回滚、流程图列表/校验/导出/导入/运行/回放/差异/基线、批次运行/恢复、队列增删改/运行/守护、索引构建与检索、generate providers/plan/submit/jobs/show）

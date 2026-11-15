@@ -1,9 +1,11 @@
 """批次队列（M14/M15）：入队、状态过滤、顺序执行、失败通知、定时与取消/重排。"""
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -328,3 +330,63 @@ class FlowQueueM16Test(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class _FakeResponse:
+    def __init__(self, status: int = 200) -> None:
+        self.status = status
+
+    def __enter__(self) -> "_FakeResponse":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
+
+
+class FlowQueueWebhookTest(unittest.TestCase):
+    """M24：失败通知 webhook 外送（JSON POST、失败容错）。"""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.base = Path(self.tmp.name)
+        report = create_project("队列 webhook", base=self.base / "projects")
+        self.project = Path(report["path"])
+        broken = make_graph("flow-webhook", self.project.name)
+        broken["edges"] = []
+        write_graph_data(self.project, broken)
+
+    def test_webhook_posts_failure_json(self) -> None:
+        captured: dict = {}
+
+        def fake_urlopen(request, timeout=10):
+            captured["url"] = request.full_url
+            captured["body"] = request.data
+            return _FakeResponse(200)
+
+        enqueue(self.project, all_graphs=True)
+        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            result = run_queue(self.project, webhook_url="http://example.test/hook")
+        self.assertTrue(result["webhook"]["configured"])
+        self.assertTrue(result["webhook"]["ok"])
+        self.assertEqual(200, result["webhook"]["status_code"])
+        self.assertTrue(result["notified"] is False)
+        body = json.loads(captured["body"].decode("utf-8"))
+        self.assertEqual("queue.run", body["event"])
+        self.assertIn("flow-webhook", body["failed_graphs"])
+        self.assertIn("队列运行失败", body["message"])
+        self.assertTrue(notify_path(self.project).is_file())
+
+    def test_webhook_failure_tolerated(self) -> None:
+        enqueue(self.project, all_graphs=True)
+        with mock.patch("urllib.request.urlopen", side_effect=OSError("boom")):
+            result = run_queue(self.project, webhook_url="http://example.test/hook")
+        self.assertTrue(result["webhook"]["configured"])
+        self.assertFalse(result["webhook"]["ok"])
+        self.assertIn("boom", result["webhook"]["error"])
+        self.assertFalse(result["ok"])
+
+    def test_webhook_not_configured(self) -> None:
+        enqueue(self.project, all_graphs=True)
+        result = run_queue(self.project)
+        self.assertFalse(result["webhook"]["configured"])
+        self.assertFalse(result["webhook"]["ok"])

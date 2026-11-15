@@ -173,3 +173,67 @@ class KnowledgeIndexTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class HybridSearchTest(unittest.TestCase):
+    """M24：混合排序（标题/路径/短语/词项覆盖率加权）与检索模式。"""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.mkdtemp(prefix="wb_kbhybrid_")
+        self.root = Path(self._tmp)
+        self.source = self.root / "kb"
+        self.out = self.root / "index"
+        self.source.mkdir(parents=True)
+        (self.source / "01_故事.md").write_text(
+            "# 开头\n\n开场三分钟建立悬念，主角在雨夜收到一封信。\n",
+            encoding="utf-8",
+        )
+        (self.source / "02_方法.md").write_text(
+            "# 悬念方法\n\n建立悬念的三种方法：信息差、倒计时、危险逼近。\n",
+            encoding="utf-8",
+        )
+        build_index(self.source, self.out)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self._tmp, ignore_errors=True)
+
+    def test_hybrid_heading_match_ranks_first(self) -> None:
+        result = search_index(self.out, "悬念", mode="hybrid")
+        self.assertEqual("hybrid", result["mode"])
+        self.assertGreaterEqual(result["count"], 2)
+        self.assertEqual("02_方法.md", result["results"][0]["path"])
+        scores = [item["score"] for item in result["results"]]
+        self.assertTrue(all(isinstance(score, (int, float)) for score in scores))
+        self.assertEqual(scores, sorted(scores, reverse=True))
+
+    def test_hybrid_short_query_uses_like_candidates(self) -> None:
+        result = search_index(self.out, "悬念", mode="hybrid")
+        self.assertEqual("hybrid", result["mode"])
+        self.assertTrue(all(item["snippet"] for item in result["results"]))
+
+    def test_invalid_mode_rejected(self) -> None:
+        with self.assertRaises(KnowledgeIndexError):
+            search_index(self.out, "悬念", mode="bogus")
+
+    def test_forced_fts_short_query_rejected(self) -> None:
+        with self.assertRaises(KnowledgeIndexError):
+            search_index(self.out, "悬念", mode="fts")
+
+    def test_hybrid_limit_respected(self) -> None:
+        result = search_index(self.out, "悬念", limit=1, mode="hybrid")
+        self.assertEqual(1, result["count"])
+
+    def test_cli_hybrid_mode(self) -> None:
+        code = cli_main(
+            [
+                "index",
+                "search",
+                "--query",
+                "悬念",
+                "--out",
+                str(self.out),
+                "--mode",
+                "hybrid",
+                "--json",
+            ]
+        )
+        self.assertEqual(0, code)

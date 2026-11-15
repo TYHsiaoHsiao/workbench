@@ -19,6 +19,8 @@ import json
 import re
 import secrets
 import subprocess
+import urllib.error
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -165,6 +167,30 @@ def list_notifications(project_root: str | Path, *, limit: int = 20) -> list[dic
     return records
 
 
+def _notify_webhook(webhook_url: str | None, payload: dict[str, Any]) -> dict[str, Any]:
+    """把失败通知以 JSON POST 外送到 webhook（失败不影响队列执行）。"""
+    result: dict[str, Any] = {"configured": bool(webhook_url), "ok": False}
+    if not webhook_url:
+        return result
+    try:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        request = urllib.request.Request(
+            webhook_url,
+            data=body,
+            headers={
+                "Content-Type": "application/json; charset=utf-8",
+                "User-Agent": "workbench-queue/2.12",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=10) as response:
+            result["status_code"] = getattr(response, "status", None)
+            result["ok"] = True
+    except (OSError, urllib.error.URLError, ValueError) as exc:
+        result["error"] = str(exc)
+    return result
+
+
 def _notify_external(notify_cmd: list[str] | None, message: str) -> bool:
     """调用外部命令外送通知（如桌面通知脚本），命令最后一个参数为通知文本。"""
     if not notify_cmd:
@@ -303,13 +329,15 @@ def run_queue(
     limit: int = 5,
     retry_failed: int = 0,
     notify_cmd: list[str] | None = None,
+    webhook_url: str | None = None,
     node_types: NodeTypeRegistry | None = None,
     sessions: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """按 order/创建顺序执行队列中已到期的 pending 条目，返回本次结果与失败通知。
 
     ``retry_failed`` > 0 时，先把重试次数未用尽的失败条目重置为 pending 再执行；
-    有失败时追加 JSONL 通知记录，并可用 ``notify_cmd`` 外送通知（命令末尾追加通知文本）。
+    有失败时追加 JSONL 通知记录，并可用 ``notify_cmd`` 外送通知（命令末尾追加通知文本）；
+    ``webhook_url`` 存在时再以 JSON POST 外送失败汇总（失败不影响队列执行）。
     """
     project = _require_project(project_root)
     doc = load_queue(project)
@@ -396,6 +424,7 @@ def run_queue(
     canceled = sum(1 for item in final_entries if item.get("status") == "canceled")
     failed_items = [item for item in ran if item.get("status") == "failed"]
     notified = False
+    webhook: dict[str, Any] = {"configured": False, "ok": False}
     if failed_items:
         failed_graphs: list[str] = []
         for item in failed_items:
@@ -407,28 +436,28 @@ def run_queue(
             f"队列运行失败 {len(failed_items)} 条（共执行 {len(ran)} 条）"
             + (f"：{', '.join(failed_graphs)}" if failed_graphs else "")
         )
-        _append_notification(
-            project,
-            {
-                "at": now_iso(),
-                "event": "queue.run",
-                "project": project.name,
-                "status": "failed",
-                "message": message,
-                "failed_graphs": failed_graphs,
-                "ran": [
-                    {"queue_id": item.get("queue_id"), "status": item.get("status")}
-                    for item in ran
-                ],
-            },
-        )
+        payload = {
+            "at": now_iso(),
+            "event": "queue.run",
+            "project": project.name,
+            "status": "failed",
+            "message": message,
+            "failed_graphs": failed_graphs,
+            "ran": [
+                {"queue_id": item.get("queue_id"), "status": item.get("status")}
+                for item in ran
+            ],
+        }
+        _append_notification(project, payload)
         notified = _notify_external(notify_cmd, message)
+        webhook = _notify_webhook(webhook_url, payload)
     return {
         "ok": all(item.get("status") != "failed" for item in ran),
         "project": str(project),
         "ran": ran,
         "retried": retried,
         "notified": notified,
+        "webhook": webhook,
         "summary": {
             **_aggregate_ran(ran),
             "pending": remaining,

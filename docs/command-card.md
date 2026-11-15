@@ -1,4 +1,4 @@
-# 命令卡（v2.11.0）
+# 命令卡（v2.12.0）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -184,12 +184,19 @@ python workbench.py flow run --project 雨夜回声 --graph flow-main --dry-run
 | `python scripts/repro_check.py [--json]` | 可复现构建：两次构建与 `.sha256` 三方一致 |
 | `docs/ci.md` | 门禁清单/矩阵/覆盖率策略/排障 |
 
-## 13. 知识库索引维护（M21/M22）
+## 13. 知识库索引维护（M21/M22/M24）
 
 | 命令 | 作用 |
 |---|---|
 | `python workbench.py index build --source <目录> [--out index] [--incremental] [--index-id ID] [--json]` | 按契约重建索引（默认全量；`--incremental` 复用未变文件、重索引变更、删除消失文档） |
 | `python workbench.py index info [--out index] [--json]` | 索引信息（index_id/模式/来源/文档与分块数/更新时间） |
 | `python workbench.py index verify [--out index] [--json]` | 校验元数据契约、库计数与 FTS 可查询性 |
-| `python workbench.py index search --query <词> [--limit 8] [--out index] [--json]` | 全文检索：≥3 字走 FTS5 trigram（bm25+snippet），短词自动 LIKE 回退 |
+| `python workbench.py index search --query <词> [--limit 8] [--mode hybrid] [--out index] [--json]` | 全文检索：`--mode auto|fts|like|hybrid`（默认 hybrid，标题/路径/短语/覆盖率加权）；≥3 字走 FTS5 trigram，短词 LIKE 回退（M24） |
 | `python workbench.py knowledge search --project 项目名 --stage 01 --problem "问题" --query "查询词" --index index` | M22：索引检索并生成同契约知识卡（`--json` 输出 report；不写参考记忆） |
+
+## 14. 队列 webhook 通知（M24）
+
+| 命令 | 作用 |
+|---|---|
+| `python workbench.py queue run --project <项目> [--limit 5] [--webhook-url <URL>]` | 执行队列；失败汇总 JSON POST 到 webhook（失败不阻断队列） |
+| `python workbench.py queue daemon --project <项目> [--webhook-url <URL>] ...` | 守护模式下同样外送 webhook 失败汇总 |

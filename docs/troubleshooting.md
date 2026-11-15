@@ -176,3 +176,6 @@
 - `knowledge search --index` 报「索引元数据不存在/索引数据库不存在」：先运行 `python workbench.py index build --source <子目录> --out index`，或检查 `--index` 是否指向上一步的输出目录。
 - 索引知识卡为 `no_evidence`：索引存在但查询词未命中；换更具体的连续短语，或对目标子目录重建索引。索引证据卡不读外部知识库，需要外部库时去掉 `--index`。
 - flow `knowledge_search` 节点配置 `index` 后失败：确认索引目录对运行机器可读且已构建（索引不入发行包，目标机需自行 `index build`）；也可暂时移除 `index` 参数回退外部知识库路径。
+
+- **索引 hybrid 排序与直觉不符**：hybrid 是启发式加权（标题 +2 / 路径 +1 / 短语 +1.5 / 覆盖率 +1），score 仅用于排序；短查询（<3 字）由 LIKE 候选兜底，强制 `--mode fts` 会报「FTS 查询至少需要 3 个字符」。
+- **队列 webhook 未送达**：webhook 只在批次有失败条目时外送；URL 不通/超时会记录在 `run_queue` 返回的 `webhook.error`，但不影响队列结果；未配置 `--webhook-url` 为 no-op；可先用 `flow queue notifications` 查看 JSONL 通知。

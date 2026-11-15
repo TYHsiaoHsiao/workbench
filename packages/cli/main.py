@@ -804,7 +804,9 @@ def cmd_index_verify(args: argparse.Namespace) -> int:
 
 def cmd_index_search(args: argparse.Namespace) -> int:
     try:
-        result = search_index(_index_out(args.out), args.query, limit=args.limit)
+        result = search_index(
+            _index_out(args.out), args.query, limit=args.limit, mode=getattr(args, "mode", "hybrid")
+        )
     except KnowledgeIndexError as exc:
         _print(f"检索失败: {exc}")
         return EXIT_FAIL
@@ -1776,12 +1778,14 @@ def cmd_flow_queue_run(args: argparse.Namespace) -> int:
                 return EXIT_USAGE
             projects = [resolve_project(args.project)]
         notify_cmd = shlex.split(args.notify_cmd) if getattr(args, "notify_cmd", None) else None
+        webhook_url = getattr(args, "webhook_url", None)
         results = [
             run_queue(
                 project,
                 limit=args.limit,
                 retry_failed=max(0, int(getattr(args, "retry_failed", 0) or 0)),
                 notify_cmd=notify_cmd,
+                webhook_url=webhook_url,
             )
             for project in projects
         ]
@@ -1801,6 +1805,12 @@ def cmd_flow_queue_run(args: argparse.Namespace) -> int:
             _print("  已重置重试：" + ", ".join(result["retried"]))
         if result.get("notified"):
             _print("  已外送失败通知")
+        webhook = result.get("webhook") or {}
+        if webhook.get("configured"):
+            if webhook.get("ok"):
+                _print(f"  已 POST webhook（HTTP {webhook.get('status_code')}）")
+            else:
+                _print(f"  webhook 外送失败: {webhook.get('error') or '未知错误'}")
         for item in result["ran"]:
             line = f"- {item['queue_id']}  {item['status']}  批次 {item.get('batch_id') or '-'}"
             if item.get("error"):
@@ -1924,6 +1934,7 @@ def cmd_flow_queue_daemon(args: argparse.Namespace) -> int:
     rotate_bytes = max(0, int(getattr(args, "rotate_bytes", 0) or 0))
     log_file = getattr(args, "log_file", None)
     notify_cmd = shlex.split(args.notify_cmd) if getattr(args, "notify_cmd", None) else None
+    webhook_url = getattr(args, "webhook_url", None)
     _print(
         f"队列守护已启动：间隔 {interval}s / 每次最多 {limit} 条 / "
         f"项目 {len(projects)} 个"
@@ -1934,7 +1945,13 @@ def cmd_flow_queue_daemon(args: argparse.Namespace) -> int:
     try:
         while True:
             results = [
-                run_queue(project, limit=limit, retry_failed=retry_failed, notify_cmd=notify_cmd)
+                run_queue(
+                    project,
+                    limit=limit,
+                    retry_failed=retry_failed,
+                    notify_cmd=notify_cmd,
+                    webhook_url=webhook_url,
+                )
                 for project in projects
             ]
             for project, result in zip(projects, results):
@@ -1958,6 +1975,12 @@ def cmd_flow_queue_daemon(args: argparse.Namespace) -> int:
                             _print("  通知: " + str(notification["message"]))
                     if result.get("notified"):
                         _print("  已外送失败通知")
+                    webhook = result.get("webhook") or {}
+                    if webhook.get("configured"):
+                        if webhook.get("ok"):
+                            _print(f"  webhook 外送成功（HTTP {webhook.get('status_code')}）")
+                        else:
+                            _print(f"  webhook 外送失败: {webhook.get('error') or '未知错误'}")
             if args.until_empty and sum(result["summary"]["pending"] for result in results) == 0:
                 for project in projects:
                     _append_daemon_log(project, "队列已空，守护退出", log_file, rotate_bytes)
@@ -2792,6 +2815,12 @@ def build_parser() -> argparse.ArgumentParser:
     index_search = index_sub.add_parser("search", help="检索本地索引（trigram FTS，短词回退 LIKE）")
     index_search.add_argument("--query", required=True, help="查询词（中文可直接检索）")
     index_search.add_argument("--limit", type=int, default=8, help="返回条数上限（默认 8）")
+    index_search.add_argument(
+        "--mode",
+        choices=["hybrid", "fts", "like"],
+        default="hybrid",
+        help="检索模式：hybrid（默认，混合排序）/ fts / like",
+    )
     index_search.add_argument("--out", help="索引输出目录（缺省 workbench/index）")
     index_search.add_argument("--json", action="store_true", help="以 JSON 输出")
     index_search.set_defaults(func=cmd_index_search)
@@ -3022,6 +3051,7 @@ def build_parser() -> argparse.ArgumentParser:
     queue_run.add_argument("--limit", type=int, default=5, help="本次最多执行条数（默认 5）")
     queue_run.add_argument("--retry-failed", type=int, default=0, help="先把失败条目重置重试（上限 0–10，默认 0 关闭）")
     queue_run.add_argument("--notify-cmd", help="失败通知外送命令（末尾追加通知文本，如 powershell -c ...）")
+    queue_run.add_argument("--webhook-url", help="失败通知 webhook（JSON POST，如钉钉/自建接口）")
     queue_run.add_argument("--json", action="store_true", help="以 JSON 输出")
     queue_run.set_defaults(func=cmd_flow_queue_run)
 
@@ -3055,6 +3085,7 @@ def build_parser() -> argparse.ArgumentParser:
     queue_daemon.add_argument("--until-empty", action="store_true", help="队列中没有待运行条目后退出")
     queue_daemon.add_argument("--retry-failed", type=int, default=0, help="失败条目自动重置重试上限（0–10，默认 0 关闭）")
     queue_daemon.add_argument("--notify-cmd", help="失败通知外送命令（末尾追加通知文本）")
+    queue_daemon.add_argument("--webhook-url", help="失败通知 webhook（JSON POST）")
     queue_daemon.add_argument("--log-file", help="守护日志文件（默认 00_project/workflows/daemon.log）")
     queue_daemon.add_argument("--rotate-bytes", type=int, default=1048576, help="日志轮转阈值字节（超限重命名为 .1，默认 1MB）")
     queue_daemon.set_defaults(func=cmd_flow_queue_daemon)

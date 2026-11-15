@@ -126,7 +126,7 @@
 | ai-film-router（阶段路由） | `stage-registry.json` + `core_router`（intent 意图路由 + gates 门禁引擎） |
 | 项目级 AGENTS.md / routing.md / project-status.md | `00_project/state.json`（v2）+ 生成的 AGENTS.md + 状态卡视图；旧文件由 `migrate` 合并 |
 | reference-memory.md / 00-本地知识库参考记忆.md | `00_project/reference-memory.json`（结构化，契约校验）+ `.md` 只读视图；旧命名由 `migrate` 识别 |
-| film-knowledge-bridge + 检索脚本 | `knowledge_service`（1a PoC + 迭代 2 方案 A + 2.1 精度修订：只读适配 + 有限正文回退 + 证据质量评分 + 行级证据链）；M21（2.9.0）：`index_builder.py` 按契约重建索引（FTS5 trigram、全量/增量、`index` CLI，索引落 `index/` 不入发行包）；M22（2.10.0），M23（覆盖率 80% 门禁与 CLI/Web 广覆盖测试）为 2.11.0：`index_service.py` 把索引接入知识服务证据卡（`search_index_card`、CLI `--index`、flow 节点 `index` 参数） |
+| film-knowledge-bridge + 检索脚本 | `knowledge_service`（1a PoC + 迭代 2 方案 A + 2.1 精度修订：只读适配 + 有限正文回退 + 证据质量评分 + 行级证据链）；M21（2.9.0）：`index_builder.py` 按契约重建索引（FTS5 trigram、全量/增量、`index` CLI，索引落 `index/` 不入发行包）；M22（2.10.0），M23（覆盖率 80% 门禁与 CLI/Web 广覆盖测试）为 2.11.0；M24（2.12.0）`search_index(mode=hybrid)` 混合排序与 `queue --webhook-url` 失败通知外送：`index_service.py` 把索引接入知识服务证据卡（`search_index_card`、CLI `--index`、flow 节点 `index` 参数） |
 | 200 位导演色卡（SKILL200） | `style_service`（迭代 3：`content/style-registry.json` + 风格画像契约 + 8 工具结构校验 + 06/08 注入记录，只读引用外部风格包） |
 | 安装/升级脚本 | `installer`（迭代 1b：备份/幂等/回滚/配置保留）+ `migrate` / `upgrade` |
 | 意图口令（中文口令卡、维护口令） | `content/intent-rules.json` + `core_router.intent` |
@@ -163,7 +163,7 @@ M15（队列定时调度、取消/重排与后台守护）为 2.3.0（`flow-queu
 - **M11（1.10.0）**：批量回填（`adopt_all` 组合登记 `state.stage_artifacts`）；生成平台流程节点 `generate_refresh` / `generate_adopt`（节点 15→17）；生成面板状态筛选；CLI `generate adopt --all`、Web API `POST /api/generate/jobs/adopt`。
 - 旧项目的兼容策略：状态卡 v2 新字段全部可选，迁移前旧 `state.json` 仍可校验；规则文件通过 `migrate` / `upgrade` 升级，创作产物字节不动。
 
-## 9. 可视化节点工作台（1.1.0 M1 / 1.2.0 M2+M3 / 1.3.0 M4 / 1.4.0 M5 / 1.5.0 M6 / 1.6.0 M7 / 1.7.0 M8 / 1.8.0 M9 / 1.9.0 M10 / 1.10.0 M11 / 2.0.0 M12 / 2.1.0 M13 / 2.2.0 M14 / 2.3.0 M15 / 2.4.0 M16 / 2.5.0 M17 / 2.6.0 M18 / 2.7.0 M19 / 2.8.0 M20）
+## 9. 可视化节点工作台（1.1.0 M1 / 1.2.0 M2+M3 / 1.3.0 M4 / 1.4.0 M5 / 1.5.0 M6 / 1.6.0 M7 / 1.7.0 M8 / 1.8.0 M9 / 1.9.0 M10 / 1.10.0 M11 / 2.0.0 M12 / 2.1.0 M13 / 2.2.0 M14 / 2.3.0 M15 / 2.4.0 M16 / 2.5.0 M17 / 2.6.0 M18 / 2.7.0 M19 / 2.8.0 M20 / 2.9.0 M21 / 2.10.0 M22 / 2.11.0 M23 / 2.12.0 M24）
 
 - 新增 `packages/flow/`：`graph.py`（图模型、端口兼容、拓扑排序、图校验 8 条规则）、`registry.py`（节点类型注册表与参数校验）、`nodes.py`（start/stage/confirm/end 执行器）、`runner.py`（运行记录、dry-run、确认断点、失败快照）、`store.py`（项目内 `00_project/workflows/` 与 `runs/` 持久化）。
 - 新增 `packages/webui/`：标准库 `ThreadingHTTPServer` + 原生 JS/SVG 前端；默认监听 `127.0.0.1` 且启用 token；API 覆盖工作台信息、项目、节点类型、流程图读写校验、运行与确认。
@@ -189,4 +189,5 @@ M15（队列定时调度、取消/重排与后台守护）为 2.3.0（`flow-queu
 - **M17（2.5.0）**：新增 `scripts/check_doc_links.py`（文档链接检查纳入 CI）、`scripts/package_smoke.py`（发行包冒烟）、`scripts/bench.py`（CLI 冷启动 NFR 基准），`run_ci.py` 门禁扩展为六步。
 - **M18（2.6.0）**：新增 `packages/core_router/rollback.py`（快照创建/列表/回滚，`00_project/history/snapshots/`，回滚前自动安全快照、dry-run、路径校验）与 CLI `rollback create/list/apply`；新增 `scripts/rollback_drill.py` 发行包升级→回滚演练。
 - **M19（2.7.0）**：新增 `docs/requirements-traceability.md`（FR-01–FR-22 ↔ 实现/里程碑/证据/状态）与 `scripts/check_fr_mapping.py`（覆盖/重复/PRD 交叉校验，纳入 CI，门禁扩为七步）。
+- **M21–M24（2.9.0–2.12.0）**：M21 知识库索引维护（FTS5 trigram、全量/增量 `index` CLI、`knowledge-index` 契约）；M22 索引证据卡接入知识服务（`search_index_card`、CLI `--index`、flow 节点参数）；M23 覆盖率 80% 门禁与 CLI/Web 广覆盖测试；M24 索引混合排序（`--mode hybrid`）与队列 webhook 通知（`--webhook-url`）。
 - **M20（2.8.0）**：新增 `scripts/coverage_check.py`（零依赖行覆盖率，实测 76.37%）、`scripts/repro_check.py`（两次构建与 `.sha256` 三方一致，`build_release.py` 固定时间戳/权限）、`.github/workflows/ci.yml` 跨平台矩阵（ubuntu/windows/macos × Python 3.11/3.12），`run_ci.py` 扩为九步；`packages/webui` 新增快照回滚 API（`/api/rollback/*`）与前端面板。

@@ -1,4 +1,4 @@
-# 知识库索引维护（M21 / 2.9.0）
+# 知识库索引维护（M21–M24）
 
 > FR-10 基础版：把 Markdown 知识库按契约重建为 SQLite FTS5 索引，并提供增量维护与检索命令。
 > 索引产物默认 `index/`（仓库内、已 gitignore、不入发行包）；知识库本体保持只读。
@@ -29,7 +29,7 @@ python workbench.py index search --query 第一幕 --limit 5
 
 - 分块：按 Markdown 标题段落聚合；单块 ≤ 900 字符，超长按 900 切分、相邻块重叠 80 字符。
 - 库表：`documents(path, sha256, bytes, mtime_ns, chunks)`、`chunks(id, path, heading, text)`、`chunks_fts`（FTS5，`tokenize='trigram'`）。
-- 检索：查询 ≥ 3 字用 FTS5 `MATCH`（bm25 排序 + `snippet`）；1–2 字自动退化为 `LIKE`（转义 `% _ \`）。中文按 3 字滑窗切分，请尽量使用连续短语。
+- 检索：查询 ≥ 3 字用 FTS5 `MATCH`（bm25 排序 + `snippet`）；1–2 字自动退化为 `LIKE`（转义 `% _ \`）。中文按 3 字滑窗切分，请尽量使用连续短语。M24 起 `search_index` 支持 `mode="hybrid"`（默认）：合并 FTS 与 LIKE 候选，按标题/路径/短语/词项覆盖率加权后降序，供 `index search --mode hybrid` 与知识服务证据卡使用。
 
 ## 4. 增量策略
 
@@ -51,3 +51,16 @@ python workbench.py index search --query 第一幕 --limit 5
   FTS 与 LIKE 结果混合排序（FTS 优先）。`no_evidence` 表示索引库中无命中（通常是索引建成后源/查询词变化）。
 - 限制：索引模式不读取外部 `knowledgeIndex.sqlite` 的 FTS 元数据；中文检索最低 3 字（1–2 字 LIKE 回退）；索引库需先由
   `index build` 生成，路径不存在时 CLI/节点返回可读错误。
+
+## 7. 混合排序（M24）
+
+`search_index(out_dir, query, *, limit=8, mode="auto")` 支持四种模式：
+
+| 模式 | 行为 |
+|---|---|
+| auto | 兼容旧行为：≥3 字走 FTS（bm25 原始分），短查询 LIKE |
+| fts | 强制 FTS；<3 字符时报错（请用 like/hybrid） |
+| like | 强制 LIKE 子串匹配 |
+| hybrid | 合并 FTS(limit×3)+LIKE(limit×2) 候选，按 (path, heading) 去重后加权排序 |
+
+hybrid 分数 = 基础分 + 标题命中 2.0 + 路径命中 1.0 + 短语命中 1.5 + 词项覆盖率 1.0；score 仅用于排序，不承诺跨查询可比。短查询（<3 字）由 LIKE 候选兜底。

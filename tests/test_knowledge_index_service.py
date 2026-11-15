@@ -82,7 +82,8 @@ class KnowledgeIndexServiceTest(unittest.TestCase):
         result = search_index_card(
             "演示", "01", "问题", ["悬念"], index_dir=str(self.index)
         )
-        self.assertEqual("like", result["report"]["query_modes"]["悬念"])
+        # M24：索引证据卡统一使用 hybrid 混合排序（短查询由 LIKE 候选兜底）
+        self.assertEqual("hybrid", result["report"]["query_modes"]["悬念"])
 
     def test_parameter_validation(self) -> None:
         with self.assertRaises(KnowledgeIndexServiceError):
