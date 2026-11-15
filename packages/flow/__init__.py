@@ -73,10 +73,13 @@ from .batch import (
     write_batch,
 )
 from .queue import (
+    cancel_entry,
     enqueue,
     list_project_roots,
     list_queue,
     load_queue,
+    move_entry,
+    normalize_schedule,
     queue_path,
     run_queue,
     validate_queue,
@@ -148,6 +151,9 @@ __all__ = [
     "validate_batch",
     "write_batch",
     "enqueue",
+    "cancel_entry",
+    "move_entry",
+    "normalize_schedule",
     "list_project_roots",
     "list_queue",
     "load_queue",

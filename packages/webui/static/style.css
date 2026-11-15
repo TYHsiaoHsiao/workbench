@@ -447,7 +447,7 @@ button.link:hover { text-decoration: underline; }
   border-radius: 6px; padding: 12px; font-family: Consolas, "Courier New", monospace;
   font-size: 12px; line-height: 1.45; color: #c8d3e6; white-space: pre-wrap; word-break: break-all; }
 
-/* M14: batch queue */
+/* M14/M15: batch queue */
 .queue-box { margin-top: 10px; border-top: 1px solid #2d3748; padding-top: 8px; font-size: 12px; }
 .queue-head { display: flex; align-items: center; justify-content: space-between; color: #a0aec0; margin-bottom: 6px; }
 .queue-head button { font-size: 11px; padding: 2px 8px; }
@@ -455,6 +455,11 @@ button.link:hover { text-decoration: underline; }
   background: rgba(255, 255, 255, 0.02); }
 .queue-row.failed { border-color: #b91c1c; }
 .queue-row.succeeded { border-color: #15803d; }
+.queue-row.canceled { border-color: #4b5563; opacity: 0.75; }
+.queue-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .queue-id { font-family: Consolas, monospace; font-size: 11px; margin-right: 8px; }
-.queue-meta { color: #a0aec0; }
+.queue-meta { color: #a0aec0; flex: 1; }
+.q-actions { display: inline-flex; gap: 4px; }
+.q-actions button { font-size: 11px; padding: 1px 7px; }
+.q-actions button[disabled] { opacity: 0.35; cursor: not-allowed; }
 .queue-notice { color: #f87171; margin: 2px 0 6px; font-size: 11px; }

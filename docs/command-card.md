@@ -1,4 +1,4 @@
-# 命令卡（v2.2.0）
+# 命令卡（v2.3.0）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -95,9 +95,12 @@
 | `python workbench.py flow batches --project 项目名 [--limit 20] [--json]` | 批次历史（最近批次摘要） |
 | `python workbench.py flow batch-show --project 项目名 --batch batch-id [--json]` | 批次详情（每图状态/尝试/耗时/错误） |
 | `python workbench.py flow batch-recover --project 项目名 --batch batch-id [--dry-run/--live] [--auto-retry N] [--parallel] [--workers N] [--json]` | 重跑批次中的失败图并把新尝试合并进原批次 |
-| `python workbench.py flow queue add --project 项目名 [--graphs a,b / --all] [--dry-run/--live] [--auto-retry N] [--fail-fast] [--parallel] [--workers N] [--json]` | 把批量运行请求加入项目队列（`00_project/workflows/queue.json`） |
-| `python workbench.py flow queue list --project 项目名 [--status pending/succeeded/failed] [--limit 50] [--json]` | 查看队列条目（状态/图数/批次/失败通知） |
+| `python workbench.py flow queue add --project 项目名 [--graphs a,b / --all] [--dry-run/--live] [--auto-retry N] [--fail-fast] [--parallel] [--workers N] [--at 2026-11-15T20:00] [--json]` | 把批量运行请求加入项目队列（`00_project/workflows/queue.json`；`--at` 定时到点执行） |
+| `python workbench.py flow queue list --project 项目名 [--status pending/succeeded/failed/canceled] [--limit 50] [--json]` | 查看队列条目（状态/顺序/计划时间/图数/批次/失败通知） |
 | `python workbench.py flow queue run --project 项目名 [--limit 5] [--json]` 或 `--all-projects` | 顺序执行 pending 条目，逐条生成批次并写回结果/失败通知 |
+| `python workbench.py flow queue cancel <queue_id> --project 项目名 [--json]` | 取消待运行（pending）队列条目 |
+| `python workbench.py flow queue move <queue_id> --project 项目名 (--before ID / --after ID / --index N) [--json]` | 调整 pending 条目执行顺序（`order` 重赋 0..n-1） |
+| `python workbench.py flow queue daemon --project 项目名 [--interval 30] [--limit 5] [--until-empty] [--all-projects]` | 后台守护：周期执行到期条目（Ctrl+C 停止） |
 
 ## 7.5 生成平台（generate，M8/M9/M10/M11）
 

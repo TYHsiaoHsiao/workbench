@@ -395,6 +395,55 @@ class WebUIApiTest(unittest.TestCase):
         self.assertEqual("failed", entry["status"])
         self.assertIn("flow-queue-broken", entry["notification"]["failed_graphs"])
 
+    def test_queue_cancel_and_schedule_endpoint(self) -> None:
+        status, data = self.client.json(
+            "POST",
+            "/api/queue",
+            {
+                "project": str(self.project),
+                "graph_ids": [self.graph["graph_id"]],
+                "dry_run": True,
+                "scheduled_at": "2999-01-01T00:00",
+            },
+        )
+        self.assertEqual(200, status, msg=data)
+        entry = data["entry"]
+        self.assertIn("scheduled_at", entry)
+        self.assertGreater(entry["order"], -1)
+        status, data = self.client.json(
+            "POST",
+            f"/api/queue/{entry['queue_id']}/cancel",
+            {"project": str(self.project)},
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertEqual("canceled", data["entry"]["status"])
+        status, data = self.client.json("GET", self._q("/api/queue") + "&status=canceled")
+        self.assertEqual(200, status, msg=data)
+        self.assertIn(entry["queue_id"], [item["queue_id"] for item in data["entries"]])
+
+    def test_queue_move_endpoint(self) -> None:
+        ids = []
+        for _ in range(2):
+            status, data = self.client.json(
+                "POST",
+                "/api/queue",
+                {"project": str(self.project), "graph_ids": [self.graph["graph_id"]], "dry_run": True},
+            )
+            self.assertEqual(200, status, msg=data)
+            ids.append(data["entry"]["queue_id"])
+        status, data = self.client.json(
+            "POST",
+            f"/api/queue/{ids[1]}/move",
+            {"project": str(self.project), "index": 0},
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertEqual(0, data["move"]["order"])
+        status, data = self.client.json("GET", self._q("/api/queue"))
+        self.assertEqual(200, status, msg=data)
+        orders = {item["queue_id"]: item.get("order") for item in data["entries"]}
+        self.assertEqual(0, orders[ids[1]])
+        self.assertEqual(1, orders[ids[0]])
+
     def test_replay_endpoint(self) -> None:
         status, data = self.client.json(
             "POST",

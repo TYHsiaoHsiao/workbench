@@ -43,6 +43,8 @@ from flow import (
     list_snapshots,
     load_node_types,
     load_templates,
+    cancel_entry,
+    move_entry,
     read_batch,
     read_graph_data,
     read_run,
@@ -808,8 +810,27 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 fail_fast=bool(body.get("fail_fast")),
                 parallel=bool(body.get("parallel")),
                 workers=int(body.get("workers") or 2),
+                scheduled_at=body.get("scheduled_at") or None,
             )
             self._json({"ok": True, "project": str(project), "entry": entry})
+            return
+        if path.startswith("/api/queue/") and path.endswith("/cancel"):
+            queue_id = unquote(path[len("/api/queue/"): -len("/cancel")]).strip("/")
+            project = resolve_project(body.get("project") or str(self.server.project_root))
+            entry = cancel_entry(project, queue_id)
+            self._json({"ok": True, "project": str(project), "entry": entry})
+            return
+        if path.startswith("/api/queue/") and path.endswith("/move"):
+            queue_id = unquote(path[len("/api/queue/"): -len("/move")]).strip("/")
+            project = resolve_project(body.get("project") or str(self.server.project_root))
+            result = move_entry(
+                project,
+                queue_id,
+                before=body.get("before") or None,
+                after=body.get("after") or None,
+                index=body.get("index"),
+            )
+            self._json({"ok": True, "project": str(project), "move": result})
             return
         if path == "/api/queue/run":
             project = resolve_project(body.get("project") or str(self.server.project_root))

@@ -7,6 +7,7 @@ import json
 import os
 import re
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -55,6 +56,7 @@ from flow import (
     FlowError,
     Runner,
     build_replay,
+    cancel_entry,
     compare_runs,
     create_snapshot,
     diff_snapshots,
@@ -68,6 +70,7 @@ from flow import (
     list_project_roots,
     list_queue,
     list_snapshots,
+    move_entry,
     read_batch,
     read_snapshot,
     recover_batch,
@@ -1494,6 +1497,7 @@ def cmd_flow_queue_add(args: argparse.Namespace) -> int:
             fail_fast=bool(args.fail_fast),
             parallel=bool(args.parallel),
             workers=args.workers,
+            scheduled_at=getattr(args, "at", None),
         )
     except FlowError as exc:
         _print(f"错误: {exc}")
@@ -1525,6 +1529,10 @@ def cmd_flow_queue_list(args: argparse.Namespace) -> int:
     for entry in entries:
         mode = "预演" if entry.get("dry_run") else "运行"
         line = f"- {entry['queue_id']}  {entry.get('status')}  {mode}  {len(entry.get('graphs') or [])} 个图"
+        if entry.get("order") is not None:
+            line += f"  顺序 {entry['order']}"
+        if entry.get("scheduled_at"):
+            line += f"  计划 {entry['scheduled_at']}"
         if entry.get("batch_id"):
             line += f"  批次 {entry['batch_id']}"
         _print(line)
@@ -1568,6 +1576,89 @@ def cmd_flow_queue_run(args: argparse.Namespace) -> int:
             if notification.get("message"):
                 _print("  通知: " + str(notification["message"]))
     return EXIT_OK if all(result["ok"] for result in results) else EXIT_FAIL
+
+
+def cmd_flow_queue_cancel(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        entry = cancel_entry(project, args.queue_id)
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    if args.json:
+        _emit({"ok": True, "project": str(project), "entry": entry}, True)
+    else:
+        _print(f"已取消队列条目 {entry['queue_id']}（计划时间与批次参数保留）")
+    return EXIT_OK
+
+
+def cmd_flow_queue_move(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        result = move_entry(
+            project,
+            args.queue_id,
+            before=getattr(args, "before", None),
+            after=getattr(args, "after", None),
+            index=getattr(args, "index", None),
+        )
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    if args.json:
+        _emit({"ok": True, "project": str(project), "move": result}, True)
+        return EXIT_OK
+    _print(f"已移动 {result['queue_id']} → 顺序 {result.get('order')}")
+    for item in result.get("pending") or []:
+        _print(f"- {item['queue_id']}  顺序 {item.get('order')}")
+    return EXIT_OK
+
+
+def cmd_flow_queue_daemon(args: argparse.Namespace) -> int:
+    try:
+        if args.all_projects:
+            projects = list_project_roots()
+            if not projects:
+                _print("未发现任何项目，无法执行跨项目队列守护")
+                return EXIT_FAIL
+        else:
+            if not args.project:
+                _print("错误: 请指定 --project，或使用 --all-projects 处理全部项目队列")
+                return EXIT_USAGE
+            projects = [resolve_project(args.project)]
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    interval = max(1, min(3600, int(args.interval)))
+    limit = max(1, min(50, int(args.limit)))
+    _print(
+        f"队列守护已启动：间隔 {interval}s / 每次最多 {limit} 条 / "
+        f"项目 {len(projects)} 个" + ("（队列空时退出）" if args.until_empty else "") + "；Ctrl+C 停止"
+    )
+    try:
+        while True:
+            results = [run_queue(project, limit=limit) for project in projects]
+            for result in results:
+                summary = result["summary"]
+                if result["ran"]:
+                    _print(
+                        f"[{datetime.now().strftime('%H:%M:%S')}] {result['project']}：执行 {summary['total']} 条 → "
+                        f"成功 {summary['succeeded']} / 失败 {summary['failed']} / 待运行 {summary['pending']} "
+                        f"（计划中 {summary.get('scheduled', 0)}）"
+                    )
+                    for item in result["ran"]:
+                        line = f"- {item['queue_id']}  {item['status']}  批次 {item.get('batch_id') or '-'}"
+                        _print(line)
+                        notification = item.get("notification") or {}
+                        if notification.get("message"):
+                            _print("  通知: " + str(notification["message"]))
+            if args.until_empty and sum(result["summary"]["pending"] for result in results) == 0:
+                _print("队列已空，守护退出")
+                return EXIT_OK
+            time.sleep(interval)
+    except KeyboardInterrupt:
+        _print("已停止队列守护")
+        return EXIT_OK
 
 
 def cmd_flow_replay(args: argparse.Namespace) -> int:
@@ -2532,7 +2623,7 @@ def build_parser() -> argparse.ArgumentParser:
     flow_batch_recover.add_argument("--json", action="store_true", help="以 JSON 输出")
     flow_batch_recover.set_defaults(func=cmd_flow_batch_recover)
 
-    flow_queue = flow_sub.add_parser("queue", help="批次队列：加入/查看/顺序执行（支持跨项目）")
+    flow_queue = flow_sub.add_parser("queue", help="批次队列：加入/查看/取消/重排/执行/守护（支持跨项目）")
     queue_sub = flow_queue.add_subparsers(dest="queue_command", required=True)
 
     queue_add = queue_sub.add_parser("add", help="把一次批量运行请求加入项目队列")
@@ -2546,22 +2637,51 @@ def build_parser() -> argparse.ArgumentParser:
     queue_add.add_argument("--fail-fast", action="store_true", help="首个失败后停止后续图")
     queue_add.add_argument("--parallel", action="store_true", help="并行预演（仅 dry-run）")
     queue_add.add_argument("--workers", type=int, default=2, help="并行线程数（1–8，默认 2）")
+    queue_add.add_argument("--at", help="计划执行时间（ISO 8601，如 2026-11-15T20:00；未到期不执行）")
     queue_add.add_argument("--json", action="store_true", help="以 JSON 输出")
     queue_add.set_defaults(func=cmd_flow_queue_add)
 
     queue_list = queue_sub.add_parser("list", help="查看队列（按创建时间倒序）")
     queue_list.add_argument("--project", required=True, help="项目名或项目路径")
-    queue_list.add_argument("--status", choices=["pending", "running", "succeeded", "failed"], help="按状态过滤")
+    queue_list.add_argument(
+        "--status",
+        choices=["pending", "running", "succeeded", "failed", "canceled"],
+        help="按状态过滤",
+    )
     queue_list.add_argument("--limit", type=int, default=50, help="最多显示条数")
     queue_list.add_argument("--json", action="store_true", help="以 JSON 输出")
     queue_list.set_defaults(func=cmd_flow_queue_list)
 
-    queue_run = queue_sub.add_parser("run", help="顺序执行队列中的 pending 条目（可按项目或全部项目）")
+    queue_run = queue_sub.add_parser("run", help="顺序执行队列中已到期的 pending 条目（可按项目或全部项目）")
     queue_run.add_argument("--project", help="项目名或项目路径（与 --all-projects 二选一）")
     queue_run.add_argument("--all-projects", action="store_true", help="依次执行默认项目根下所有项目的队列")
     queue_run.add_argument("--limit", type=int, default=5, help="本次最多执行条数（默认 5）")
     queue_run.add_argument("--json", action="store_true", help="以 JSON 输出")
     queue_run.set_defaults(func=cmd_flow_queue_run)
+
+    queue_cancel = queue_sub.add_parser("cancel", help="取消一个待运行条目（已运行的条目不能取消）")
+    queue_cancel.add_argument("queue_id", help="队列条目 ID（q-...）")
+    queue_cancel.add_argument("--project", required=True, help="项目名或项目路径")
+    queue_cancel.add_argument("--json", action="store_true", help="以 JSON 输出")
+    queue_cancel.set_defaults(func=cmd_flow_queue_cancel)
+
+    queue_move = queue_sub.add_parser("move", help="重排待运行条目（--before / --after / --index 三选一）")
+    queue_move.add_argument("queue_id", help="要移动的队列条目 ID")
+    queue_move.add_argument("--project", required=True, help="项目名或项目路径")
+    queue_move_target = queue_move.add_mutually_exclusive_group()
+    queue_move_target.add_argument("--before", help="移动到该条目之前")
+    queue_move_target.add_argument("--after", help="移动到该条目之后")
+    queue_move_target.add_argument("--index", type=int, help="移动到 0 基下标位置")
+    queue_move.add_argument("--json", action="store_true", help="以 JSON 输出")
+    queue_move.set_defaults(func=cmd_flow_queue_move)
+
+    queue_daemon = queue_sub.add_parser("daemon", help="队列守护：周期性执行到期条目（Ctrl+C 停止）")
+    queue_daemon.add_argument("--project", help="项目名或项目路径（与 --all-projects 二选一）")
+    queue_daemon.add_argument("--all-projects", action="store_true", help="依次执行默认项目根下所有项目的队列")
+    queue_daemon.add_argument("--interval", type=int, default=30, help="轮询间隔秒数（1–3600，默认 30）")
+    queue_daemon.add_argument("--limit", type=int, default=5, help="每次最多执行条数（默认 5）")
+    queue_daemon.add_argument("--until-empty", action="store_true", help="队列中没有待运行条目后退出")
+    queue_daemon.set_defaults(func=cmd_flow_queue_daemon)
 
     flow_replay = flow_sub.add_parser("replay", help="查看运行回放（每步耗时与失败定位）")
     flow_replay.add_argument("--project", required=True, help="项目名或项目路径")

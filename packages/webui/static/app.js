@@ -1501,7 +1501,7 @@ async function recoverBatch() {
 /* ---------------- 批次队列（M14） ---------------- */
 
 function queueStatusLabel(status) {
-  return { pending: "待运行", running: "运行中", succeeded: "成功", failed: "失败" }[status] || status;
+  return { pending: "待运行", running: "运行中", succeeded: "成功", failed: "失败", canceled: "已取消" }[status] || status;
 }
 
 async function loadQueue() {
@@ -1528,24 +1528,100 @@ function renderQueue() {
     box.innerHTML = "";
     return;
   }
-  const pending = entries.filter((e) => e.status === "pending").length;
+  const pendingEntries = entries
+    .filter((e) => e.status === "pending")
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
+  const pending = pendingEntries.length;
+  const scheduled = pendingEntries.filter((e) => e.scheduled_at).length;
   const failed = entries.filter((e) => e.status === "failed").length;
+  const canceled = entries.filter((e) => e.status === "canceled").length;
   const rows = entries.map((entry) => {
-    const cls = entry.status === "failed" ? "failed" : entry.status === "succeeded" ? "succeeded" : "";
-    let html = '<div class="queue-row ' + cls + '">';
+    const cls = entry.status === "failed" ? "failed" : entry.status === "succeeded" ? "succeeded" : entry.status === "canceled" ? "canceled" : "";
+    let html = '<div class="queue-row ' + cls + '"><div class="queue-line">';
     html += '<span class="queue-id">' + escapeHtml(entry.queue_id) + "</span>";
     html += '<span class="queue-meta">' + (entry.graphs || []).length + " 图 · " + escapeHtml(queueStatusLabel(entry.status));
+    if (entry.status === "pending" && entry.order !== undefined) html += " · 顺序 " + escapeHtml(String(entry.order));
+    if (entry.scheduled_at) html += " · 计划 " + escapeHtml(entry.scheduled_at);
     if (entry.batch_id) html += " · 批次 " + escapeHtml(entry.batch_id);
-    html += "</span></div>";
+    html += "</span>";
+    if (entry.status === "pending") {
+      const pos = pendingEntries.indexOf(entry);
+      html += '<span class="q-actions">';
+      html += '<button data-q-up="' + escapeHtml(entry.queue_id) + '"' + (pos === 0 ? " disabled" : "") + ">上移</button>";
+      html += '<button data-q-down="' + escapeHtml(entry.queue_id) + '"' + (pos === pendingEntries.length - 1 ? " disabled" : "") + ">下移</button>";
+      html += '<button data-q-cancel="' + escapeHtml(entry.queue_id) + '">取消</button>';
+      html += "</span>";
+    }
+    html += "</div>";
     const notif = entry.notification || {};
     if (notif.message) html += '<div class="queue-notice">' + escapeHtml(notif.message) + "</div>";
     return html;
   }).join("");
   box.classList.remove("hidden");
   box.innerHTML =
-    '<div class="queue-head"><span>批次队列（待运行 ' + pending + " / 失败 " + failed + "）</span>" +
+    '<div class="queue-head"><span>批次队列（待运行 ' + pending + " / 计划中 " + scheduled +
+    " / 失败 " + failed + " / 已取消 " + canceled + "）</span>" +
     '<button id="btn-queue-refresh" title="刷新队列">刷新</button></div>' + rows;
   $("#btn-queue-refresh").addEventListener("click", () => loadQueue());
+  box.querySelectorAll("[data-q-cancel]").forEach((btn) =>
+    btn.addEventListener("click", () => cancelQueueEntry(btn.dataset.qCancel))
+  );
+  box.querySelectorAll("[data-q-up]").forEach((btn) =>
+    btn.addEventListener("click", () => moveQueueEntry(btn.dataset.qUp, "up"))
+  );
+  box.querySelectorAll("[data-q-down]").forEach((btn) =>
+    btn.addEventListener("click", () => moveQueueEntry(btn.dataset.qDown, "down"))
+  );
+}
+
+async function cancelQueueEntry(queueId) {
+  if (!window.confirm("取消队列条目 " + queueId + "？（仅待运行条目可取消）")) return;
+  try {
+    await api("/api/queue/" + encodeURIComponent(queueId) + "/cancel", {
+      method: "POST",
+      body: JSON.stringify({ project: state.project }),
+    });
+    logLine("已取消队列条目：" + queueId, "ok");
+    await loadQueue();
+  } catch (err) {
+    logLine("取消队列条目失败：" + err.message, "err");
+  }
+}
+
+async function moveQueueEntry(queueId, direction) {
+  if (!state.project) return;
+  const pending = (state.queue || [])
+    .filter((e) => e.status === "pending")
+    .sort((a, b) => (a.order || 0) - (b.order || 0));
+  const pos = pending.findIndex((e) => e.queue_id === queueId);
+  if (pos < 0) {
+    logLine("条目不在待运行列表中", "warn");
+    return;
+  }
+  const body = { project: state.project };
+  if (direction === "up") {
+    if (pos === 0) {
+      logLine("已经是第一个待运行条目", "warn");
+      return;
+    }
+    body.before = pending[pos - 1].queue_id;
+  } else {
+    if (pos === pending.length - 1) {
+      logLine("已经是最后一个待运行条目", "warn");
+      return;
+    }
+    body.after = pending[pos + 1].queue_id;
+  }
+  try {
+    await api("/api/queue/" + encodeURIComponent(queueId) + "/move", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+    logLine("已调整队列顺序：" + queueId, "ok");
+    await loadQueue();
+  } catch (err) {
+    logLine("调整队列顺序失败：" + err.message, "err");
+  }
 }
 
 async function addToQueue() {
@@ -1554,6 +1630,12 @@ async function addToQueue() {
   const all = !graphs.length;
   const label = graphs.length ? "当前流程图 " + state.graphId : "项目内全部流程图";
   if (!window.confirm("把" + label + "加入批次队列？（dry-run 预演）")) return;
+  const scheduled = window.prompt(
+    "计划执行时间（ISO 8601，如 2026-11-15T20:00；留空表示立即执行）",
+    ""
+  );
+  if (scheduled === null) return;
+  const scheduledAt = scheduled.trim() || null;
   try {
     const data = await api("/api/queue", {
       method: "POST",
@@ -1563,6 +1645,7 @@ async function addToQueue() {
         all,
         dry_run: true,
         auto_confirm: true,
+        scheduled_at: scheduledAt,
       }),
     });
     logLine("已加入队列：" + data.entry.queue_id, "ok");
@@ -1589,7 +1672,8 @@ async function runQueue() {
     }
     const summary = data.summary || {};
     setStatus(
-      "队列执行完成：成功 " + (summary.succeeded || 0) + " / 失败 " + (summary.failed || 0) + " / 剩余 " + (summary.pending || 0)
+      "队列执行完成：成功 " + (summary.succeeded || 0) + " / 失败 " + (summary.failed || 0) +
+      " / 剩余 " + (summary.pending || 0) + "（计划中 " + (summary.scheduled || 0) + "）"
     );
     await loadQueue();
   } catch (err) {

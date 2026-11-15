@@ -74,11 +74,21 @@
               "pending",
               "running",
               "succeeded",
-              "failed"
+              "failed",
+              "canceled"
             ]
           },
           "created_at": {
             "type": "string"
+          },
+          "scheduled_at": {
+            "type": "string",
+            "description": "计划执行时间（ISO 8601，本地时区可省略）；到达该时间后 daemon/run 才会执行"
+          },
+          "order": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "待运行条目内的执行顺序（越小越先；可移动调整）"
           },
           "started_at": {
             "type": "string"

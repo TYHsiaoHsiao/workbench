@@ -1,5 +1,13 @@
 # 变更日志
 
+## [2.3.0] - 2026-11-15 — 队列定时调度、取消/重排与后台守护（M15）
+
+- 定时执行：`flow-queue` 契约条目新增可选 `scheduled_at`（ISO 8601）与 `order`；`flow queue add --at <时间>` 入队后到点才执行；`run_queue()` 只处理到期条目，summary 增加 `scheduled`/`canceled` 计数。
+- 取消与重排：`flow queue cancel <queue_id>` 仅取消 pending 条目（置 `canceled` 并写通知）；`flow queue move <queue_id> (--before|--after|--index)` 调整 pending 顺序并把 `order` 重赋 0..n-1。
+- 后台守护：`flow queue daemon --interval 30 --limit 5 [--until-empty] [--all-projects]` 周期执行到期条目，Ctrl+C 停止。
+- CLI/Web/前端：Web API `POST /api/queue/<id>/cancel`、`POST /api/queue/<id>/move`；前端队列列表显示顺序/计划时间并提供上移/下移/取消操作。
+- 新增 10 项测试（队列 8、Web API 2），全量 351 项通过；兼容性：`flow-queue` 契约只新增可选字段，默认行为不变。
+
 ## [2.2.0] - 2026-11-15 — 批次队列化与失败通知（M14）
 
 - 批次队列：新增 `packages/flow/queue.py` 与 `flow-queue` 契约（v0.1），队列文件 `00_project/workflows/queue.json`；`flow queue add` 入队（`--graphs` / `--all`）、`flow queue list` 查看、`flow queue run` 按创建顺序执行 pending 条目（默认最多 5 条），每条生成批次记录并把批次 ID/结果/失败通知写回队列。

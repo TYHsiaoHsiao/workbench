@@ -1,6 +1,6 @@
-# 可视化节点工作台（M1–M14 + 2.0.1 实时预览）
+# 可视化节点工作台（M1–M15 + 2.0.1 实时预览）
 
-> 版本：2.2.0 · 状态：M1–M14 已完成；2.2.0 为批次队列化与失败通知 · 适用范围：本地单用户
+> 版本：2.3.0 · 状态：M1–M15 已完成；2.3.0 为队列定时调度、取消/重排与后台守护 · 适用范围：本地单用户
 
 ## 1. 定位
 
@@ -202,6 +202,8 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 | POST | `/api/queue` | 加入批次队列（body: project / graph_ids / all / dry_run / auto_confirm / auto_retry / fail_fast / parallel / workers） |
 | POST | `/api/queue/run` | 执行项目队列中的 pending 条目（body: project / limit） |
 | GET | `/api/queue?project=&status=&limit=` | 队列条目列表（含批次 ID、结果与失败通知） |
+| POST | `/api/queue/<queue_id>/cancel` | 取消待运行队列条目（body: project） |
+| POST | `/api/queue/<queue_id>/move` | 重排队列条目（body: project / before / after / index） |
 | GET | `/api/dev/version` | 静态资源签名（`filename:size:mtime_ns` + `latest_mtime_ns`）；前端每 1.2s 轮询，变更后整页刷新（2.0.1） |
 - 兼容别名：`POST /api/runs/batch` 与 `POST /api/workflows/batch` 等价（旧字段 `count`/`results`），前端已迁移到新端点。
 
@@ -313,6 +315,14 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - 边界：队列串行执行、不做定时调度；条目不会自动重试（可配合批次的 `auto_retry`）；队列文件在项目目录内（不越界写）。
 
 
+### M15：队列定时调度、取消/重排与后台守护（2.3.0）
+
+- 定时执行：队列条目新增可选 `scheduled_at`（ISO 8601）与 `order`；`run_queue()` 只执行到期条目，summary 增加 `scheduled`/`canceled` 计数；`flow queue add --at` 入队即计划。
+- 取消与重排：`cancel_entry()` 仅允许 pending 取消（写 `notification` 说明）；`move_entry()` 支持 `before`/`after`/`index` 三选一重排，pending `order` 重赋 0..n-1；CLI `flow queue cancel/move`。
+- 后台守护：`flow queue daemon --interval 30 --limit 5 [--until-empty] [--all-projects]` 周期执行到期条目，Ctrl+C 退出；无 daemon 时仍需显式 `flow queue run`。
+- CLI/Web/前端：queue add 支持 `--at`；Web API `POST /api/queue/<id>/cancel`、`POST /api/queue/<id>/move`；前端队列列表显示顺序/计划时间与上移/下移/取消按钮。
+- 边界：定时基于本机时钟，daemon 需保持进程运行；不自动重试失败条目；契约新增可选字段（向后兼容）。
+
 ## 16. 已知限制
 
 1. 图与 state 仍为单向（图 → state）；不支持从现有 state 自动反推流程图。
@@ -336,7 +346,9 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 18. 自动重试是有限次数（0–3）的同步重跑，不含退避/排队等待；生成长任务请配合 generate 节点与显式状态刷新。
 19. 实时预览基于整页刷新，刷新后缩放/选中状态会重置；仅跟踪 3 个内置静态资源，后端 Python 改动需重启 `serve`。
 20. 批次并行仅支持 dry-run 预演；live 运行共享项目状态，必须串行。失败图恢复沿用原批次记录并追加尝试，不创建新批次。
-21. 批次队列只按项目本地顺序执行（不跨进程并发）；不做定时调度与后台守护，运行需显式 `flow queue run` / Web「运行队列」。
+21. 批次队列按项目本地顺序执行（不跨进程并发）；定时条目需 `flow queue daemon` 或显式 `flow queue run` 触发，daemon 停止后不会自动执行。
+22. 队列定时与后台守护依赖本机时钟与常驻进程；daemon 不自动重启失败条目，也不跨机器同步。
+23. 取消/重排只作用于 pending 条目；running/succeeded/failed/canceled 条目不可取消或移动。
 
 ## 17. 验证
 
@@ -354,11 +366,12 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - 2.0.1 新增 2 项测试（dev 版本端点、静态文件变更后签名变化），全量 `Ran 325 tests ... OK`；手动验证：`serve` 后修改 `style.css`，约 1–2s 页面自动刷新（服务端日志可 `GET /api/dev/version` 轮询）。
 - M13（2.1.0）新增 6 项测试（批次并行 dry-run、并行拒绝 live/fail-fast、恢复合并尝试、无失败恢复、Web API 并行端点/恢复端点），全量 `Ran 331 tests ... OK`；CLI 冒烟：`flow batch --parallel --workers 2`、`flow batch-recover`（失败图重跑并合并尝试）；doctor 9 项含 5 份 flow 契约。
 - M14（2.2.0）新增 10 项测试（队列引擎 8：入队/过滤/去重/空选择/并行校验/顺序执行/失败通知/limit 与空队列；Web API 2：队列端点、失败通知），全量 `Ran 341 tests ... OK`；CLI 冒烟：`flow queue add/list/run`（含 `--all-projects`）；doctor 9 项含 6 份 flow 契约。
+- M15（2.3.0）新增 10 项测试（定时跳过/计划执行、取消、重排 before/after/index、非法参数；Web API 2：定时+取消、重排），全量 `Ran 351 tests ... OK`；CLI 冒烟：`queue add --at`/`cancel`/`move`/`daemon --until-empty`；doctor 9 项含 6 份 flow 契约。
 
-## 18. 后续（M15 候选）
+## 18. 后续（M16 候选）
 
-- 批次定时调度与后台队列守护（跨会话恢复）；队列条目详情与手动取消/重排。
-- 失败通知的外部通道（桌面通知/日志汇总报告）与队列失败重试策略。
+- 队列失败重试策略与失败通知外部通道（桌面通知/日志汇总报告）、daemon 开机自启与日志轮转。
+- 队列条目历史趋势与批量取消、跨会话守护恢复。
 - 生成面板内选择回填阶段与逐镜批量操作（05/06/07 混合）；任务详情抽屉的媒体预览与提交历史过滤。
 - 批次/队列历史趋势与运行基线定时巡检、缩略图文件缓存落盘。
 - 真实生成平台在线联调；macOS / GitHub Actions 远端矩阵与迁移用例扩充。

@@ -144,6 +144,9 @@
 - `flow queue add` 报「没有可加入队列的流程图」：项目内还没有流程图，或 `--graphs` 传了不存在的 id；先 `flow list` 或 `flow new`。
 - `flow queue run` 后条目仍 pending：单次 `--limit` 默认 5，剩余条目保持 pending，可再次执行或调大 `--limit`；`--all-projects` 只扫描默认项目根。
 - 队列条目失败并显示「通知：批次 … 失败 N 个图」：用 `flow batch-show <batch_id>` 查看失败尝试，修复后重跑；队列不做自动重试。
+- `flow queue add --at` 报「无法解析计划时间 …」：用 ISO 8601（如 `2026-11-15T20:00`），留空表示立即执行。
+- 到点条目仍显示「计划中」未执行：`flow queue run` 不会自动等待，需启动 `flow queue daemon`（保持进程运行）或手动 run；`flow queue list` 可查看 `scheduled_at`。
+- `flow queue cancel/move` 报错：只能操作 pending 条目，先 `flow queue list --status pending` 确认条目状态。
 
 
 
