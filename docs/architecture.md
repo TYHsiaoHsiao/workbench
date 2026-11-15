@@ -26,7 +26,7 @@
                               |
 +-----------------------------v-------------------------------+
 |  契约层（packages/contracts）                                |
-|  7 份 JSON Schema + 标准库子集校验器                         |
+|  10 份 JSON Schema + 标准库子集校验器                         |
 +-----------------------------+-------------------------------+
                               |
 +-----------------------------v-------------------------------+
@@ -39,12 +39,14 @@
 |  能力（packages/）                                           |
 |  knowledge_service（1a/2/2.1）| style_service（迭代 3）      |
 |  installer（1b）；memory（迭代 4）；export/restore（迭代 4）；1.0.1：artifact register / knowledge bridge / check --content / inject-batch |
+|  flow（1.1.0 M1）：graph / registry / nodes / runner / store；webui（1.1.0 M1）：本地服务 + 原生前端 |
 +-------------------------------------------------------------+
 ```
 
 - **契约层不依赖其他包**，可单独被外部工具复用。
 - **路由核心只依赖契约层**，不读文件系统以外的状态。
 - **CLI 是薄壳**，负责参数、日志与退出码，业务逻辑都在包里。
+- **可视化编排层（1.1.0 / M1）**：`packages/flow`（图模型与校验、节点注册表、执行引擎、项目内存储）+ `packages/webui`（标准库 HTTP 服务 + 原生 JS/SVG 画布）；节点执行复用现有服务层，`state.json` 仍是唯一事实来源，详 `docs/flow-workbench.md`。
 - **知识服务已实现只读适配 + 有限正文回退 + 证据质量评分；安装器、初始化器、门禁与迁移器在迭代 1b 落地；风格服务在迭代 3 落地（注册表 + 风格卡 + 8 工具适配 + 06/08 注入记录）；迭代 4 增加参考记忆加载器、项目导出/还原与试点驱动。**
 
 ## 3. 阶段模型
@@ -133,9 +135,10 @@
 | 跨阶段参考记忆读取 | `core_router.memory`（阶段→scope 映射、启用条目自动加载）+ CLI `reference list` |
 | 阶段产物登记（原手动改 state） | 1.0.1：`core_router.project.register_artifacts` + CLI `artifact register`（SHA-256/字节数/修订日志/刷新状态卡/路径去重） |
 | 风格批量注入（原逐条覆盖） | 1.0.1：`StyleService.inject_batch` + CLI `style inject-batch`（整批校验、失败整批拒绝、单份批量记录） |
+| 可视化节点编排 | 1.1.0（M1）：`packages/flow`（图/节点/引擎/存储）+ `packages/webui`（浏览器画布）+ CLI `flow` 子命令 |
 | 项目一致性体检 | 1.0.1：`check --content`（风格卡/知识卡/产物存在性、confirmed⊆references、treatment↔shot-plan 时长、下游过期提示） |
 
-迁移策略：**先适配、后重建**。迭代 1a 已用只读适配验证现有 `aistudio-md-2` 索引格式（详情见 `docs/knowledge-service.md`、`docs/knowledge-poc-report.md`），不改动知识库本体；契约层统一抽象，避免把现有脚本的私有格式带进新架构。迭代 2 方案 A（0.3.0）以有限正文回退补足预算内召回，迭代 2.1（0.3.1）加入证据质量评分与误命中过滤（见 `docs/iteration-2-recall-report.md`）；完整覆盖与语义级精度仍以方案 B（按契约重建索引）为中期路径。迭代 1b（0.4.0）把旧项目的规则文件合并进状态卡 v2，旧参考记忆转为契约 JSON 并保留 `.legacy.md` 原件（见 `docs/iteration-1b-report.md`）。迭代 3（0.5.0）只读扫描外部 200 位导演风格包生成 `content/style-registry.json`，风格素材不复制进仓库，风格卡与注入记录写入项目（见 `docs/iteration-3-report.md`）。迭代 4（1.0.0）用两个试点（从零到 08、B 入口到 05）验证全链路，补参考记忆加载器与导出/还原，并完成迁移升级与回滚演练（见 `docs/iteration-4-report.md`、`docs/migration.md`）。1.0.1 是真实项目试点（《死亡外科医生》从零到 done）后的补丁：新增产物登记与知识桥状态 CLI、跨阶段内容一致性检查、风格批量注入，不改变契约与阶段路由（见 `docs/release-notes-1.0.1.md`、`docs/pilot-c-report.md`）。1.0.2 为体验补丁：跨项目总览、风格质量提示、批量逐镜注入记录、init 下一步引导（见 `docs/release-notes-1.0.2.md`）。
+迁移策略：**先适配、后重建**。迭代 1a 已用只读适配验证现有 `aistudio-md-2` 索引格式（详情见 `docs/knowledge-service.md`、`docs/knowledge-poc-report.md`），不改动知识库本体；契约层统一抽象，避免把现有脚本的私有格式带进新架构。迭代 2 方案 A（0.3.0）以有限正文回退补足预算内召回，迭代 2.1（0.3.1）加入证据质量评分与误命中过滤（见 `docs/iteration-2-recall-report.md`）；完整覆盖与语义级精度仍以方案 B（按契约重建索引）为中期路径。迭代 1b（0.4.0）把旧项目的规则文件合并进状态卡 v2，旧参考记忆转为契约 JSON 并保留 `.legacy.md` 原件（见 `docs/iteration-1b-report.md`）。迭代 3（0.5.0）只读扫描外部 200 位导演风格包生成 `content/style-registry.json`，风格素材不复制进仓库，风格卡与注入记录写入项目（见 `docs/iteration-3-report.md`）。迭代 4（1.0.0）用两个试点（从零到 08、B 入口到 05）验证全链路，补参考记忆加载器与导出/还原，并完成迁移升级与回滚演练（见 `docs/iteration-4-report.md`、`docs/migration.md`）。1.0.1 是真实项目试点（《死亡外科医生》从零到 done）后的补丁：新增产物登记与知识桥状态 CLI、跨阶段内容一致性检查、风格批量注入，不改变契约与阶段路由（见 `docs/release-notes-1.0.1.md`、`docs/pilot-c-report.md`）。1.0.2 为体验补丁：跨项目总览、风格质量提示、批量逐镜注入记录、init 下一步引导（见 `docs/release-notes-1.0.2.md`）。1.1.0 增加可视化节点工作台（M1）：新增 flow/webui 两层与 3 份 v0.1 契约，节点执行复用既有服务层，不改变 state v2 与阶段路由（见 `docs/flow-workbench.md`）。
 
 ## 7. 错误码与退出码
 
@@ -150,5 +153,14 @@
 
 - 契约 `contract_version` 固定 `1.0`；破坏性变更必须升 `2.0` 并提供迁移脚本。
 - 注册表与契约同版本发布；`manifest.json` 记录文件哈希，供安装器校验。
-- `VERSION` 遵循 semver：迭代 0 为 `0.1.0`，迭代 1a（B 知识服务 PoC）为 `0.2.0`，迭代 2 方案 A（有限正文回退）为 `0.3.0`，迭代 2.1（精度修订）为 PATCH `0.3.1`，迭代 1b（A 编排硬化）为 `0.4.0`，迭代 3（C 风格服务）为 `0.5.0`，迭代 4（试点与固化）为 `1.0.0`，真实项目补丁为 PATCH `1.0.1`，体验补丁为 PATCH `1.0.2`。1.0.0 为功能完善后的首个正式版本；后续 breaking change 升 2.x。
+- `VERSION` 遵循 semver：迭代 0 为 `0.1.0`，迭代 1a（B 知识服务 PoC）为 `0.2.0`，迭代 2 方案 A（有限正文回退）为 `0.3.0`，迭代 2.1（精度修订）为 PATCH `0.3.1`，迭代 1b（A 编排硬化）为 `0.4.0`，迭代 3（C 风格服务）为 `0.5.0`，迭代 4（试点与固化）为 `1.0.0`，真实项目补丁为 PATCH `1.0.1`，体验补丁为 PATCH `1.0.2`；可视化节点工作台（M1）为 MINOR `1.1.0`。1.0.0 为功能完善后的首个正式版本；后续 breaking change 升 2.x。
 - 旧项目的兼容策略：状态卡 v2 新字段全部可选，迁移前旧 `state.json` 仍可校验；规则文件通过 `migrate` / `upgrade` 升级，创作产物字节不动。
+
+## 9. 可视化节点工作台（1.1.0 / M1）
+
+- 新增 `packages/flow/`：`graph.py`（图模型、端口兼容、拓扑排序、图校验 8 条规则）、`registry.py`（节点类型注册表与参数校验）、`nodes.py`（start/stage/confirm/end 执行器）、`runner.py`（运行记录、dry-run、确认断点、失败快照）、`store.py`（项目内 `00_project/workflows/` 与 `runs/` 持久化）。
+- 新增 `packages/webui/`：标准库 `ThreadingHTTPServer` + 原生 JS/SVG 前端；默认监听 `127.0.0.1` 且启用 token；API 覆盖工作台信息、项目、节点类型、流程图读写校验、运行与确认。
+- 契约新增 3 份 v0.1：`flow-node-types.schema.json`、`flow-graph.schema.json`、`flow-run.schema.json`；`content/flow-node-types.json` 定义四类节点。
+- CLI 新增 `flow serve/new/list/show/validate/run`；`doctor` 增加 flow 检查（8 项）。
+- 边界：流程图只记录流程意图、布局与运行记录；`state.json` 仍为唯一事实来源；节点执行调用现有服务层（门禁/advance、知识、风格、产物登记等），无第二套业务逻辑。
+- 验证：新增 34 项测试（22 flow + 12 Web API），全量 204 项通过；CI 全绿；文档 `docs/flow-workbench.md`。

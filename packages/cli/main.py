@@ -49,6 +49,18 @@ from core_router.registry import REPO_ROOT as WORKBENCH_ROOT
 from core_router.state import validate_state
 from installer import InstallerError, install_skills
 from knowledge_service import KnowledgeService, KnowledgeServiceError
+from flow import (
+    FlowError,
+    Runner,
+    default_graph,
+    list_graphs,
+    load_node_types,
+    read_graph_data,
+    resolve_project,
+    validate_graph,
+    write_graph_data,
+)
+from flow.store import graph_id_from_name
 from style_service import (
     AdapterError,
     StyleRegistryError,
@@ -131,6 +143,7 @@ def _check_layout() -> tuple[bool, str]:
         "content/stage-registry.json",
         "content/intent-rules.json",
         "content/style-registry.json",
+        "content/flow-node-types.json",
         "config/brand-guard.json",
     ]
     missing = [rel for rel in required if not (WORKBENCH_ROOT / rel).is_file()]
@@ -152,6 +165,19 @@ def _check_style_registry() -> tuple[bool, str]:
         return False, str(exc)
 
 
+def _check_flow() -> tuple[bool, str]:
+    try:
+        types = load_node_types()
+    except FlowError as exc:
+        return False, str(exc)
+    required = ["flow-graph.schema.json", "flow-node-types.schema.json", "flow-run.schema.json"]
+    schemas = set(list_schemas())
+    missing = [name for name in required if name not in schemas]
+    if missing:
+        return False, "缺少流程契约: " + ", ".join(missing)
+    return True, f"流程节点类型 {len(types)} 个、契约 {len(required)} 份"
+
+
 def cmd_doctor(args: argparse.Namespace) -> int:
     checks = [
         ("python", _check_python()),
@@ -160,6 +186,7 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         ("registry", _check_registry()),
         ("intent-rules", _check_intent()),
         ("style-registry", _check_style_registry()),
+        ("flow", _check_flow()),
         ("brand-wordlist", _check_wordlist()),
     ]
     failures = 0
@@ -1061,6 +1088,149 @@ def cmd_project_list(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _flow_read(args: argparse.Namespace) -> dict[str, Any]:
+    """按 --file 或 --project + --graph 读取流程图 JSON。"""
+    if getattr(args, "file", None):
+        path = Path(args.file)
+        if not path.is_file():
+            raise FlowError(f"流程图文件不存在: {path}")
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise FlowError(f"流程图读取失败: {exc}") from exc
+    if args.project and getattr(args, "graph", None):
+        project = resolve_project(args.project)
+        return read_graph_data(project, args.graph)
+    raise FlowError("需要 --file，或同时提供 --project 与 --graph")
+
+
+def cmd_flow_new(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        graph_id = args.graph or graph_id_from_name(args.name)
+        data = default_graph(project.name, graph_id=graph_id)
+        data["name"] = args.name
+        data["nodes"][0]["params"]["project"] = project.name
+        target = project / "00_project" / "workflows" / f"{graph_id}.json"
+        if target.is_file() and not args.force:
+            _print(f"流程图已存在: {target}（如需覆盖请加 --force）")
+            return EXIT_FAIL
+        write_graph_data(project, data)
+        payload = {"ok": True, "project": str(project), "graph_id": graph_id, "file": str(target)}
+        _emit(payload, args.json)
+        if not args.json:
+            _print(f"已创建流程图: {graph_id}（{args.name}）")
+            _print(f"文件: {target}")
+            _print("下一步: 编辑后运行 `workbench.py flow serve --project " + str(project) + "` 在浏览器中拖拽连线。")
+        return EXIT_OK
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+
+
+def cmd_flow_list(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        items = list_graphs(project)
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    if args.json:
+        _emit({"ok": True, "project": str(project), "count": len(items), "graphs": items}, True)
+        return EXIT_OK
+    _print(f"项目: {project}")
+    _print(f"流程图: {len(items)} 个")
+    for item in items:
+        _print(
+            f"- {item['graph_id']}  {item['name']}  "
+            f"节点 {item['nodes']} / 连线 {item['edges']}  更新 {item['updated_at']}"
+        )
+    return EXIT_OK
+
+
+def cmd_flow_show(args: argparse.Namespace) -> int:
+    try:
+        data = _flow_read(args)
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    _print(json.dumps(data, ensure_ascii=False, indent=2))
+    return EXIT_OK
+
+
+def cmd_flow_validate(args: argparse.Namespace) -> int:
+    try:
+        data = _flow_read(args)
+        result = validate_graph(data, load_node_types())
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    payload = {"ok": result["ok"], "graph_id": data.get("graph_id"), **result}
+    if args.json:
+        _emit(payload, True)
+    else:
+        _print(f"流程图: {data.get('graph_id')}（节点 {len(data.get('nodes') or [])} / 连线 {len(data.get('edges') or [])}）")
+        if result["errors"]:
+            for item in result["errors"]:
+                _print(f"[错误] {item}")
+        if result["warnings"]:
+            for item in result["warnings"]:
+                _print(f"[提示] {item}")
+        _print("校验通过" if result["ok"] else "校验失败")
+    return EXIT_OK if result["ok"] else EXIT_FAIL
+
+
+def cmd_flow_run(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        data = read_graph_data(project, args.graph)
+        runner = Runner(
+            project,
+            data,
+            dry_run=args.dry_run,
+            auto_confirm=args.yes,
+        )
+        result = runner.run(mode=args.mode, target=args.node)
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    run = result["run"]
+    if args.json:
+        _emit(result, True)
+    else:
+        _print(f"运行 {run['run_id']}：{run['status']}（模式 {run['mode']}，dry_run={run['dry_run']}）")
+        for step in run.get("steps") or []:
+            flag = "OK" if step.get("status") in {"succeeded", "planned"} else step.get("status", "").upper()
+            line = f"[{flag}] {step['node_id']}"
+            if step.get("outputs"):
+                line += "  " + "；".join(str(x) for x in step["outputs"])
+            if step.get("error"):
+                line += "  错误: " + step["error"]
+            _print(line)
+        if result.get("awaiting"):
+            awaiting = result["awaiting"]
+            _print("")
+            _print(f"等待人工确认: {awaiting.get('prompt')}（节点 {awaiting.get('node_id')}）")
+            _print("提示: 浏览器端 `flow serve` 可确认；或加 --yes 自动确认。")
+        _print("运行记录: " + str(project / "00_project" / "workflows" / "runs" / (run["run_id"] + ".json")))
+    return EXIT_OK if run.get("status") in {"succeeded", "awaiting_confirm"} else EXIT_FAIL
+
+
+def cmd_flow_serve(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        from webui import serve_forever
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    try:
+        serve_forever(project, host=args.host, port=args.port, use_token=not args.no_token)
+    except OSError as exc:
+        _print(f"启动失败: {exc}")
+        return EXIT_ENV
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="workbench",
@@ -1295,6 +1465,57 @@ def build_parser() -> argparse.ArgumentParser:
     )
     style_batch.add_argument("--json", action="store_true", help="以 JSON 输出")
     style_batch.set_defaults(func=cmd_style_inject_batch)
+
+    flow = sub.add_parser("flow", help="可视化节点工作流：列表 / 校验 / 运行 / 本地服务")
+    flow_sub = flow.add_subparsers(dest="flow_command", required=True)
+
+    flow_new = flow_sub.add_parser("new", help="新建流程图骨架（start + end）")
+    flow_new.add_argument("--project", required=True, help="项目名或项目路径")
+    flow_new.add_argument("--name", required=True, help="流程图名称")
+    flow_new.add_argument("--graph", help="graph_id（缺省由名称生成）")
+    flow_new.add_argument("--force", action="store_true", help="覆盖同名流程图")
+    flow_new.add_argument("--json", action="store_true", help="以 JSON 输出")
+    flow_new.set_defaults(func=cmd_flow_new)
+
+    flow_list = flow_sub.add_parser("list", help="列出项目内流程图")
+    flow_list.add_argument("--project", required=True, help="项目名或项目路径")
+    flow_list.add_argument("--json", action="store_true", help="以 JSON 输出")
+    flow_list.set_defaults(func=cmd_flow_list)
+
+    flow_show = flow_sub.add_parser("show", help="输出流程图 JSON")
+    flow_show.add_argument("--project", help="项目名或项目路径")
+    flow_show.add_argument("--graph", help="graph_id")
+    flow_show.add_argument("--file", help="直接指定流程图 JSON 文件")
+    flow_show.add_argument("--json", action="store_true", help="以 JSON 输出（默认即 JSON）")
+    flow_show.set_defaults(func=cmd_flow_show)
+
+    flow_validate = flow_sub.add_parser("validate", help="校验流程图（契约 + 语义规则）")
+    flow_validate.add_argument("--project", help="项目名或项目路径")
+    flow_validate.add_argument("--graph", help="graph_id")
+    flow_validate.add_argument("--file", help="直接指定流程图 JSON 文件")
+    flow_validate.add_argument("--json", action="store_true", help="以 JSON 输出")
+    flow_validate.set_defaults(func=cmd_flow_validate)
+
+    flow_run = flow_sub.add_parser("run", help="执行流程图（默认按图设置决定 dry-run）")
+    flow_run.add_argument("--project", required=True, help="项目名或项目路径")
+    flow_run.add_argument("--graph", required=True, help="graph_id")
+    flow_run.add_argument(
+        "--mode", choices=["full", "to_node", "single"], default="full", help="运行模式"
+    )
+    flow_run.add_argument("--node", help="目标节点（to_node / single 模式必填）")
+    flow_dry = flow_run.add_mutually_exclusive_group()
+    flow_dry.add_argument("--dry-run", dest="dry_run", action="store_true", default=None, help="只预演不写盘")
+    flow_dry.add_argument("--live", dest="dry_run", action="store_false", default=None, help="真实执行并写盘")
+    flow_run.add_argument("--yes", action="store_true", help="自动确认 confirm 节点（无人值守）")
+    flow_run.add_argument("--json", action="store_true", help="以 JSON 输出")
+    flow_run.set_defaults(func=cmd_flow_run)
+
+    flow_serve = flow_sub.add_parser("serve", help="启动本地可视化工作台（浏览器访问）")
+    flow_serve.add_argument("--project", required=True, help="项目名或项目路径")
+    flow_serve.add_argument("--host", default="127.0.0.1", help="监听地址（默认仅本机）")
+    flow_serve.add_argument("--port", type=int, default=8899, help="监听端口（默认 8899）")
+    flow_serve.add_argument("--no-token", action="store_true", help="关闭访问令牌（本机调试用）")
+    flow_serve.set_defaults(func=cmd_flow_serve)
 
     return parser
 

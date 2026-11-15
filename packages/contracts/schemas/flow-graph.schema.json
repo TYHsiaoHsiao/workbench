@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Flow Graph v0.1",
+  "type": "object",
+  "required": ["contract_version", "graph_id", "name", "project", "created_at", "updated_at", "nodes", "edges", "settings"],
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": { "type": "string", "const": "0.1" },
+    "graph_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}$" },
+    "name": { "type": "string", "minLength": 1 },
+    "project": { "type": "string", "minLength": 1 },
+    "created_at": { "type": "string" },
+    "updated_at": { "type": "string" },
+    "canvas": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "zoom": { "type": "number" },
+        "pan": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "x": { "type": "number" }, "y": { "type": "number" } }
+        }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "required": ["auto_advance", "allow_skip_stages", "dry_run_first"],
+      "additionalProperties": false,
+      "properties": {
+        "auto_advance": { "type": "boolean" },
+        "allow_skip_stages": { "type": "boolean" },
+        "dry_run_first": { "type": "boolean" }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "label", "position", "params"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$" },
+          "type": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+          "label": { "type": "string", "minLength": 1 },
+          "position": {
+            "type": "object",
+            "required": ["x", "y"],
+            "additionalProperties": false,
+            "properties": { "x": { "type": "number" }, "y": { "type": "number" } }
+          },
+          "params": { "type": "object" },
+          "disabled": { "type": "boolean" },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "from", "to"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$" },
+          "from": {
+            "type": "object",
+            "required": ["node", "port"],
+            "additionalProperties": false,
+            "properties": { "node": { "type": "string" }, "port": { "type": "string" } }
+          },
+          "to": {
+            "type": "object",
+            "required": ["node", "port"],
+            "additionalProperties": false,
+            "properties": { "node": { "type": "string" }, "port": { "type": "string" } }
+          }
+        }
+      }
+    },
+    "meta": { "type": "object" }
+  }
+}

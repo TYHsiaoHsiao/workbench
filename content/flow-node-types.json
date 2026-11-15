@@ -1,0 +1,76 @@
+{
+  "contract_version": "0.1",
+  "types": [
+    {
+      "type": "start",
+      "label": "开始",
+      "category": "入口",
+      "description": "绑定已有项目（项目需先 init）；记录入口与流程起点。",
+      "ports": { "in": [], "out": ["project"] },
+      "params_schema": {
+        "type": "object",
+        "required": ["project"],
+        "additionalProperties": false,
+        "properties": {
+          "project": { "type": "string", "minLength": 1 },
+          "entry": { "type": "string", "enum": ["A", "B", "C", "D"] },
+          "note": { "type": "string" }
+        }
+      },
+      "executor": "start",
+      "constraints": ["全图必须且只能有一个 start"]
+    },
+    {
+      "type": "stage",
+      "label": "阶段",
+      "category": "阶段",
+      "description": "执行 01-08 中的一个阶段：通过本阶段门禁并推进到下一阶段。",
+      "ports": { "in": ["state", "artifact"], "out": ["artifact", "log"] },
+      "params_schema": {
+        "type": "object",
+        "required": ["stage"],
+        "additionalProperties": false,
+        "properties": {
+          "stage": { "type": "string", "enum": ["01", "02", "03", "04", "05", "06", "07", "08"] },
+          "auto_gates": { "type": "boolean", "default": true },
+          "note": { "type": "string" }
+        }
+      },
+      "executor": "stage",
+      "constraints": ["同图内同一阶段最多一个节点", "当前项目阶段必须与节点阶段一致"]
+    },
+    {
+      "type": "confirm",
+      "label": "人工确认",
+      "category": "阶段",
+      "description": "断点节点：运行到这里暂停，等待人工确认后继续。",
+      "ports": { "in": ["artifact", "text", "card", "log"], "out": ["confirmed"] },
+      "params_schema": {
+        "type": "object",
+        "required": ["prompt"],
+        "additionalProperties": false,
+        "properties": {
+          "prompt": { "type": "string", "minLength": 1 },
+          "detail_path": { "type": "string", "description": "项目内相对路径，UI 可预览该文件" },
+          "note": { "type": "string" }
+        }
+      },
+      "executor": "confirm",
+      "constraints": ["未确认前下游节点不执行"]
+    },
+    {
+      "type": "end",
+      "label": "结束",
+      "category": "输出",
+      "description": "流程结束标记；至少一个，不产生副作用。",
+      "ports": { "in": ["any"], "out": [] },
+      "params_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": { "note": { "type": "string" } }
+      },
+      "executor": "end",
+      "constraints": ["全图至少一个 end"]
+    }
+  ]
+}

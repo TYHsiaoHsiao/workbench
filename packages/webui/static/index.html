@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>可视化节点工作台</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">可视化节点工作台 <span class="version" id="version">…</span></div>
+    <div class="topbar-controls">
+      <label>项目
+        <select id="project-select"></select>
+      </label>
+      <label>流程图
+        <select id="graph-select"></select>
+      </label>
+      <button id="btn-new-graph" title="新建流程图">＋ 新建</button>
+      <button id="btn-save" title="保存（Ctrl+S）">保存</button>
+      <button id="btn-validate" title="校验流程图">校验</button>
+      <button id="btn-autolayout" title="自动布局">自动布局</button>
+      <span class="spacer"></span>
+      <button id="btn-zoom-out" title="缩小">－</button>
+      <button id="btn-zoom-reset" title="重置缩放">100%</button>
+      <button id="btn-zoom-in" title="放大">＋</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel palette">
+      <h2>节点库</h2>
+      <p class="hint">拖拽节点到画布，或双击添加。</p>
+      <div id="palette-list"></div>
+      <div class="palette-footer">
+        <div class="hint">连线：从节点右侧输出端口拖到另一节点左侧输入端口。</div>
+        <div class="hint">快捷键：Delete 删除所选节点，Ctrl+S 保存。</div>
+      </div>
+    </aside>
+
+    <section class="canvas-wrap">
+      <div id="canvas">
+        <div id="world">
+          <svg id="edges"></svg>
+          <div id="nodes"></div>
+        </div>
+        <div id="canvas-empty" class="canvas-empty hidden">
+          当前项目还没有流程图。<br />点击右上角「＋ 新建」创建一张。
+        </div>
+      </div>
+      <div id="log" class="log"></div>
+    </section>
+
+    <aside class="panel inspector">
+      <h2>检查器</h2>
+      <div id="inspector-body" class="inspector-body">
+        <p class="hint">选择画布中的节点查看与编辑参数。</p>
+      </div>
+      <div class="run-panel">
+        <h2>运行</h2>
+        <div class="run-controls">
+          <label><input type="checkbox" id="run-dry" checked /> 预演（dry-run，不写盘）</label>
+          <label>模式
+            <select id="run-mode">
+              <option value="full">整图运行</option>
+              <option value="to_node">运行到节点</option>
+              <option value="single">单节点运行</option>
+            </select>
+          </label>
+          <label id="run-target-label" class="hidden">目标节点
+            <select id="run-target"></select>
+          </label>
+          <label><input type="checkbox" id="run-auto-confirm" /> 自动确认（无人值守）</label>
+          <button id="btn-run">运行</button>
+        </div>
+        <div id="run-status" class="run-status"></div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="statusbar">
+    <span id="status-text">就绪</span>
+    <span id="status-selection"></span>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>

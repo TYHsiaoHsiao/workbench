@@ -1,5 +1,22 @@
 # 变更日志
 
+## [1.1.0] - 2026-11-15 — 可视化节点工作台（M1）
+
+### 新增
+
+- `packages/flow/`：图模型与校验（拓扑排序、端口兼容、8 条规则）、节点类型注册表、节点执行器、执行引擎（dry-run/确认断点/失败快照）、项目内存储（`00_project/workflows/`）。
+- `packages/webui/`：Python 标准库 HTTP 服务 + 原生 JS/SVG 三栏画布（拖拽/连线/参数检查器/运行面板/确认抽屉），默认本机监听 + token。
+- 3 份新契约（v0.1）：`flow-node-types`、`flow-graph`、`flow-run`；`content/flow-node-types.json`（start/stage/confirm/end 四类节点）。
+
+### CLI
+
+- 新增 `flow serve/new/list/show/validate/run`；`doctor` 增加 flow 检查（共 8 项）。
+
+### 测试与验证
+
+- 新增 34 项测试（flow 22 + Web API 12），全量 204 项通过；CLI 冒烟（dry-run + live 推进 01→02）通过；CI 全绿、品牌守卫 0 命中。
+- 文档：`docs/flow-workbench.md`（架构、节点、数据结构、API、交互、限制、M2/M3）。
+
 ## [1.0.2] - 2026-11-15 — 工作台体验补丁
 
 - 跨项目总览：`workbench.py project list`（缺省同时扫描文档目录默认项目根与仓库同级 `projects/`，可多次 `--root`；输出名称/阶段/版本/入口/风格/知识桥/更新时间，支持 `--json`，损坏项目跳过并提示）。

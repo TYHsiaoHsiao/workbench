@@ -1,0 +1,192 @@
+# 可视化节点工作台（M1）
+
+> 版本：1.1.0 · 状态：M1 骨架已完成 · 适用范围：本地单用户
+
+## 1. 定位
+
+在既有 CLI 工作台之上增加一层**可视化节点编排**：把「入口 / 阶段 / 人工确认 / 结束」抽象为节点，
+用连线表达执行顺序与数据流，在浏览器里搭建、配置、运行、观察状态。
+
+核心原则：
+
+- **内核不变**：契约、阶段注册表、门禁、知识服务、风格服务、品牌守卫全部复用，节点执行即调用同一套函数。
+- **state 唯一事实来源**：流程图只记录「流程意图 + 布局 + 运行记录」，执行结果仍写 `00_project/state.json`。
+- **默认安全**：默认 dry-run；只监听 `127.0.0.1`；默认启用访问令牌；写操作限于项目目录内。
+- **零第三方依赖**：Web 服务用 Python 标准库，前端用原生 JS/SVG。
+
+## 2. 快速开始
+
+```bash
+cd workbench
+# 1) 启动本地可视化服务（会打印带 token 的 URL）
+python workbench.py flow serve --project 死亡外科医生
+
+# 2) 浏览器打开打印出的 http://127.0.0.1:8899/?token=...
+
+# 3) 在页面：选择项目 → ＋新建流程图（start + end 骨架）
+#    从左侧节点库拖入「阶段 / 人工确认」，从端口拖线连接，右侧检查器改参数
+# 4) 勾选「预演」→ 运行 → 查看日志与节点状态；确认节点会暂停并弹出确认抽屉
+# 5) 预演通过后取消勾选「预演」→ 运行（live）会真实推进 state 与门禁
+```
+
+命令行等价操作：
+
+```bash
+python workbench.py flow new --project 死亡外科医生 --name 我的流程
+python workbench.py flow list --project 死亡外科医生
+python workbench.py flow show --project 死亡外科医生 --graph flow-main
+python workbench.py flow validate --project 死亡外科医生 --graph flow-main
+python workbench.py flow run --project 死亡外科医生 --graph flow-main --dry-run
+python workbench.py flow run --project 死亡外科医生 --graph flow-main --live --yes
+```
+
+## 3. 架构
+
+```
+浏览器（原生 JS/SVG）
+      │  HTTP + token
+      ▼
+packages/webui/server.py（stdlib ThreadingHTTPServer）
+      │  调用
+      ▼
+packages/flow/            packages/cli/main.py
+  graph.py   图模型/校验   │  flow 子命令
+  registry.py 节点类型     │
+  store.py   项目内持久化  │
+  nodes.py   节点执行器    │
+  runner.py  执行引擎      │
+      │  调用现有服务层
+      ▼
+core_router（state/门禁/advance） · knowledge_service · style_service · contracts · brand_guard
+```
+
+## 4. 节点类型（M1 四类）
+
+| 类型 | 分类 | 输入端口 | 输出端口 | 关键参数 | 执行语义 |
+|---|---|---|---|---|---|
+| `start` | 入口 | — | `project` | `project`（必填）、`entry`（A–D）、`note` | 加载 state、校验项目存在；入口不一致仅记录日志 |
+| `stage` | 阶段 | `state`、`artifact` | `artifact`、`log` | `stage`（01–08 必填）、`auto_gates`（默认 true）、`note` | 要求 `state.stage` 与节点阶段一致；`auto_gates` 时自动通过当前阶段 pending 门禁；仍有门禁未过则失败；通过后 `advance` 推进 |
+| `confirm` | 阶段 | `artifact`、`text`、`card`、`log` | `confirmed` | `prompt`（必填）、`detail_path`、`note` | 运行到此暂停（`awaiting_confirm`），人工确认后继续；取消则流程 `canceled` |
+| `end` | 输出 | `any` | — | `note` | 流程结束标记，输出当前阶段与版本 |
+
+端口兼容表（`flow.graph.PORT_COMPAT`）：
+
+| 输出端口 | 可连接输入端口 |
+|---|---|
+| `project` | `project`、`state` |
+| `artifact` | `artifact`、`state`、`text`、`card`、`log`、`any` |
+| `log` / `text` / `card` | `log`、`text`、`card`、`any`（互连） |
+| `confirmed` | `confirmed`、`artifact`、`log`、`any` |
+| `any` | `any` |
+
+## 5. 数据结构
+
+### 5.1 流程图（`00_project/workflows/<graph_id>.json`，契约 `flow-graph.schema.json` v0.1）
+
+```json
+{
+  "contract_version": "0.1",
+  "graph_id": "flow-main",
+  "name": "从零到 05",
+  "project": "死亡外科医生",
+  "created_at": "2026-11-15T10:00:00+08:00",
+  "updated_at": "2026-11-15T10:00:00+08:00",
+  "nodes": [
+    { "id": "start", "type": "start", "label": "开始", "position": { "x": 80, "y": 140 },
+      "params": { "project": "死亡外科医生", "entry": "A" } },
+    { "id": "stage-01", "type": "stage", "label": "阶段 01", "position": { "x": 360, "y": 140 },
+      "params": { "stage": "01", "auto_gates": true } },
+    { "id": "end", "type": "end", "label": "结束", "position": { "x": 720, "y": 140 }, "params": {} }
+  ],
+  "edges": [
+    { "id": "e1", "from": { "node": "start", "port": "project" }, "to": { "node": "stage-01", "port": "state" } },
+    { "id": "e2", "from": { "node": "stage-01", "port": "artifact" }, "to": { "node": "end", "port": "any" } }
+  ],
+  "settings": { "auto_advance": true, "allow_skip_stages": false, "dry_run_first": true }
+}
+```
+
+### 5.2 运行记录（`00_project/workflows/runs/<run_id>.json`，契约 `flow-run.schema.json` v0.1）
+
+必填：`contract_version`、`run_id`、`graph_id`、`project`、`status`（`running`/`awaiting_confirm`/`succeeded`/`failed`/`canceled`）、`mode`（`full`/`to_node`/`single`）、`started_at`、`steps`。
+每个 step：`node_id`、`status`（`pending`/`running`/`succeeded`/`failed`/`skipped`/`waiting_confirmation`/`planned`），可选 `state_before`、`state_after`、`outputs`、`logs`、`error`。
+另含 `confirmations`、`state_snapshot_before`、`summary`、`dry_run`、`target_node`、`finished_at`。
+
+### 5.3 节点类型注册表（`content/flow-node-types.json`，契约 `flow-node-types.schema.json` v0.1）
+
+字段：`type`、`label`、`category`、`description`、`ports{in[],out[]}`、`params_schema`（JSON Schema 子集）、`executor`、`constraints`。
+
+## 6. 图校验规则
+
+`flow validate` / 保存接口执行同一套规则（契约校验 + 语义）：
+
+1. 必须且只能有一个 `start`；
+2. 至少一个 `end`；
+3. 非 `start` 节点必须有入边，`start` 不能有入边，`end` 不能有出边；
+4. 有输出端口的节点必须有出边；
+5. 连线引用的节点/端口必须存在，端口类型必须兼容；
+6. 不允许成环；
+7. 同一阶段最多一个 `stage` 节点；
+8. 阶段倒置报错；前跳超过 1 个阶段报错（`settings.allow_skip_stages=true` 时降为提示，需显式允许）。
+
+## 7. 运行语义
+
+- 执行顺序：Kahn 拓扑排序（同层按 y、x、id 稳定排序）。
+- 运行模式：`full`（整图）、`to_node`（目标及其祖先）、`single`（仅目标）。
+- dry-run：节点执行器返回 `planned`，除运行记录外不写任何项目文件；`settings.dry_run_first=true` 时 CLI/Web 默认 dry-run。
+- 确认断点：遇到 `confirm` 节点时状态置 `awaiting_confirm` 并持久化；调用 `resume(approved)` 后继续；`--yes` / `auto_confirm` 可无人值守。
+- 失败：节点异常记录 `failed` + 错误文本；运行记录保留 `state_snapshot_before` 便于对账。
+- 幂等性：每次运行独立记录；重复运行以 state 当前状态为准（阶段不一致会明确失败，不会静默跳阶段）。
+
+## 8. Web API
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| GET | `/api/workbench?project=` | 工作台/项目信息 |
+| GET | `/api/projects` | 项目总览（默认项目根 + 工作台同级 projects） |
+| GET | `/api/node-types` | 节点类型注册表 |
+| GET | `/api/workflows?project=` | 流程图列表 |
+| GET | `/api/workflows/<graph_id>?project=` | 流程图详情 |
+| PUT | `/api/workflows/<graph_id>?project=` | 保存流程图（返回校验错误时 HTTP 422） |
+| POST | `/api/workflows/new` | 新建骨架图（`{project,name}`） |
+| POST | `/api/workflows/validate` | 校验（`{graph}`） |
+| POST | `/api/runs` | 运行（`{project,graph_id,mode,target_node,dry_run,auto_confirm}`） |
+| POST | `/api/runs/<run_id>/confirm` | 确认/取消断点（`{approved,note}`） |
+| GET | `/api/runs/<run_id>?project=` | 运行记录 |
+
+鉴权：默认启用令牌，通过 `?token=` 或请求头 `X-Workbench-Token` 传递；静态页面不拦截（仅本机监听）。
+
+## 9. 前端交互
+
+- 三栏布局：左侧节点库（分类 + 拖拽）、中间 SVG 画布、右侧检查器 + 运行面板。
+- 画布：拖拽节点移动、节点右侧输出端口拖到另一节点输入端口连线、单击连线删除、中键拖动画布、滚轮缩放、Delete 删除所选节点。
+- 检查器：显示名称、按 `params_schema` 自动生成参数表单（枚举/布尔/数字/文本）、禁用/启用、删除。
+- 运行面板：dry-run 开关、模式（整图/到节点/单节点）、自动确认、步骤状态列表；断点确认抽屉显示 `prompt` 与 `detail_path`。
+- 自动布局：按 start → 阶段顺序 → confirm → end 排列为网格；保存快捷键 `Ctrl+S`。
+- 数据流观察：节点状态按最近一次运行着色（succeeded/failed/waiting_confirmation/planned），运行日志面板逐节点输出。
+
+## 10. 安全边界
+
+- 只监听 `127.0.0.1`（可用 `--host` 显式覆盖，默认不建议）。
+- 默认令牌校验 `/api/*`；`--no-token` 仅建议临时本机调试。
+- 写操作限制：流程图存于项目 `00_project/workflows/`，运行记录存于 `runs/`；不提供任意文件读写 API。
+- live 运行会真实推进 state/门禁，属于显式操作（默认 dry-run 兜底）。
+
+## 11. 已知限制（M1）
+
+1. 首版仅 4 类节点（start/stage/confirm/end）；知识检索、风格注入、产物登记、内容检查、导出等能力节点在 M2 接入。
+2. 不支持撤销/重做、复制粘贴、框选多选、模板库。
+3. 图与 state 为单向（图 → state）；不支持从现有 state 自动反推流程图。
+4. 阶段节点要求当前项目阶段与节点一致，从零项目需按阶段顺序编排。
+5. 断点确认会话存于服务内存，服务重启后需重新运行。
+
+## 12. 验证
+
+- 新增 22 项 flow 测试（图校验 12、执行引擎 10）+ 12 项 Web API 测试；全量 204 项通过。
+- 冒烟：start→stage01→confirm→end 图 dry-run/live/awaiting/resume 全链路；Web 静态页 200、API 200、未授权 401、非法图 422。
+- CI：compile/tests/doctor（8 项，含 flow）/brand-guard 全绿。
+
+## 13. 后续（M2 / M3）
+
+- **M2**：能力节点（knowledge-search、style-apply/inject、artifact-register、check-content、export）、运行记录与状态卡联动、API 失败恢复与运行历史面板。
+- **M3**：任意 DAG/跳阶段编排、模板库（从零/接力/B 检索/C 注入）、撤销重做、批量运行、与产物追踪表联动、文档与发行包固化。
