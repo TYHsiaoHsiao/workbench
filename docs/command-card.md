@@ -1,4 +1,4 @@
-# 命令卡（v2.10.0）
+# 命令卡（v2.11.0）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -12,7 +12,7 @@
 | `python workbench.py check` | 校验阶段注册表；`--project <名或路径>` 同时校验项目 `state.json` 与参考记忆 |
 | `python workbench.py check --project 项目名 --content` | 跨阶段内容一致性：风格卡/知识卡/产物文件存在性、`confirmed_references` 子集、treatment↔shot-plan 时长、下游过期提示（1.0.1） |
 | `python workbench.py brand-guard` | 品牌禁用词扫描；`--json` 输出结构化报告 |
-| `python scripts/run_ci.py` | 本地 CI：编译 → 文档链接 → FR 映射 → 测试 → 覆盖率≥75% → doctor → 冷启动基准 → brand-guard → 可复现构建 |
+| `python scripts/run_ci.py` | 本地 CI：编译 → 文档链接 → FR 映射 → 测试 → 覆盖率≥80% → doctor → 冷启动基准 → brand-guard → 可复现构建 |
 
 ## 2. 项目生命周期
 
@@ -156,10 +156,10 @@ python workbench.py flow run --project 雨夜回声 --graph flow-main --dry-run
 
 | 命令 | 作用 |
 |---|---|
-| `python scripts/run_ci.py` | 本地 CI：编译 → 文档链接 → FR 映射 → 测试 → 覆盖率≥75% → doctor → 冷启动基准 → 品牌守卫 → 可复现构建 |
+| `python scripts/run_ci.py` | 本地 CI：编译 → 文档链接 → FR 映射 → 测试 → 覆盖率≥80% → doctor → 冷启动基准 → 品牌守卫 → 可复现构建 |
 | `python scripts/check_doc_links.py [--json]` | 文档链接检查：Markdown 链接与行内代码中的仓库内路径必须存在 |
 | `python scripts/check_fr_mapping.py [--json]` | FR 追溯映射检查：FR-01–FR-22 全覆盖、无重复/非预期 ID，并与 PRD 头衔交叉校验（M19） |
-| `python scripts/coverage_check.py [--min 75] [--json] [--out <文件>]` | 零依赖行覆盖率（`packages/`，跳过 docstring/import；2.9.0 实测 76.92%，CI `--min 75`） |
+| `python scripts/coverage_check.py [--min 80] [--json] [--out <文件>]` | 零依赖行覆盖率（`packages/`，跳过 docstring/import；2.11.0 实测 80.8%，CI `--min 80`） |
 | `python scripts/repro_check.py [--json]` | 可复现构建：两次构建与 `.sha256` 三方一致（M20） |
 | `python scripts/bench.py [--runs 5] [--max-cold-start 1.0] [--enforce] [--json]` | NFR 基准：CLI 冷启动/doctor 耗时中位数（`--enforce` 超阈值退出 1） |
 | `python scripts/build_manifest.py` | 生成发行清单 `manifest.json`（文件级 SHA256） |
@@ -180,7 +180,7 @@ python workbench.py flow run --project 雨夜回声 --graph flow-main --dry-run
 | 命令/文件 | 作用 |
 |---|---|
 | `.github/workflows/ci.yml` | GitHub Actions：ubuntu/windows/macos × Python 3.11/3.12，跑 run_ci → build_release → package_smoke → 上传 artifact |
-| `python scripts/coverage_check.py [--min 75] [--json]` | 零依赖行覆盖率（`packages/`）；2.9.0 实测 76.92% |
+| `python scripts/coverage_check.py [--min 80] [--json]` | 零依赖行覆盖率（`packages/`）；2.11.0 实测 80.8% |
 | `python scripts/repro_check.py [--json]` | 可复现构建：两次构建与 `.sha256` 三方一致 |
 | `docs/ci.md` | 门禁清单/矩阵/覆盖率策略/排障 |
 

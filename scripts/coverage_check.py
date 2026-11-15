@@ -89,12 +89,17 @@ def _run_unittest() -> None:
             sys.path.insert(0, extra)
     loader = unittest.TestLoader()
     suite = loader.discover(str(REPO_ROOT / "tests"))
-    runner = unittest.TextTestRunner(stream=io.StringIO(), verbosity=0)
+    stream = io.StringIO()
+    runner = unittest.TextTestRunner(stream=stream, verbosity=0)
     result = runner.run(suite)
     if not result.wasSuccessful():
+        if stream.getvalue():
+            sys.stderr.write(stream.getvalue())
+        names = [test.id() for test, _ in result.failures + result.errors]
+        detail = f"：{', '.join(names)}" if names else ""
         raise RuntimeError(
             "测试未通过（覆盖率统计前必须先让全部测试通过）："
-            f"failures={len(result.failures)} errors={len(result.errors)}"
+            f"failures={len(result.failures)} errors={len(result.errors)}{detail}"
         )
 
 

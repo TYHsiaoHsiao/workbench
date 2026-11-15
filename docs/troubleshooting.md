@@ -165,7 +165,7 @@
 - 文档链接检查报 MISSING：按提示的文件:行号修复相对路径，或确认该路径属于运行时目录（`00_project/` 等）而非仓库文件；检查器跳过 URL、`/api/...` 与占位符路径。
 - CLI 冷启动基准超限：多为机器负载或磁盘抖动导致，重跑即可；如持续超 1.0s，检查是否有第三方包被意外引入（运行时零依赖）。
 - 发行包冒烟失败：先看 `dist/workbench-<版本>.sha256` 与 zip 是否匹配；解压目录须含顶层 `workbench/workbench.py`，`manifest.json` 版本须与 `VERSION` 一致；重新执行 `build_manifest.py` 与 `build_release.py`。
-- 行覆盖率低于 75%：用 `python scripts/coverage_check.py --json` 查看低覆盖文件与行数，补测试或清理死代码；门槛在 `run_ci.py` 的 `--min 75`。
+- 行覆盖率低于 80%：用 `python scripts/coverage_check.py --json` 查看低覆盖文件与行数，补测试或清理死代码；门槛在 `run_ci.py` 的 `--min 80`。
 - 可复现构建校验失败：确认 `build_release.py` 的时间戳/权限逻辑未被改动，且 `.sha256` 与 zip 同时重建；`python scripts/repro_check.py` 应报告两次构建一致。
 - GitHub Actions 未触发：本机无 remote 时 workflow 不会跑；先 `git remote add origin <url>` 并 push 分支，再用 `workflow_dispatch` 手动触发；本地等价为 `python scripts/run_ci.py`。
 - 索引构建报「当前 SQLite 不支持 FTS5 trigram tokenizer」：Python 内置 SQLite 需 ≥3.34；Windows 建议使用 Python 3.12 官方发行版，必要时改用短查询 LIKE 回退（功能受限）。

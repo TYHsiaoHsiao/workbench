@@ -896,5 +896,34 @@ class WebUIApiTest(unittest.TestCase):
         self.assertEqual(first["signature"], third["signature"])
 
 
+    def test_http_error_paths(self) -> None:
+        status, data = self.client.json("GET", "/api/does-not-exist")
+        self.assertEqual(404, status)
+        self.assertFalse(data["ok"])
+        status, data = self.client.json("POST", "/api/does-not-exist", {})
+        self.assertEqual(404, status)
+        self.assertFalse(data["ok"])
+        status, data = self.client.json("GET", self._q("/api/workflows/missing-flow"))
+        self.assertEqual(400, status, msg=data)
+        status, data = self.client.json("GET", self._q("/api/runs/run-does-not-exist"))
+        self.assertEqual(400, status, msg=data)
+        status, data = self.client.json("GET", self._q("/api/batches/batch-does-not-exist"))
+        self.assertEqual(400, status, msg=data)
+        status, data = self.client.json("POST", self._q("/api/queue"), {"graph_ids": []})
+        self.assertEqual(400, status, msg=data)
+        status, data = self.client.json("POST", "/api/queue/run", {})
+        self.assertEqual(200, status, msg=data)
+        self.assertTrue(data["ok"])
+        status, data = self.client.json("POST", "/api/queue/q-missing/retry", {"project": str(self.project)})
+        self.assertEqual(400, status, msg=data)
+        status, data = self.client.json("POST", "/api/queue/q-missing/cancel", {"project": str(self.project)})
+        self.assertEqual(400, status, msg=data)
+        status, data = self.client.json("GET", "/api/queue/notifications")
+        self.assertEqual(200, status, msg=data)
+        self.assertTrue(data["ok"])
+        status, raw = self.client.request("HEAD", "/")
+        self.assertIn(status, (200, 404, 501), msg=raw)
+
+
 if __name__ == "__main__":
     unittest.main()

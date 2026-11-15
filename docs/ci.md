@@ -12,7 +12,7 @@
 | doc-links | `scripts/check_doc_links.py` | Markdown/行内代码引用了不存在的仓库路径 |
 | fr-mapping | `scripts/check_fr_mapping.py` | 需求追溯表缺 FR / 重复 / 与 PRD §6 不一致 |
 | tests | `python -m unittest discover -s tests` | 单元/契约/集成测试失败 |
-| coverage | `scripts/coverage_check.py --min 75` | 行覆盖率低于 75% |
+| coverage | `scripts/coverage_check.py --min 80` | 行覆盖率低于 80% |
 | doctor | `python workbench.py doctor` | 环境/契约/注册表自检失败 |
 | bench | `scripts/bench.py --enforce --max-cold-start 1.0` | CLI 冷启动 P50 超过 1.0s |
 | brand-guard | `python workbench.py brand-guard` | 品牌禁用词命中 |
@@ -35,7 +35,7 @@
 ```bash
 python scripts/run_ci.py                     # 九步门禁
 python scripts/coverage_check.py --json      # 行覆盖率报告（机器可读）
-python scripts/coverage_check.py --min 75    # 强制门禁
+python scripts/coverage_check.py --min 80    # 强制门禁
 python scripts/repro_check.py --json         # 可复现构建校验
 python scripts/build_release.py              # 生成发行包与 .sha256
 python scripts/package_smoke.py              # 发行包冒烟
@@ -45,8 +45,8 @@ python scripts/package_smoke.py              # 发行包冒烟
 
 - 测试对象：`packages/`（`workbench.py` 为 6 行入口，不计入，避免 0% 稀释）。
 - 口径：AST 可执行行（跳过 docstring、纯 `import`），运行 `tests/` 时用 `sys.monitoring`（Python 3.12+）或 `trace`（旧版本）统计命中行。
-- 实测（2.10.0）：**77.37%（6017/7777 行）**，CI 门禁 `--min 75`。
-- 与 PRD 目标的差距：PRD §7 要求测试覆盖率 ≥80%，当前低 2.63pp；提升策略见 `docs/requirements-traceability.md` 与 §9.25。新增代码必须带测试，覆盖率只增不减。
+- 实测（2.11.0）：**80.8%（6284/7777 行）**，CI 门禁 `--min 80`。
+- 与 PRD 目标：PRD §7 要求测试覆盖率 ≥80%，2.11.0 实测 80.8%，**已达标**；新增代码必须带测试，覆盖率只增不减。
 
 ## 5. 可复现构建
 

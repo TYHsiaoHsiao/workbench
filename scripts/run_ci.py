@@ -25,7 +25,7 @@ def main() -> int:
         ("doc-links", [sys.executable, "scripts/check_doc_links.py"]),
         ("fr-mapping", [sys.executable, "scripts/check_fr_mapping.py"]),
         ("tests", [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"]),
-        ("coverage", [sys.executable, "scripts/coverage_check.py", "--min", "75"]),
+        ("coverage", [sys.executable, "scripts/coverage_check.py", "--min", "80"]),
         ("doctor", [sys.executable, "workbench.py", "doctor"]),
         ("bench", [sys.executable, "scripts/bench.py", "--enforce", "--max-cold-start", "1.0"]),
         ("brand-guard", [sys.executable, "workbench.py", "brand-guard"]),
