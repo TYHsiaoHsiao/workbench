@@ -55,7 +55,17 @@ from flow import (
     Runner,
     build_replay,
     compare_runs,
+    create_snapshot,
+    diff_snapshots,
+    diff_with_current,
     format_compare_text,
+    format_diff_text,
+    get_baseline,
+    clear_baseline,
+    list_baselines,
+    list_snapshots,
+    read_snapshot,
+    set_baseline,
     default_graph,
     format_replay_text,
     instantiate_template,
@@ -1423,7 +1433,7 @@ def cmd_project_summary(args: argparse.Namespace) -> int:
         project = resolve_project(args.project)
     except FlowError as exc:
         print(f"错误: {exc}")
-        return EXIT_FAILURE
+        return EXIT_FAIL
     state = load_state(project)
     artifacts = []
     for stage, summary in (state.get("stage_artifacts") or {}).items():
@@ -1491,19 +1501,195 @@ def cmd_project_summary(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _regression_violations(diff: dict[str, Any], max_regressions: int, max_delta_ms: int | None) -> list[str]:
+    summary = diff.get("summary") or {}
+    violations: list[str] = []
+    regressed = int(summary.get("regressed") or 0)
+    if regressed > max_regressions:
+        violations.append(f"回归节点 {regressed} 个，超过上限 {max_regressions}")
+    if max_delta_ms is not None:
+        delta = int(summary.get("total_delta_ms") or 0)
+        if delta > max_delta_ms:
+            violations.append(f"总耗时增加 {delta}ms，超过上限 {max_delta_ms}ms")
+    return violations
+
+
 def cmd_flow_diff(args: argparse.Namespace) -> int:
     try:
         project = resolve_project(args.project)
-        base = read_run(project, args.run)
-        target = read_run(project, args.other_run)
+        baseline_mode = bool(getattr(args, "baseline", False))
+        if baseline_mode:
+            if not args.other_run:
+                print("错误: --baseline 模式需要 --other-run 指定目标运行")
+                return EXIT_USAGE
+            target = read_run(project, args.other_run)
+            graph_id = args.graph or str(target.get("graph_id") or "")
+            if not graph_id:
+                print("错误: 无法确定流程图 ID，请提供 --graph")
+                return EXIT_USAGE
+            entry = get_baseline(project, graph_id)
+            if entry is None:
+                print(f"错误: 流程图 {graph_id} 尚未保存运行基线（先运行 flow baseline set）")
+                return EXIT_FAIL
+            base = {
+                "run_id": entry.get("run_id"),
+                "graph_id": graph_id,
+                "status": entry.get("status"),
+                "mode": entry.get("mode"),
+                "dry_run": entry.get("dry_run"),
+                "started_at": entry.get("started_at"),
+                "finished_at": entry.get("finished_at"),
+                "steps": entry.get("steps") or [],
+            }
+        else:
+            if not args.run or not args.other_run:
+                print("错误: 需要 --run 与 --other-run（或 --baseline --other-run）")
+                return EXIT_USAGE
+            base = read_run(project, args.run)
+            target = read_run(project, args.other_run)
         diff = compare_runs(base, target)
     except FlowError as exc:
         print(f"错误: {exc}")
-        return EXIT_FAILURE
+        return EXIT_FAIL
+    violations = _regression_violations(
+        diff,
+        max_regressions=int(getattr(args, "max_regressions", 0) or 0),
+        max_delta_ms=getattr(args, "max_delta_ms", None),
+    )
+    ok = not violations
+    if args.json:
+        payload = {
+            "ok": True,
+            "project": str(project),
+            "diff": diff,
+            "regression": {
+                "ok": ok,
+                "max_regressions": int(getattr(args, "max_regressions", 0) or 0),
+                "max_delta_ms": getattr(args, "max_delta_ms", None),
+                "violations": violations,
+            },
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(format_compare_text(diff))
+        if violations:
+            for item in violations:
+                print(f"[回归告警] {item}")
+    if getattr(args, "fail_on_regression", False) and not ok:
+        return EXIT_FAIL
+    return EXIT_OK
+
+
+def cmd_flow_baseline_set(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        run = read_run(project, args.run)
+        graph_id = args.graph or str(run.get("graph_id") or "")
+        if not graph_id:
+            print("错误: 无法确定流程图 ID，请提供 --graph")
+            return EXIT_USAGE
+        entry = set_baseline(project, graph_id, args.run, run)
+    except FlowError as exc:
+        print(f"错误: {exc}")
+        return EXIT_FAIL
+    if args.json:
+        print(json.dumps({"ok": True, "project": str(project), "baseline": entry}, ensure_ascii=False, indent=2))
+    else:
+        print(f"已保存运行基线：图 {graph_id} ← 运行 {entry['run_id']}（{entry.get('saved_at')}）")
+    return EXIT_OK
+
+
+def cmd_flow_baseline_show(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        if args.graph:
+            entry = get_baseline(project, args.graph)
+            entries = {args.graph: entry} if entry else {}
+        else:
+            entries = list_baselines(project)
+    except FlowError as exc:
+        print(f"错误: {exc}")
+        return EXIT_FAIL
+    if args.json:
+        print(json.dumps({"ok": True, "project": str(project), "baselines": entries}, ensure_ascii=False, indent=2))
+    else:
+        if not entries:
+            print("尚无运行基线")
+        for graph_id, entry in sorted(entries.items()):
+            print(
+                f"- {graph_id}: 运行 {entry.get('run_id')} · {entry.get('status')}"
+                f" · 保存于 {entry.get('saved_at')}"
+            )
+    return EXIT_OK
+
+
+def cmd_flow_baseline_clear(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        removed = clear_baseline(project, args.graph)
+    except FlowError as exc:
+        print(f"错误: {exc}")
+        return EXIT_FAIL
+    if args.json:
+        print(json.dumps({"ok": True, "project": str(project), "cleared": removed, "graph_id": args.graph}, ensure_ascii=False, indent=2))
+    else:
+        print(f"已清除基线: {args.graph}" if removed else f"没有找到基线: {args.graph}")
+    return EXIT_OK
+
+
+def cmd_project_snapshot(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        record = create_snapshot(project, label=args.label)
+    except FlowError as exc:
+        print(f"错误: {exc}")
+        return EXIT_FAIL
+    if args.json:
+        print(json.dumps({"ok": True, "project": str(project), "snapshot": record}, ensure_ascii=False, indent=2))
+    else:
+        summary = record.get("summary") or {}
+        print(
+            f"已创建产物快照 {record['snapshot_id']}"
+            f"（{summary.get('count', 0)} 文件 / {summary.get('bytes', 0)} 字节）"
+        )
+    return EXIT_OK
+
+
+def cmd_project_artifacts_diff(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        if getattr(args, "base", None) and getattr(args, "target", None):
+            diff = diff_snapshots(project, args.base, args.target)
+        else:
+            diff = diff_with_current(project, getattr(args, "base", None))
+    except FlowError as exc:
+        print(f"错误: {exc}")
+        return EXIT_FAIL
     if args.json:
         print(json.dumps({"ok": True, "project": str(project), "diff": diff}, ensure_ascii=False, indent=2))
     else:
-        print(format_compare_text(diff))
+        print(format_diff_text(diff))
+    return EXIT_OK
+
+
+def cmd_project_snapshots(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        items = list_snapshots(project)
+    except FlowError as exc:
+        print(f"错误: {exc}")
+        return EXIT_FAIL
+    if args.json:
+        print(json.dumps({"ok": True, "project": str(project), "snapshots": items}, ensure_ascii=False, indent=2))
+    else:
+        if not items:
+            print("尚无产物快照")
+        for item in items:
+            print(
+                f"- {item['snapshot_id']} · {item.get('created_at')}"
+                f" · {item.get('count')} 文件 · {item.get('bytes')} 字节"
+                + (f" · {item['label']}" if item.get("label") else "")
+            )
     return EXIT_OK
 
 
@@ -1573,6 +1759,21 @@ def build_parser() -> argparse.ArgumentParser:
     project_summary.add_argument("--project", required=True, help="项目名或项目路径")
     project_summary.add_argument("--json", action="store_true", help="以 JSON 输出")
     project_summary.set_defaults(func=cmd_project_summary)
+    project_snapshot = project_sub.add_parser("snapshot", help="为当前产物创建快照（用于差异对比）")
+    project_snapshot.add_argument("--project", required=True, help="项目名或项目路径")
+    project_snapshot.add_argument("--label", help="快照备注（可选）")
+    project_snapshot.add_argument("--json", action="store_true", help="以 JSON 输出")
+    project_snapshot.set_defaults(func=cmd_project_snapshot)
+    project_snapshots = project_sub.add_parser("snapshots", help="列出项目的产物快照")
+    project_snapshots.add_argument("--project", required=True, help="项目名或项目路径")
+    project_snapshots.add_argument("--json", action="store_true", help="以 JSON 输出")
+    project_snapshots.set_defaults(func=cmd_project_snapshots)
+    project_diff = project_sub.add_parser("artifacts-diff", help="对比产物快照与当前磁盘（或两个快照）")
+    project_diff.add_argument("--project", required=True, help="项目名或项目路径")
+    project_diff.add_argument("--base", help="基线快照 ID（缺省为最近一次快照）")
+    project_diff.add_argument("--target", help="目标快照 ID（提供则对比两个快照）")
+    project_diff.add_argument("--json", action="store_true", help="以 JSON 输出")
+    project_diff.set_defaults(func=cmd_project_artifacts_diff)
     project_list.set_defaults(func=cmd_project_list)
 
     route = sub.add_parser("route", help="意图路由：维护口令 / 知识库 / 阶段 / 入口 / 修订")
@@ -1852,10 +2053,34 @@ def build_parser() -> argparse.ArgumentParser:
 
     flow_diff = flow_sub.add_parser("diff", help="对比两次运行（状态/耗时/回归）")
     flow_diff.add_argument("--project", required=True, help="项目名或项目路径")
-    flow_diff.add_argument("--run", required=True, help="基准 run_id（较早）")
+    flow_diff.add_argument("--run", help="基准 run_id（较早；--baseline 模式下可省略）")
     flow_diff.add_argument("--other-run", required=True, help="对比 run_id（较新）")
+    flow_diff.add_argument("--graph", help="流程图 ID（--baseline 模式用于定位基线）")
+    flow_diff.add_argument("--baseline", action="store_true", help="使用已保存的运行基线作为基准")
+    flow_diff.add_argument("--fail-on-regression", action="store_true", help="出现回归时以非零退出（CI 用）")
+    flow_diff.add_argument("--max-regressions", type=int, default=0, help="允许的回归节点数上限（默认 0）")
+    flow_diff.add_argument("--max-delta-ms", type=int, default=None, help="允许的总耗时增加上限（毫秒）")
     flow_diff.add_argument("--json", action="store_true", help="以 JSON 输出")
     flow_diff.set_defaults(func=cmd_flow_diff)
+
+    flow_baseline = flow_sub.add_parser("baseline", help="保存/查看/清除运行基线（回归对比用）")
+    baseline_sub = flow_baseline.add_subparsers(dest="baseline_command", required=True)
+    baseline_set = baseline_sub.add_parser("set", help="把一次运行保存为基线")
+    baseline_set.add_argument("--project", required=True, help="项目名或项目路径")
+    baseline_set.add_argument("--run", required=True, help="run_id")
+    baseline_set.add_argument("--graph", help="流程图 ID（缺省取运行记录内的 graph_id）")
+    baseline_set.add_argument("--json", action="store_true", help="以 JSON 输出")
+    baseline_set.set_defaults(func=cmd_flow_baseline_set)
+    baseline_show = baseline_sub.add_parser("show", help="查看已保存的基线")
+    baseline_show.add_argument("--project", required=True, help="项目名或项目路径")
+    baseline_show.add_argument("--graph", help="只查看指定流程图")
+    baseline_show.add_argument("--json", action="store_true", help="以 JSON 输出")
+    baseline_show.set_defaults(func=cmd_flow_baseline_show)
+    baseline_clear = baseline_sub.add_parser("clear", help="清除流程图基线")
+    baseline_clear.add_argument("--project", required=True, help="项目名或项目路径")
+    baseline_clear.add_argument("--graph", required=True, help="流程图 ID")
+    baseline_clear.add_argument("--json", action="store_true", help="以 JSON 输出")
+    baseline_clear.set_defaults(func=cmd_flow_baseline_clear)
 
     flow_export = flow_sub.add_parser("export", help="导出流程图 JSON（stdout 或 --out）")
     flow_export.add_argument("--file", help="直接导出指定流程图 JSON 文件")

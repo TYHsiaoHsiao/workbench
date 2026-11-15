@@ -1,5 +1,15 @@
 # 变更日志
 
+## [1.6.0] - 2026-11-15 — 可视化节点工作台（M7：条件分支、循环、运行基线与产物快照）
+
+- 控制流节点：新增 `condition`（`when` 表达式，走 true/false 分支）与 `loop`（`max_iterations` 1–10、`until` 表达式、body 单链）两类节点；新增 `true` / `false` / `body` / `done` 端口；图校验支持条件/循环语义（分支唯一出边、循环 body 白名单、禁止嵌套）。
+- 运行期：`conditions.evaluate` 安全表达式求值（不使用 eval）；执行引擎按分支剪枝（未选分支下游标记 skipped）、循环按迭代展开（步骤记录 `iteration`，循环节点记录 `iterations`），`until` 为真时提前退出。
+- 回归基线：`flow baseline set/show/clear`；`flow diff --baseline [--fail-on-regression] [--max-regressions N] [--max-delta-ms N]` 可在 CI 中作为回归闸门。
+- 产物快照：`project snapshot / snapshots / artifacts-diff` 与 Web 预览面板「创建产物快照 / 产物差异」；快照只记录路径、sha256 与大小，不复制内容。
+- 项目摘要缓存：`GET /api/projects/<name>/summary` 按 state/workflows/runs/artifacts 最新 mtime 签名缓存，`?refresh=1` 强制刷新。
+- 测试：新增 15 项（条件 5、基线 2、产物 3、控制流 2、Web API 3），合计 262 项通过；doctor 8 项、本地 CI 全绿、品牌守卫 0 命中。
+- 兼容：契约仍为 1.0，新增字段均为可选，旧流程图与项目无需迁移。
+
 ## [1.5.0] - 2026-11-15 — 可视化节点工作台（M6：状态锁、运行对比、项目预览）
 
 - 写状态节点安全并行：新增 `packages/flow/locks.py`（项目级文件锁 `00_project/.locks/state.lock`，陈旧锁自动清理、超时抛 `LockError`）与事务日志 `00_project/history/transactions.jsonl`；`knowledge_search` / `style_apply` / `style_inject` / `artifact_register` 等写节点持锁执行并标记 `parallel_safe`，可在并行波次中安全运行；`NodeContext.run_id` 写入事务记录。

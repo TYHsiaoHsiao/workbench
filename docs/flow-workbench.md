@@ -1,6 +1,6 @@
-# 可视化节点工作台（M1 / M2 / M3 / M4 / M5 / M6）
+# 可视化节点工作台（M1 / M2 / M3 / M4 / M5 / M6 / M7）
 
-> 版本：1.5.0 · 状态：M1–M6 已完成 · 适用范围：本地单用户
+> 版本：1.6.0 · 状态：M1–M7 已完成 · 适用范围：本地单用户
 
 ## 1. 定位
 
@@ -67,7 +67,13 @@ packages/flow/            packages/cli/main.py
 core_router（state/门禁/advance） · knowledge_service · style_service · contracts · brand_guard
 ```
 
-## 4. 节点类型（10 类）
+## 4. 节点类型（12 类）
+
+两类 M7 控制流节点（详见 §14）：
+
+- `condition`：输入 state/artifact/text/card/log，输出 `true` / `false` 两支；参数 `when`（默认 `always`，支持 `state.stage`、`state.version`、`iteration` 的比较表达式）。
+- `loop`：输入 state，输出 `body` / `done`；参数 `max_iterations`（1–10，默认 3）与 `until`（默认 `never`）；body 为单链（阶段/知识/风格/产物/检查/导出），运行期按迭代展开，步骤记录 `iteration`、循环节点记录 `iterations`。
+
 
 | 类型 | 分类 | 输入端口 | 输出端口 | 关键参数 | 执行语义 |
 |---|---|---|---|---|---|
@@ -217,7 +223,15 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - 运行对比：`flow diff --project P --run A [--other-run B] [--json]` 或 Web API `GET /api/runs/<id>/diff?other=`；输出每节点状态变化、耗时差、回归/改善计数。
 - 项目摘要与预览：`project summary --project P` 与 `GET /api/projects/<name>/summary` 汇总已登记产物文件、流程图节点/边与运行数；Web 项目面板「预览」展示产物列表与流程图 SVG 缩略图，点击缩略图直接切换项目并加载该图。
 
-## 14. 已知限制
+## 14. 控制流、运行基线与产物快照（M7）
+
+- 条件分支：`condition` 节点求值 `when` 表达式（`always` / `never` / `state.stage == 0N|done` / `state.version >= vNN` / `iteration < N` 等），只走 true 或 false 一条出边；未选分支的下游节点在运行记录中标记 `skipped`，dry-run 同样剪枝。
+- 循环：`loop` 节点把 body 单链按 `max_iterations` 展开执行，每轮结束求值 `until`，为真提前退出；每个 body 步骤记录 `iteration`，循环节点记录 `iterations`。不支持嵌套循环；`loop` 本身不可直接执行（由执行引擎展开）。
+- 运行基线：`flow baseline set --project P --run R [--graph G]` 保存一次运行作为基线；`flow diff --baseline [--fail-on-regression] [--max-regressions N] [--max-delta-ms N]` 与基线对比，回归超阈值时退出码 1，可作为 CI 闸门；`flow baseline show/clear` 查看与清除。
+- 产物快照：`project snapshot --project P [--label L]` 对 01_story…06_prompts 下的文件记录路径、sha256 与大小（不复制内容）；`project snapshots` / `project artifacts-diff [--base ID] [--target ID]` 查看与当前或两份快照的差异；Web 项目预览面板提供「创建产物快照」「产物差异」按钮与差异文本。
+- 摘要缓存：`GET /api/projects/<name>/summary` 按 state/workflows/runs/artifacts 最新 mtime 签名缓存，`?refresh=1` 强制刷新；CLI `project summary` 不受缓存影响。
+
+## 15. 已知限制
 
 1. 图与 state 仍为单向（图 → state）；不支持从现有 state 自动反推流程图。
 2. 阶段节点要求当前项目阶段与节点一致；跨阶段自由回退需显式编排并自行确认。
@@ -227,20 +241,22 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 6. 状态锁只对同一台机器的进程有效；跨机器并发写同一项目不在支持范围。
 7. 运行对比按 `node_id` 对齐；图结构变化较大时会出现 added/removed 噪声。
 8. 项目预览只读取已登记产物与 `00_project/workflows/` 下的图，不扫描未登记的目录。
+9. 循环只支持单链 body 且不能嵌套；body 内节点不能直接作为运行目标。
+10. 条件表达式只支持预定义比较形式，不支持任意函数/布尔表达式；运行对比按 node_id 对齐，图结构变化大时会出现 added/removed 噪声。
 
-## 15. 验证
+## 16. 验证
 
 - 新增 22 项 flow 测试（图校验 12、执行引擎 10）+ 12 项 Web API 测试（M1）；M2/M3 新增 18 项（模板 6、能力节点 6、runner 2、Web API 4）。
 - 全量 `Ran 222 tests ... OK`；CLI 冒烟：模板实例化、dry-run、运行历史、批量预演、失败恢复（live 恢复后 01→02）；`doctor` 8 项含 flow 模板检查。
 - M4（1.3.0）新增 5 项回放/导入导出测试 + 2 项 Web API，全量 `Ran 229 tests ... OK`；CLI 冒烟：模板图 → dry-run → replay → export → import → 非法导入被拒。
 - M6（1.5.0）新增 11 项测试（状态锁 5、运行对比 3、并行写锁集成 1、Web API 2），全量 `Ran 247 tests ... OK`；CLI 冒烟：两次 dry-run → `project summary` → `flow diff` → `project list --stats` → `doctor` / `flow validate` 通过。
+- M7（1.6.0）新增 15 项测试（条件 5、基线 2、产物 3、控制流 2、Web API 3），全量 `Ran 262 tests ... OK`；CLI 冒烟：条件剪枝、循环展开、基线回归退出码、产物快照差异。
 - 本地 CI `scripts/run_ci.py`：compile / tests / doctor / brand-guard 全 PASS；品牌守卫 0 命中。
 
-## 16. 后续（M7 候选）
+## 17. 后续（M8 候选）
 
-- 条件分支与循环节点（图级 DAG + 运行期选路）。
-- 运行对比的基线保存与回归阈值告警（CI 化）。
-- 项目预览的缩略图缓存与产物体积/差异视图。
-- 知识卡/风格卡确认后自动写入参考记忆的复合节点。
-- 与真实生成平台的 API 对接（Seedance / H3 等）。
-- macOS 实跑与 GitHub Actions 远端 CI 矩阵。
+- 复合节点（知识卡/风格卡确认后自动写入参考记忆）。
+- 与真实生成平台 API 对接（Seedance / H3 等）。
+- 运行基线的定时巡检与趋势图、缩略图文件缓存落盘。
+- macOS / GitHub Actions 远端矩阵与迁移用例扩充。
+

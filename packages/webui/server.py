@@ -27,10 +27,17 @@ from flow import (
     Runner,
     build_replay,
     compare_runs,
+    create_snapshot,
     default_graph,
+    diff_snapshots,
+    diff_with_current,
+    format_diff_text,
+    get_baseline,
     instantiate_template,
+    list_baselines,
     list_graphs,
     list_runs,
+    list_snapshots,
     load_node_types,
     load_templates,
     read_graph_data,
@@ -121,6 +128,22 @@ def _list_projects() -> list[dict[str, Any]]:
     return list(found.values())
 
 
+def _project_signature(project_root: Path) -> float:
+    """项目摘要缓存签名：state 与 workflows/runs 目录的最新修改时间。"""
+    latest = 0.0
+    for path in (
+        project_root / "00_project" / "state.json",
+        project_root / "00_project" / "workflows",
+        project_root / "00_project" / "workflows" / "runs",
+        project_root / "00_project" / "workflows" / "artifacts",
+    ):
+        try:
+            latest = max(latest, path.stat().st_mtime)
+        except OSError:
+            continue
+    return latest
+
+
 class WorkbenchServer(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
@@ -130,6 +153,7 @@ class WorkbenchServer(ThreadingHTTPServer):
         self.project_root = Path(project_root)
         self.token = token
         self.sessions: dict[str, Runner] = {}
+        self.summary_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
 
 class WorkbenchHandler(BaseHTTPRequestHandler):
@@ -284,9 +308,39 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
         if path == "/api/projects":
             self._json({"ok": True, "projects": _list_projects()})
             return
+        if path.startswith("/api/projects/") and path.endswith("/artifacts/snapshots"):
+            name = unquote(path[len("/api/projects/"): -len("/artifacts/snapshots")]).strip("/")
+            project = resolve_project(name)
+            self._json({"ok": True, "project": project.name, "snapshots": list_snapshots(project)})
+            return
+        if path.startswith("/api/projects/") and path.endswith("/artifacts/diff"):
+            name = unquote(path[len("/api/projects/"): -len("/artifacts/diff")]).strip("/")
+            project = resolve_project(name)
+            base = (query.get("base") or [None])[0]
+            target = (query.get("target") or [None])[0]
+            if base and target:
+                diff = diff_snapshots(project, base, target)
+            else:
+                diff = diff_with_current(project, base)
+            self._json({"ok": True, "project": project.name, "diff": diff, "text": format_diff_text(diff)})
+            return
         if path.startswith("/api/projects/") and path.endswith("/summary"):
             name = unquote(path[len("/api/projects/"): -len("/summary")]).strip("/")
             project = resolve_project(name)
+            refresh = "refresh" in query
+            # 先确保 workflows/runs 目录存在，再取签名，避免首次请求建目录导致签名漂移。
+            from flow.store import runs_dir, workflows_dir
+
+            runs_dir(project)
+            workflows_dir(project)
+            signature = _project_signature(project)
+            cache_key = str(project)
+            cached = self.server.summary_cache.get(cache_key)
+            if not refresh and cached is not None and cached[0] == signature:
+                payload = dict(cached[1])
+                payload["cached"] = True
+                self._json(payload)
+                return
             state = load_state(project)
             artifacts = []
             for stage, summary in (state.get("stage_artifacts") or {}).items():
@@ -331,20 +385,21 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     }
                 )
             runs = list_runs(project, limit=20)
-            self._json(
-                {
-                    "ok": True,
-                    "project": project.name,
-                    "path": str(project),
-                    "stage": state.get("stage"),
-                    "version": state.get("version"),
-                    "entry": state.get("entry"),
-                    "artifacts": artifacts,
-                    "graphs": graphs,
-                    "runs": len(runs),
-                    "latest_runs": runs[:5],
-                }
-            )
+            payload = {
+                "ok": True,
+                "project": project.name,
+                "path": str(project),
+                "stage": state.get("stage"),
+                "version": state.get("version"),
+                "entry": state.get("entry"),
+                "artifacts": artifacts,
+                "graphs": graphs,
+                "runs": len(runs),
+                "latest_runs": runs[:5],
+                "cached": False,
+            }
+            self.server.summary_cache[cache_key] = (signature, payload)
+            self._json(payload)
             return
         if path == "/api/node-types":
             registry = load_node_types()
@@ -367,6 +422,20 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 except ValueError:
                     pass
             self._json({"ok": True, "project": str(project), "runs": list_runs(project, limit=limit)})
+            return
+        if path.startswith("/api/workflows/") and path.endswith("/baseline"):
+            project = self._project_from(query)
+            graph_id = unquote(path[len("/api/workflows/"): -len("/baseline")]).strip("/")
+            entry = get_baseline(project, graph_id)
+            self._json(
+                {
+                    "ok": True,
+                    "project": str(project),
+                    "graph_id": graph_id,
+                    "baseline": entry,
+                    "baselines": list_baselines(project),
+                }
+            )
             return
         if path.startswith("/api/workflows/"):
             project = self._project_from(query)
@@ -415,6 +484,32 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
         self._error("not found", HTTPStatus.NOT_FOUND)
 
     def _api_post(self, path: str, query: dict[str, list[str]], body: dict[str, Any]) -> None:
+        if path.startswith("/api/projects/") and path.endswith("/artifacts/snapshot"):
+            name = unquote(path[len("/api/projects/"): -len("/artifacts/snapshot")]).strip("/")
+            project = resolve_project(name)
+            record = create_snapshot(project, label=str(body.get("label") or "") or None)
+            self._json({"ok": True, "project": project.name, "snapshot": record})
+            return
+        if path.startswith("/api/workflows/") and path.endswith("/baseline/clear"):
+            project = self._project_from(query) if query.get("project") else resolve_project(body.get("project") or str(self.server.project_root))
+            graph_id = unquote(path[len("/api/workflows/"): -len("/baseline/clear")]).strip("/")
+            from flow import clear_baseline
+
+            removed = clear_baseline(project, graph_id)
+            self._json({"ok": True, "project": str(project), "graph_id": graph_id, "cleared": removed})
+            return
+        if path.startswith("/api/workflows/") and path.endswith("/baseline"):
+            project = self._project_from(query) if query.get("project") else resolve_project(body.get("project") or str(self.server.project_root))
+            graph_id = unquote(path[len("/api/workflows/"): -len("/baseline")]).strip("/")
+            from flow import set_baseline
+
+            run_id = str(body.get("run_id") or "").strip()
+            if not run_id:
+                raise FlowError("缺少 run_id")
+            run = read_run(project, run_id)
+            entry = set_baseline(project, graph_id, run_id, run)
+            self._json({"ok": True, "project": str(project), "baseline": entry})
+            return
         if path == "/api/workflows/new":
             project = self._project_from(query) if query.get("project") else resolve_project(body.get("project") or str(self.server.project_root))
             name = str(body.get("name") or "").strip()

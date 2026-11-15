@@ -13,7 +13,15 @@ from typing import Any, Callable
 from core_router.project import load_state
 
 from . import store
-from .graph import FlowError, Graph, order_for_mode, validate_graph
+from .conditions import ConditionError, evaluate
+from .graph import (
+    LOOP_TYPE,
+    FlowError,
+    Graph,
+    loop_plan_for,
+    order_for_mode,
+    validate_graph,
+)
 from .nodes import NodeContext, NodeError, NodeResult, get_executor
 from .registry import NodeTypeRegistry, load_node_types
 
@@ -75,6 +83,8 @@ class Runner:
         self.waiting_index: int | None = None
         self.session_active = False
         self.record: dict[str, Any] = {}
+        # M7：分支选择状态。node_id -> None 表示全部输出端口有效，set() 表示无有效端口。
+        self.emitted: dict[str, set[str] | None] = {}
 
     # -- 公共入口 -----------------------------------------------------
     def run(self, mode: str = "full", target: str | None = None) -> dict[str, Any]:
@@ -82,6 +92,7 @@ class Runner:
             raise FlowError("流程图校验失败: " + "; ".join(self.validation["errors"]))
         self.order = order_for_mode(self.graph, mode=mode, target=target)
         self.cursor = 0
+        self.emitted = {}
         self.session_active = True
         self.record = {
             "contract_version": "0.1",
@@ -123,6 +134,7 @@ class Runner:
         step["ended_at"] = _now()
         step["state_after"] = _state_snapshot(self.project_root)
         self.waiting_index = None
+        self.emitted[step["node_id"]] = None
         self.cursor += 1
         self._emit("confirm_resumed", {"node_id": step["node_id"]})
         self._continue()
@@ -192,13 +204,136 @@ class Runner:
             {"node_id": step["node_id"], "status": step["status"], "outputs": step["outputs"]},
         )
 
+    def _node_reachable(self, node_id: str) -> bool:
+        """M7：判断节点是否仍可能执行（上游分支未被选中时整条支路跳过）。"""
+        incoming = self.graph.incoming(node_id)
+        if not incoming:
+            return True
+        for edge in incoming:
+            if edge.from_node not in self.emitted:
+                continue
+            ports = self.emitted[edge.from_node]
+            if ports is None or edge.from_port in ports:
+                return True
+        return False
+
+    def _skip_step(self, node_id: str, message: str) -> None:
+        node = self.graph.node(node_id)
+        step = self._begin_step(node_id, node)
+        step["status"] = "skipped"
+        step["ended_at"] = _now()
+        step["logs"] = list(step["logs"]) + [message]
+        self.emitted[node_id] = set()
+        self.cursor += 1
+        self._save()
+        self._emit("node_skipped", {"node_id": node_id, "reason": message})
+
+    def _complete_body_step(self, step: dict[str, Any]) -> None:
+        step["status"] = "succeeded"
+        step["ended_at"] = _now()
+        step["state_after"] = _state_snapshot(self.project_root)
+        self._save()
+
+    def _run_loop(self, node_id: str, node_ctx: NodeContext) -> bool:
+        """执行循环节点：按 max_iterations/until 展开循环体（M7）。"""
+        node = self.graph.node(node_id)
+        step = self._begin_step(node_id, node)
+        step["iterations"] = 0
+        self._save()
+
+        if node.disabled:
+            step.update(status="skipped", ended_at=_now(), logs=["节点已禁用，跳过"])
+            self.emitted[node_id] = set(["done"])
+            self.cursor += 1
+            self._save()
+            self._emit("node_skipped", {"node_id": node_id})
+            return True
+
+        plan = loop_plan_for(self.graph, node_id)
+        body: list[str] = plan["body"]
+        try:
+            max_iterations = max(1, min(10, int(node.params.get("max_iterations", 3) or 3)))
+        except (TypeError, ValueError):
+            max_iterations = 3
+        until = str(node.params.get("until") or "never")
+
+        if self.dry_run:
+            step["status"] = "planned"
+            step["ended_at"] = _now()
+            step["state_after"] = _state_snapshot(self.project_root)
+            step["outputs"] = [
+                f"[dry-run] 循环节点最多迭代 {max_iterations} 次（until={until}），循环体 {len(body)} 个节点"
+            ]
+            self.emitted[node_id] = set(["done"])
+            self.cursor += 1
+            self._save()
+            self._emit("node_finished", {"node_id": node_id, "status": "planned", "outputs": step["outputs"]})
+            return True
+
+        completed = 0
+        for iteration in range(1, max_iterations + 1):
+            for body_id in body:
+                body_node = self.graph.node(body_id)
+                body_step = self._begin_step(body_id, body_node)
+                body_step["iteration"] = iteration
+                self._save()
+                result, attempts, retry_logs, last_error = self._execute_with_retry(body_node, node_ctx)
+                body_step["attempts"] = attempts
+                body_step["logs"] = list(body_step["logs"]) + retry_logs
+                if result is None:
+                    self._fail(body_step, last_error)
+                    return False
+                body_step["outputs"] = list(result.outputs)
+                body_step["logs"] = list(body_step["logs"]) + list(result.logs)
+                if result.error:
+                    self._fail(body_step, result.error)
+                    return False
+                self._complete_body_step(body_step)
+                self.emitted[body_id] = (
+                    None if result.selected_ports is None else set(result.selected_ports)
+                )
+                self._emit(
+                    "node_finished",
+                    {"node_id": body_id, "status": "succeeded", "iteration": iteration},
+                )
+            completed = iteration
+            state = load_state(self.project_root)
+            try:
+                stop = evaluate(until, state, iteration=iteration)
+            except ConditionError as exc:
+                self._fail(step, f"循环结束条件求值失败: {exc}")
+                return False
+            if stop:
+                step["logs"] = list(step["logs"]) + [f"第 {iteration} 次迭代后满足结束条件，提前退出"]
+                break
+
+        step["iterations"] = completed
+        step["status"] = "succeeded"
+        step["ended_at"] = _now()
+        step["state_after"] = _state_snapshot(self.project_root)
+        step["outputs"] = [f"循环完成：{completed} 次迭代（until={until}），循环体 {', '.join(body)}"]
+        self.emitted[node_id] = set(["done"])
+        self.cursor += 1
+        self._save()
+        self._emit("node_finished", {"node_id": node_id, "status": "succeeded", "outputs": step["outputs"]})
+        return True
+
     def _run_one(self, node_id: str, context: NodeContext) -> bool:
         node = self.graph.node(node_id)
+
+        if not self._node_reachable(node_id):
+            self._skip_step(node_id, "上游分支未选中，跳过")
+            return True
+
+        if node.type == LOOP_TYPE:
+            return self._run_loop(node_id, context)
+
         step = self._begin_step(node_id, node)
         self._save()
 
         if node.disabled:
             step.update(status="skipped", ended_at=_now(), logs=["节点已禁用，跳过"])
+            self.emitted[node_id] = set()
             self._emit("node_skipped", {"node_id": node_id})
             self.cursor += 1
             self._save()
@@ -208,14 +343,19 @@ class Runner:
         step["attempts"] = attempts
         step["logs"] = list(step["logs"]) + retry_logs
         if result is None:
+            self.emitted[node_id] = set()
             self._fail(step, last_error)
             return False
 
         step["outputs"] = list(result.outputs)
         step["logs"] = list(step["logs"]) + list(result.logs)
         if result.error:
+            self.emitted[node_id] = set()
             self._fail(step, result.error)
             return False
+        self.emitted[node_id] = (
+            None if result.selected_ports is None else set(result.selected_ports)
+        )
         if result.status == "waiting_confirmation":
             if not self.auto_confirm:
                 step["status"] = "waiting_confirmation"
@@ -245,8 +385,22 @@ class Runner:
     def _run_wave_parallel(self, wave: list[str], context: NodeContext) -> bool:
         from concurrent.futures import ThreadPoolExecutor
 
-        pairs: list[tuple[str, dict[str, Any]]] = []
+        runnable: list[str] = []
         for node_id in wave:
+            node = self.graph.node(node_id)
+            if not self._node_reachable(node_id):
+                self._skip_step(node_id, "上游分支未选中，跳过")
+                continue
+            if node.disabled or node.type == LOOP_TYPE:
+                if not self._run_one(node_id, context):
+                    return False
+                continue
+            runnable.append(node_id)
+        if not runnable:
+            return True
+
+        pairs: list[tuple[str, dict[str, Any]]] = []
+        for node_id in runnable:
             node = self.graph.node(node_id)
             pairs.append((node_id, self._begin_step(node_id, node)))
         self._save()
@@ -268,18 +422,25 @@ class Runner:
             if failure is not None:
                 step["status"] = "skipped"
                 step["ended_at"] = _now()
+                self.emitted[node_id] = set()
                 continue
             if result is None:
+                self.emitted[node_id] = set()
                 failure = (step, last_error)
                 continue
             step["outputs"] = list(result.outputs)
             step["logs"] = list(step["logs"]) + list(result.logs)
             if result.error:
+                self.emitted[node_id] = set()
                 failure = (step, result.error)
                 continue
             if result.status == "waiting_confirmation":
+                self.emitted[node_id] = set()
                 failure = (step, "并行波次内不允许人工确认节点")
                 continue
+            self.emitted[node_id] = (
+                None if result.selected_ports is None else set(result.selected_ports)
+            )
             step["status"] = "planned" if self.dry_run else "succeeded"
             step["ended_at"] = _now()
             step["state_after"] = _state_snapshot(self.project_root)

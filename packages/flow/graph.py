@@ -26,7 +26,28 @@ PORT_COMPAT: dict[str, set[str]] = {
     "knowledge_card": {"knowledge_card", "card", "text", "log", "artifact", "any"},
     "style_card": {"style_card", "card", "text", "log", "artifact", "any"},
     "injection": {"injection", "artifact", "log", "text", "any"},
+    "true": {"true", "state", "artifact", "log", "text", "card", "any"},
+    "false": {"false", "state", "artifact", "log", "text", "card", "any"},
+    "body": {"body", "state", "artifact", "log", "any"},
+    "done": {"done", "state", "artifact", "log", "text", "any"},
     "any": {"any"},
+}
+
+# M7：控制流节点类型
+CONDITION_TYPE = "condition"
+LOOP_TYPE = "loop"
+CONTROL_BRANCH_PORTS = ("true", "false")
+LOOP_BODY_PORT = "body"
+LOOP_DONE_PORT = "done"
+# 循环体内部只允许"无分支、可串行"的内容节点（不支持嵌套循环/条件/确认）
+LOOP_BODY_ALLOWED_TYPES = {
+    "stage",
+    "knowledge_search",
+    "style_apply",
+    "style_inject",
+    "artifact_register",
+    "check_content",
+    "export",
 }
 
 
@@ -190,6 +211,60 @@ class Graph:
         return None
 
 
+def loop_plans(graph: Graph) -> dict[str, dict[str, Any]]:
+    """解析所有循环节点：返回 {loop_id: {body:[node...], body_edges, back_edges, done_edges}}。
+
+    约定：循环节点 body 端口只连一条边，body 内部是一条单向链条，链条末端回到循环节点
+    （构成回边）。校验由 validate_graph 完成；本函数只负责尽可能解析，供调度与执行使用。
+    """
+    plans: dict[str, dict[str, Any]] = {}
+    for node in graph.nodes.values():
+        if node.type != LOOP_TYPE:
+            continue
+        body_edges = [edge for edge in graph.outgoing(node.id) if edge.from_port == LOOP_BODY_PORT]
+        done_edges = [edge for edge in graph.outgoing(node.id) if edge.from_port == LOOP_DONE_PORT]
+        body: list[str] = []
+        back_edges: list[Edge] = []
+        if body_edges:
+            seen: set[str] = set()
+            current: str | None = body_edges[0].to_node
+            while current and current not in seen and current != node.id:
+                if current not in graph.nodes:
+                    break
+                seen.add(current)
+                body.append(current)
+                next_node: str | None = None
+                for edge in graph.outgoing(current):
+                    if edge.to_node == node.id:
+                        back_edges.append(edge)
+                    elif next_node is None:
+                        next_node = edge.to_node
+                current = next_node
+        plans[node.id] = {
+            "loop_id": node.id,
+            "body": body,
+            "body_edges": body_edges,
+            "back_edges": back_edges,
+            "done_edges": done_edges,
+        }
+    return plans
+
+
+def loop_body_nodes_of(graph: Graph) -> set[str]:
+    """返回所有循环体节点集合（调度时由循环节点内部展开执行）。"""
+    body: set[str] = set()
+    for plan in loop_plans(graph).values():
+        body.update(plan["body"])
+    return body
+
+
+def loop_plan_for(graph: Graph, node_id: str) -> dict[str, Any]:
+    plan = loop_plans(graph).get(node_id)
+    if plan is None:
+        raise FlowError(f"节点不是循环节点: {node_id}")
+    return plan
+
+
 def _sort_key(graph: Graph) -> Any:
     def key(node_id: str) -> tuple[float, float, str]:
         node = graph.nodes[node_id]
@@ -199,10 +274,17 @@ def _sort_key(graph: Graph) -> Any:
 
 
 def topo_order(graph: Graph) -> list[str]:
-    """Kahn 拓扑排序；同层按画布位置稳定排序。"""
-    indegree = {node_id: 0 for node_id in graph.nodes}
-    adjacency: dict[str, list[str]] = {node_id: [] for node_id in graph.nodes}
+    """Kahn 拓扑排序；同层按画布位置稳定排序。
+
+    M7：循环体节点不参与主调度顺序（由循环节点内部展开执行），
+    进入循环体的边与回边也从主图中剔除，从而允许"受控环"。
+    """
+    body_nodes = loop_body_nodes_of(graph)
+    indegree = {node_id: 0 for node_id in graph.nodes if node_id not in body_nodes}
+    adjacency: dict[str, list[str]] = {node_id: [] for node_id in indegree}
     for edge in graph.edges:
+        if edge.from_node in body_nodes or edge.to_node in body_nodes:
+            continue
         if edge.from_node in adjacency and edge.to_node in indegree:
             adjacency[edge.from_node].append(edge.to_node)
             indegree[edge.to_node] += 1
@@ -217,9 +299,9 @@ def topo_order(graph: Graph) -> list[str]:
             if indegree[target] == 0:
                 ready.append(target)
         ready.sort(key=key)
-    if len(order) != len(graph.nodes):
+    if len(order) != len(indegree):
         # 找出环上的节点提示（有入度剩余且未处理）
-        remaining = [node_id for node_id in graph.nodes if node_id not in order]
+        remaining = [node_id for node_id in indegree if node_id not in order]
         raise FlowError("流程图存在环，无法确定执行顺序: " + ", ".join(sorted(remaining)))
     return order
 
@@ -248,12 +330,98 @@ def order_for_mode(graph: Graph, mode: str = "full", target: str | None = None) 
         raise FlowError(f"运行模式 {mode} 需要指定目标节点")
     if target not in graph.nodes:
         raise FlowError(f"节点不存在: {target}")
+    if target in loop_body_nodes_of(graph):
+        raise FlowError(f"不能直接以循环体内部节点为运行目标，请指定循环节点或其下游: {target}")
     if mode == "single":
         return [target]
     if mode == "to_node":
         keep = ancestors(graph, target) | {target}
         return [node_id for node_id in full if node_id in keep]
     raise FlowError(f"未知运行模式: {mode}")
+
+
+def _validate_control_flow(graph: Graph, node_types: Any, errors: list[str]) -> None:
+    """M7：条件分支与循环节点的语义校验。"""
+    plans = loop_plans(graph)
+    body_nodes: set[str] = set()
+    for plan in plans.values():
+        body_nodes.update(plan["body"])
+
+    for node in graph.nodes.values():
+        if node.type != CONDITION_TYPE:
+            continue
+        outgoing = graph.outgoing(node.id)
+        true_edges = [edge for edge in outgoing if edge.from_port == "true"]
+        false_edges = [edge for edge in outgoing if edge.from_port == "false"]
+        if len(true_edges) != 1:
+            errors.append(
+                f"条件节点 {node.id} 需要且只能有一条 true 分支连线（当前 {len(true_edges)} 条）"
+            )
+        if len(false_edges) != 1:
+            errors.append(
+                f"条件节点 {node.id} 需要且只能有一条 false 分支连线（当前 {len(false_edges)} 条）"
+            )
+        if node.id in body_nodes:
+            errors.append(f"条件节点 {node.id} 不能放在循环体内（循环体只允许无分支节点）")
+
+    for loop_id, plan in plans.items():
+        if loop_id in body_nodes:
+            errors.append(f"循环节点 {loop_id} 不能嵌套在另一个循环体内")
+        if len(plan["body_edges"]) != 1:
+            errors.append(
+                f"循环节点 {loop_id} 的 body 端口必须且只能连一条边（当前 {len(plan['body_edges'])} 条）"
+            )
+        if not plan["done_edges"]:
+            errors.append(f"循环节点 {loop_id} 缺少 done 分支连线（循环结束后继续的路径）")
+        body: list[str] = plan["body"]
+        if not body:
+            errors.append(f"循环节点 {loop_id} 的循环体为空（body 端口需要有下游节点）")
+            continue
+        for index, node_id in enumerate(body):
+            node = graph.nodes.get(node_id)
+            if node is None:
+                continue
+            if node.type not in LOOP_BODY_ALLOWED_TYPES:
+                errors.append(
+                    f"循环体节点 {node_id} 的类型 {node.type} 不支持（循环体只允许 stage/知识/风格/产物/检查/导出等无分支节点）"
+                )
+            expected_prev = loop_id if index == 0 else body[index - 1]
+            incoming = graph.incoming(node_id)
+            for edge in incoming:
+                if index == 0:
+                    if not (edge.from_node == loop_id and edge.from_port == LOOP_BODY_PORT):
+                        errors.append(f"循环体首节点 {node_id} 只能接收来自循环节点 body 端口的入边")
+                        break
+                elif edge.from_node != expected_prev:
+                    errors.append(
+                        f"循环体节点 {node_id} 的入边必须来自 {expected_prev}（当前来自 {edge.from_node}）"
+                    )
+                    break
+            outgoing = graph.outgoing(node_id)
+            if index < len(body) - 1:
+                expected_next = body[index + 1]
+                if len(outgoing) != 1 or outgoing[0].to_node != expected_next:
+                    errors.append(f"循环体节点 {node_id} 的下游必须唯一指向 {expected_next}")
+            else:
+                back_edges = [edge for edge in outgoing if edge.to_node == loop_id]
+                if len(back_edges) != 1 or len(outgoing) != 1:
+                    errors.append(
+                        f"循环体末端节点 {node_id} 必须且只能有一条回到循环节点 {loop_id} 的连线"
+                    )
+        for edge in graph.edges:
+            if edge.to_node in body and edge.from_node not in body and not (
+                edge.from_node == loop_id and edge.from_port == LOOP_BODY_PORT
+            ):
+                errors.append(
+                    f"循环体节点 {edge.to_node} 不允许有来自循环体外部的入边（{edge.from_node}）"
+                )
+            if edge.from_node in body and edge.to_node not in body and edge.to_node != loop_id:
+                errors.append(
+                    f"循环体节点 {edge.from_node} 的输出只能连下一个循环体节点或回到循环节点（当前连到 {edge.to_node}）"
+                )
+        for edge in plan["done_edges"]:
+            if edge.to_node in body:
+                errors.append(f"循环节点 {loop_id} 的 done 分支不能直接连回循环体节点 {edge.to_node}")
 
 
 def validate_graph(data: dict[str, Any], node_types: Any) -> dict[str, Any]:
@@ -317,6 +485,8 @@ def validate_graph(data: dict[str, Any], node_types: Any) -> dict[str, Any]:
             errors.append(
                 f"连线 {edge.id}: 端口类型不兼容（{edge.from_port} → {edge.to_port}）"
             )
+
+    _validate_control_flow(graph, node_types, errors)
 
     # 环
     try:

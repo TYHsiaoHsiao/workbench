@@ -379,6 +379,84 @@
       "parallel_safe": true
     },
     {
+      "type": "condition",
+      "label": "条件分支",
+      "category": "控制",
+      "description": "按条件表达式选择 true/false 分支；未选中分支的下游节点会被自动跳过。",
+      "ports": {
+        "in": [
+          "state",
+          "artifact",
+          "text",
+          "card",
+          "log"
+        ],
+        "out": [
+          "true",
+          "false"
+        ]
+      },
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "when": {
+            "type": "string",
+            "title": "条件表达式",
+            "default": "always",
+            "description": "支持 always / never / state.stage == 05 / state.version >= v03 / iteration >= 2"
+          },
+          "note": {
+            "type": "string",
+            "title": "备注"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "executor": "condition",
+      "parallel_safe": true
+    },
+    {
+      "type": "loop",
+      "label": "循环体",
+      "category": "控制",
+      "description": "按最大次数/条件重复执行循环体（body 与回边构成单一链条），完成后走 done 分支。",
+      "ports": {
+        "in": [
+          "state"
+        ],
+        "out": [
+          "body",
+          "done"
+        ]
+      },
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "max_iterations": {
+            "type": "integer",
+            "title": "最大迭代次数",
+            "default": 3,
+            "minimum": 1,
+            "maximum": 10
+          },
+          "until": {
+            "type": "string",
+            "title": "提前结束条件",
+            "default": "never",
+            "description": "支持 never / always / state.stage == 05 / iteration >= 2 等表达式"
+          },
+          "note": {
+            "type": "string",
+            "title": "备注"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "executor": "loop"
+    },
+    {
       "type": "confirm",
       "label": "人工确认",
       "category": "控制",

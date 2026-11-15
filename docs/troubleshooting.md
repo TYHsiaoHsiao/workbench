@@ -119,6 +119,9 @@
 - 批量运行默认 dry-run，真实执行需显式 `--live`。
 - 并行执行不生效：确认图 `settings.parallel=true`，且该波所有节点类型都带 `parallel_safe`；当前仅 `check_content`/`end` 可并行，其余写状态节点强制串行。
 - 重试没有发生：节点 `retries` 与 `settings.node_retries` 默认均为 0；`flow run --retries N` 只覆盖默认值，节点显式 `retries` 优先。写状态节点重试前请确认幂等性。
+- 条件/循环图校验报错：`condition` 必须恰好各一条 true/false 出边且不得在循环体内；`loop` 的 body 必须单链、非空、类型在白名单内，且不支持嵌套循环。
+- `flow diff --baseline` 报「基线不存在」：先执行 `flow baseline set --project <项目> --run <run_id>`；回归阈值用 `--max-regressions` / `--max-delta-ms` 调整。
+- 产物快照差异为空：快照只覆盖 01_story…06_prompts 下的文件，且需先执行 `project snapshot`；`?refresh=1` 只影响项目摘要缓存，不影响快照。
 
 
 - 回放没有耗时/失败定位：先确认该运行记录含 `started_at` / `ended_at`（旧运行记录缺时间戳时回放只给步骤序列）；`flow replay --json` 可查看原始字段。

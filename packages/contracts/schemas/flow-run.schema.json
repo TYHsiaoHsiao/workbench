@@ -113,6 +113,14 @@
           "attempts": {
             "type": "integer",
             "minimum": 1
+          },
+          "iteration": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "iterations": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       }

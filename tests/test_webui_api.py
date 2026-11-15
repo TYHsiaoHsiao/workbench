@@ -157,7 +157,7 @@ class WebUIApiTest(unittest.TestCase):
     def test_node_types(self) -> None:
         status, data = self.client.json("GET", "/api/node-types")
         self.assertEqual(200, status)
-        self.assertEqual(10, len(data["types"]))
+        self.assertEqual(12, len(data["types"]))
         self.assertEqual("0.1", data["contract_version"])
 
     def test_workflow_get(self) -> None:
@@ -361,6 +361,66 @@ class WebUIApiTest(unittest.TestCase):
         self.assertEqual(3, diff["summary"]["base_steps"])
         self.assertEqual(3, diff["summary"]["target_steps"])
 
+    def test_baseline_endpoints(self) -> None:
+        status, data = self.client.json(
+            "POST",
+            "/api/runs",
+            {"project": str(self.project), "graph_id": "flow-test", "dry_run": True},
+        )
+        self.assertEqual(200, status, msg=data)
+        run_id = data["run"]["run_id"]
+        status, data = self.client.json(
+            "POST", "/api/workflows/flow-test/baseline", {"project": str(self.project), "run_id": run_id}
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertEqual(run_id, data["baseline"]["run_id"])
+        status, data = self.client.json("GET", self._q("/api/workflows/flow-test/baseline"))
+        self.assertEqual(200, status, msg=data)
+        self.assertEqual(run_id, data["baseline"]["run_id"])
+        status, data = self.client.json(
+            "POST", "/api/workflows/flow-test/baseline/clear", {"project": str(self.project)}
+        )
+        self.assertEqual(200, status, msg=data)
+        status, data = self.client.json("GET", self._q("/api/workflows/flow-test/baseline"))
+        self.assertEqual(200, status, msg=data)
+        self.assertIsNone(data["baseline"])
+
+    def test_artifacts_snapshot_and_diff_endpoints(self) -> None:
+        story = self.project / "01_story" / "synopsis.md"
+        story.parent.mkdir(parents=True, exist_ok=True)
+        story.write_text("# 大纲\n第一版\n", encoding="utf-8")
+        status, data = self.client.json(
+            "POST",
+            f"/api/projects/{quote(str(self.project))}/artifacts/snapshot",
+            {"label": "接口快照"},
+        )
+        self.assertEqual(200, status, msg=data)
+        snapshot_id = data["snapshot"]["snapshot_id"]
+        status, data = self.client.json(
+            "GET", f"/api/projects/{quote(str(self.project))}/artifacts/snapshots"
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertEqual(snapshot_id, data["snapshots"][0]["snapshot_id"])
+        story.write_text("# 大纲\n第二版\n", encoding="utf-8")
+        status, data = self.client.json(
+            "GET", f"/api/projects/{quote(str(self.project))}/artifacts/diff?base={quote(snapshot_id)}"
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertEqual(1, data["diff"]["summary"]["changed"])
+        self.assertIn("产物差异", data["text"])
+
+    def test_project_summary_cache(self) -> None:
+        url = f"/api/projects/{quote(str(self.project))}/summary"
+        status, first = self.client.json("GET", url)
+        self.assertEqual(200, status, msg=first)
+        self.assertFalse(first.get("cached", False))
+        status, second = self.client.json("GET", url)
+        self.assertEqual(200, status, msg=second)
+        self.assertTrue(second.get("cached", False))
+        status, refreshed = self.client.json("GET", url + "?refresh=1")
+        self.assertEqual(200, status, msg=refreshed)
+        self.assertFalse(refreshed.get("cached", False))
+
     def test_token_required(self) -> None:
         server = create_server(self.project, port=0, use_token=True)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -371,7 +431,7 @@ class WebUIApiTest(unittest.TestCase):
         self.assertEqual(401, status)
         status, data = client.json("GET", "/api/node-types", token=server.token)
         self.assertEqual(200, status)
-        self.assertEqual(10, len(data["types"]))
+        self.assertEqual(12, len(data["types"]))
 
 
 if __name__ == "__main__":

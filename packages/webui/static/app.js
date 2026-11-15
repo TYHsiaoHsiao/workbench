@@ -1061,7 +1061,70 @@ function renderDiff(diff) {
   box.classList.remove("hidden");
 }
 
-/* ---------------- 项目预览（M6） ---------------- */
+/* ---------------- 运行基线（M7） ---------------- */
+
+function currentRunId() {
+  if (!state.run) return null;
+  return state.run.run_id || (state.run.run && state.run.run.run_id) || null;
+}
+
+function currentRunGraphId() {
+  if (state.run && state.run.run && state.run.run.graph_id) return state.run.run.graph_id;
+  if (state.run && state.run.graph_id) return state.run.graph_id;
+  return state.graphId || null;
+}
+
+async function saveBaseline() {
+  const runId = currentRunId();
+  const graphId = currentRunGraphId();
+  if (!state.project || !runId || !graphId) {
+    logLine("请先运行一次（或从历史打开一条运行）再保存基线", "warn");
+    return;
+  }
+  try {
+    const data = await api(
+      "/api/workflows/" + encodeURIComponent(graphId) + "/baseline?project=" + encodeURIComponent(state.project),
+      { method: "POST", body: JSON.stringify({ run_id: runId }) }
+    );
+    logLine("已保存运行基线：" + graphId + " ← " + (data.baseline || {}).run_id, "ok");
+  } catch (err) {
+    logLine("保存基线失败：" + err.message, "err");
+  }
+}
+
+async function diffBaseline() {
+  const runId = currentRunId();
+  const graphId = currentRunGraphId();
+  if (!state.project || !runId || !graphId) {
+    logLine("请先运行一次（或从历史打开一条运行）再与基线对比", "warn");
+    return;
+  }
+  try {
+    const baseInfo = await api(
+      "/api/workflows/" + encodeURIComponent(graphId) + "/baseline?project=" + encodeURIComponent(state.project)
+    );
+    if (!baseInfo.baseline) {
+      logLine("流程图 " + graphId + " 尚未保存运行基线（先点击「存基线」）", "warn");
+      return;
+    }
+    const otherId = baseInfo.baseline.run_id;
+    const data = await api(
+      "/api/runs/" + encodeURIComponent(runId) + "/diff?project=" + encodeURIComponent(state.project) +
+      "&other=" + encodeURIComponent(otherId)
+    );
+    renderDiff(data.diff);
+    const regressed = (data.diff.summary || {}).regressed || 0;
+    if (regressed > 0) {
+      logLine("[回归告警] 相对基线有 " + regressed + " 个回归节点", "err");
+    } else {
+      logLine("与基线对比：无回归", "ok");
+    }
+  } catch (err) {
+    logLine("基线对比失败：" + err.message, "err");
+  }
+}
+
+
 
 const TYPE_COLORS = {
   start: "#2f855a", stage: "#2b6cb0", knowledge_search: "#2c7a7b", style_apply: "#b7791f",
@@ -1115,10 +1178,38 @@ async function previewProject(projectPath) {
       '<div class="project-preview">' +
       '<button id="btn-back-projects" class="link">← 返回项目列表</button>' +
       '<h3>' + escapeHtml(data.project) + "（阶段 " + escapeHtml(data.stage || "") + " / " + escapeHtml(data.version || "") + "）</h3>" +
+      '<div class="preview-actions">' +
+      '<button id="btn-artifact-snapshot">创建产物快照</button>' +
+      '<button id="btn-artifact-diff">产物差异</button>' +
+      '</div>' +
+      '<div id="artifact-diff-box" class="artifact-diff hidden"></div>' +
       "<h4>产物</h4>" + artifacts +
       "<h4>流程图缩略图</h4><div class='graph-thumbs'>" + graphs + "</div>" +
       "</div>";
     $("#btn-back-projects").addEventListener("click", () => renderProjects());
+    $("#btn-artifact-snapshot").addEventListener("click", async () => {
+      try {
+        const result = await api(
+          "/api/projects/" + encodeURIComponent(projectPath) + "/artifacts/snapshot",
+          { method: "POST", body: JSON.stringify({ label: "webui 手动快照" }) }
+        );
+        logLine("已创建产物快照 " + (result.snapshot || {}).snapshot_id, "ok");
+      } catch (err) {
+        logLine("创建快照失败：" + err.message, "err");
+      }
+    });
+    $("#btn-artifact-diff").addEventListener("click", async () => {
+      const box = $("#artifact-diff-box");
+      try {
+        const result = await api("/api/projects/" + encodeURIComponent(projectPath) + "/artifacts/diff");
+        box.classList.remove("hidden");
+        box.textContent = result.text || "";
+        logLine("产物差异：" + JSON.stringify((result.diff || {}).summary || {}));
+      } catch (err) {
+        box.classList.remove("hidden");
+        box.textContent = "产物差异不可用：" + err.message;
+      }
+    });
     body.querySelectorAll("[data-preview-graph]").forEach((figure) => {
       figure.addEventListener("click", async () => {
         try {
@@ -1411,6 +1502,8 @@ function bindUi() {
   $("#btn-run").addEventListener("click", () => runFlow());
   $("#btn-run-history").addEventListener("click", () => loadRunHistory());
   $("#btn-run-diff").addEventListener("click", () => diffRun());
+  $("#btn-baseline-save").addEventListener("click", () => saveBaseline());
+  $("#btn-baseline-diff").addEventListener("click", () => diffBaseline());
   $("#btn-run-batch").addEventListener("click", () => runBatch());
   $("#btn-undo").addEventListener("click", () => undo());
   $("#btn-redo").addEventListener("click", () => redo());

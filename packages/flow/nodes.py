@@ -53,6 +53,7 @@ class NodeResult:
     error: str | None = None
     prompt: str = ""
     detail_path: str = ""
+    selected_ports: list[str] | None = None  # M7：条件节点选中的分支端口；None=全部端口有效
 
 
 Executor = Callable[[Node, NodeContext], NodeResult]
@@ -335,6 +336,46 @@ def _exec_export(node: Node, ctx: NodeContext) -> NodeResult:
     )
 
 
+def _exec_condition(node: Node, ctx: NodeContext) -> NodeResult:
+    from .conditions import ConditionError, evaluate
+
+    expression = str(node.params.get("when") or "always")
+    state = load_state(ctx.project_root)
+    try:
+        matched = evaluate(expression, state, iteration=0)
+    except ConditionError as exc:
+        raise NodeError(f"条件求值失败: {exc}") from exc
+    branch = "true" if matched else "false"
+    label = "真" if matched else "假"
+    logs = [f"条件「{expression}」→ {label}（分支端口 {branch}）"]
+    if ctx.dry_run:
+        return NodeResult(
+            status="planned",
+            outputs=[f"[dry-run] 条件「{expression}」将走 {branch} 分支"],
+            logs=logs,
+            selected_ports=[branch],
+        )
+    return NodeResult(
+        outputs=[f"条件「{expression}」→ {branch}（stage={state.get('stage')}）"],
+        logs=logs,
+        selected_ports=[branch],
+    )
+
+
+def _exec_loop(node: Node, ctx: NodeContext) -> NodeResult:
+    """循环节点由 runner 内部展开执行；本执行器只覆盖 dry-run/兜底场景。"""
+    max_iterations = int(node.params.get("max_iterations", 3) or 3)
+    until = str(node.params.get("until") or "never")
+    if ctx.dry_run:
+        return NodeResult(
+            status="planned",
+            outputs=[f"[dry-run] 循环节点将最多迭代 {max_iterations} 次（until={until}），由引擎展开循环体"],
+            logs=["dry-run 不执行循环体"],
+            selected_ports=["done"],
+        )
+    raise NodeError("循环节点必须由执行引擎展开执行（当前上下文不支持直接执行）")
+
+
 def _exec_confirm(node: Node, ctx: NodeContext) -> NodeResult:
     prompt = str(node.params.get("prompt") or "请确认后继续")
     detail_path = str(node.params.get("detail_path") or "")
@@ -362,6 +403,8 @@ EXECUTORS: dict[str, Executor] = {
     "style_inject": _exec_style_inject,
     "artifact_register": _exec_artifact_register,
     "check_content": _exec_check_content,
+    "condition": _exec_condition,
+    "loop": _exec_loop,
     "confirm": _exec_confirm,
     "export": _exec_export,
     "end": _exec_end,

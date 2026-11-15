@@ -23,6 +23,7 @@ from .graph import (
 from .nodes import NodeContext, NodeError, NodeResult
 from .registry import NodeType, NodeTypeRegistry, load_node_types, parse_node_types
 from .compare import compare_runs, format_compare_text
+from .conditions import ConditionError, evaluate
 from .locks import LockError, log_transaction, state_lock
 from .replay import build_replay, format_replay_text
 from .runner import Runner, recover_run, run_flow
@@ -35,15 +36,30 @@ from .templates import (
 )
 from .store import (
     graph_path,
+    list_baselines,
     list_graphs,
     list_runs,
     read_graph_data,
     read_run,
     resolve_project,
     runs_dir,
+    set_baseline,
+    clear_baseline,
+    get_baseline,
     workflows_dir,
     write_graph_data,
     write_run,
+)
+from .artifacts import (
+    collect_files,
+    create_snapshot,
+    diff_files,
+    diff_snapshots,
+    diff_with_current,
+    format_diff_text,
+    latest_snapshot,
+    list_snapshots,
+    read_snapshot,
 )
 
 __all__ = [
@@ -66,6 +82,8 @@ __all__ = [
     "LockError",
     "log_transaction",
     "state_lock",
+    "ConditionError",
+    "evaluate",
     "format_compare_text",
     "compare_runs",
     "graph_path",
@@ -86,6 +104,19 @@ __all__ = [
     "write_run",
     "list_runs",
     "recover_run",
+    "list_baselines",
+    "set_baseline",
+    "clear_baseline",
+    "get_baseline",
+    "collect_files",
+    "create_snapshot",
+    "diff_files",
+    "diff_snapshots",
+    "diff_with_current",
+    "format_diff_text",
+    "latest_snapshot",
+    "list_snapshots",
+    "read_snapshot",
     "TemplateError",
     "get_template",
     "instantiate",

@@ -350,6 +350,78 @@ class FlowRunnerTest(unittest.TestCase):
         lines = [line for line in txn.read_text(encoding="utf-8").splitlines() if line.strip()]
         self.assertGreaterEqual(len(lines), 2)
 
+    def test_condition_branch_prunes_unreachable_nodes(self) -> None:
+        """条件分支为 true 时，false 分支下游节点应记为 skipped。"""
+        graph = make_graph(
+            self.project.name,
+            [
+                make_node("start", "start"),
+                {
+                    "id": "branch",
+                    "type": "condition",
+                    "label": "条件分支",
+                    "position": {"x": 320, "y": 140},
+                    "params": {"when": "always"},
+                },
+                make_node("stage-01", "stage", "01", x=500),
+                make_node("confirm-01", "confirm", x=680),
+                make_node("end", "end", x=860),
+            ],
+            [
+                edge("e1", "start", "project", "branch", "state"),
+                edge("e2", "branch", "true", "stage-01", "state"),
+                edge("e3", "branch", "false", "confirm-01", "artifact"),
+                edge("e4", "stage-01", "artifact", "end", "any"),
+                edge("e5", "confirm-01", "confirmed", "end", "any"),
+            ],
+        )
+        result = Runner(self.project, graph, dry_run=True).run()
+        self.assertEqual("succeeded", result["run"]["status"], msg=result["run"])
+        statuses = {step["node_id"]: step["status"] for step in result["run"]["steps"]}
+        self.assertEqual("skipped", statuses["confirm-01"])
+        self.assertEqual("planned", statuses["stage-01"])
+        self.assertEqual("planned", statuses["end"])
+
+    def test_loop_runs_body_and_iterates_until_condition(self) -> None:
+        """循环节点按 until 条件执行 body 链，并记录每轮 iteration。"""
+        (self.project / "01_story").mkdir(parents=True, exist_ok=True)
+        (self.project / "01_story" / "synopsis.md").write_text("大纲", encoding="utf-8")
+        graph = make_graph(
+            self.project.name,
+            [
+                make_node("start", "start"),
+                {
+                    "id": "loop-1",
+                    "type": "loop",
+                    "label": "循环体",
+                    "position": {"x": 320, "y": 140},
+                    "params": {"max_iterations": 3, "until": "iteration >= 2"},
+                },
+                {
+                    "id": "reg-1",
+                    "type": "artifact_register",
+                    "label": "登记产物",
+                    "position": {"x": 500, "y": 300},
+                    "params": {"stage": "01", "kind": "循环产物", "paths": ["01_story/synopsis.md"]},
+                },
+                make_node("end", "end", x=860),
+            ],
+            [
+                edge("e1", "start", "project", "loop-1", "state"),
+                edge("e2", "loop-1", "body", "reg-1", "state"),
+                edge("e3", "reg-1", "artifact", "loop-1", "state"),
+                edge("e4", "loop-1", "done", "end", "any"),
+            ],
+        )
+        result = Runner(self.project, graph, dry_run=False, auto_confirm=True).run()
+        self.assertEqual("succeeded", result["run"]["status"], msg=result["run"])
+        loop_steps = [step for step in result["run"]["steps"] if step["node_id"] == "loop-1"]
+        self.assertEqual(1, len(loop_steps))
+        self.assertEqual(2, loop_steps[0].get("iterations"))
+        body_steps = [step for step in result["run"]["steps"] if step["node_id"] == "reg-1"]
+        self.assertEqual([1, 2], [step.get("iteration") for step in body_steps])
+        self.assertTrue((self.project / "00_project" / "state.json").is_file())
+
 
 if __name__ == "__main__":
     unittest.main()

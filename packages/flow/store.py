@@ -174,3 +174,65 @@ def list_runs(project_root: Path, limit: int = 50) -> list[dict[str, Any]]:
         )
     runs.sort(key=lambda item: item.get("started_at") or "", reverse=True)
     return runs[: max(1, int(limit))]
+
+
+BASELINES_FILE = "baselines.json"
+
+
+def baselines_path(project_root: Path) -> Path:
+    return workflows_dir(project_root) / BASELINES_FILE
+
+
+def _read_baselines(project_root: Path) -> dict[str, Any]:
+    path = baselines_path(project_root)
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise FlowError(f"基线文件读取失败: {exc}") from exc
+    return data if isinstance(data, dict) else {}
+
+
+def get_baseline(project_root: Path, graph_id: str) -> dict[str, Any] | None:
+    """返回流程图保存的运行基线（含快照的 run 记录），不存在返回 None。"""
+    baselines = _read_baselines(project_root)
+    entry = baselines.get(graph_id)
+    return entry if isinstance(entry, dict) else None
+
+
+def list_baselines(project_root: Path) -> dict[str, dict[str, Any]]:
+    return {key: value for key, value in _read_baselines(project_root).items() if isinstance(value, dict)}
+
+
+def set_baseline(project_root: Path, graph_id: str, run_id: str, run: dict[str, Any] | None = None) -> dict[str, Any]:
+    """把一次运行设为该流程图的回归基线（保存 run 快照，后续 diff 无需原 run 文件）。"""
+    if not GRAPH_ID_RE.match(graph_id):
+        raise FlowError(f"graph_id 非法（仅小写字母、数字、连字符）: {graph_id}")
+    record = run if run is not None else read_run(project_root, run_id)
+    steps = record.get("steps") or []
+    entry = {
+        "graph_id": graph_id,
+        "run_id": str(record.get("run_id") or run_id),
+        "saved_at": now_iso(),
+        "status": record.get("status"),
+        "mode": record.get("mode"),
+        "dry_run": bool(record.get("dry_run")),
+        "started_at": record.get("started_at"),
+        "finished_at": record.get("finished_at"),
+        "steps": steps,
+        "summary": record.get("summary"),
+    }
+    baselines = _read_baselines(project_root)
+    baselines[graph_id] = entry
+    atomic_write_json(baselines_path(project_root), baselines)
+    return entry
+
+
+def clear_baseline(project_root: Path, graph_id: str) -> bool:
+    baselines = _read_baselines(project_root)
+    if graph_id not in baselines:
+        return False
+    del baselines[graph_id]
+    atomic_write_json(baselines_path(project_root), baselines)
+    return True

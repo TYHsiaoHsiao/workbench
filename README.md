@@ -7,7 +7,7 @@
 - **契约先行**：阶段产物、参考记忆、知识卡、风格画像、项目状态全部有 JSON Schema；
 - **品牌守卫**：仓库与工作区零品牌残留，CI 阻断回归。
 
-当前版本 `1.5.0`：迭代 0（地基）、迭代 1a（B 知识服务 PoC）、迭代 2 方案 A（有限正文回退）、迭代 2.1（精度修订）、迭代 1b（A 编排硬化）、迭代 3（C 风格服务）、迭代 4（试点与固化）、1.0.1（真实项目补丁）、1.0.2（工作台体验补丁）、M1（可视化节点工作台骨架，1.1.0）、M2/M3（可视化节点工作台能力层，1.2.0）、M4（运行回放与图导入导出，1.3.0）与 M5（并行执行、节点级重试、项目管理面板，1.4.0）与 M6（状态锁与事务、运行对比、项目预览，1.5.0）已完成。三个试点：从零到 08（`试点A-雨夜回声`）、既有剧本到 05（`试点B-旧剧本接管`）、真实项目从零到 done（《死亡外科医生》，见 `docs/pilot-c-report.md`），指标与证据见 `docs/pilots/`。
+当前版本 `1.5.0`：迭代 0（地基）、迭代 1a（B 知识服务 PoC）、迭代 2 方案 A（有限正文回退）、迭代 2.1（精度修订）、迭代 1b（A 编排硬化）、迭代 3（C 风格服务）、迭代 4（试点与固化）、1.0.1（真实项目补丁）、1.0.2（工作台体验补丁）、M1（可视化节点工作台骨架，1.1.0）、M2/M3（可视化节点工作台能力层，1.2.0）、M4（运行回放与图导入导出，1.3.0）与 M5（并行执行、节点级重试、项目管理面板，1.4.0）与 M6（状态锁与事务、运行对比、项目预览，1.5.0）以及 M7（条件分支与循环、运行基线与回归告警、产物快照差异，1.6.0）已完成。三个试点：从零到 08（`试点A-雨夜回声`）、既有剧本到 05（`试点B-旧剧本接管`）、真实项目从零到 done（《死亡外科医生》，见 `docs/pilot-c-report.md`），指标与证据见 `docs/pilots/`。
 
 ## 目录结构
 
@@ -34,7 +34,7 @@ workbench/
     installer/               # Skill 安装/升级：备份、幂等、回滚、配置保留
     flow/                    # 可视化节点工作流：图模型与校验、节点注册表、执行引擎、项目内存储
     webui/                   # 本地 Web 服务 + 原生前端（画布/拖拽/连线/检查器/运行面板）
-  tests/                     # 247 个 unittest 用例
+  tests/                     # 262 个 unittest 用例
   scripts/                   # run_ci.py / build_manifest.py / pilot_matrix.py / 平台包装
   docs/                      # 架构、品牌守卫、命令卡、故障排查、迁移说明、迭代报告、pilots/
   .github/workflows/ci.yml   # GitHub Actions
@@ -89,6 +89,9 @@ python workbench.py flow replay --run <run_id> --project 我的短片           
 python workbench.py flow export --project 我的短片 --graph flow-main --out flow.json   # 导出流程图
 python workbench.py flow import --project 我的短片 --file flow.json --graph imported-flow  # 导入流程图
 python workbench.py flow diff --project 我的短片 --run <run_id> --other-run <run_id>      # 两次运行对比（状态/耗时/回归）
+python workbench.py flow baseline set --project <项目> --run <run-id>   # 保存运行基线（回归对比）
+python workbench.py project snapshot --project <项目>                  # 产物快照（差异视图）
+python workbench.py project artifacts-diff --project <项目>            # 与最近快照对比
 python workbench.py project summary --project 我的短片        # 项目摘要（产物/流程图/运行）
 python workbench.py project list --stats                      # 跨项目统计（产物/待门禁/流程/运行）
 python workbench.py flow run --project 我的短片 --graph flow-main --live --retries 2   # 节点失败自动重试（0–3）
@@ -97,7 +100,7 @@ python workbench.py project list --stats                            # 跨项目�
 
 - 项目默认创建在「文档目录/AI 影视工作台/projects/<名称>/」，可用 `--project-root` 或环境变量 `AI_FILM_PROJECTS_ROOT` 覆盖；包含 `00_project/`（状态、参考记忆、历史、知识卡、风格卡）、`00_inbox/`、`01_story/` … `06_prompts/`。
 - 项目状态以 `00_project/state.json` 为唯一事实来源，必须通过 `state.schema.json`（v2 字段）校验；门禁与修订日志同文件持久化。
-- 本地 CI：`python scripts/run_ci.py`（编译 → 247 项测试 → doctor → brand-guard）。
+- 本地 CI：`python scripts/run_ci.py`（编译 → 262 项测试 → doctor → brand-guard）。
 - 知识服务只读现有索引，不改知识库本体；先做元数据候选，召回不足时按预算做有限正文回退；只有路径/行号/命中词齐全才输出 `ok` 知识卡。回退可用 `--no-fallback` 关闭、用 `--fallback-files` / `--fallback-bytes` 调预算。证据按质量评分排序，并过滤「反转身」等动作误命中；高置信证据足够时会丢弃纯字面低置信证据（统计见 `report.evidence_quality`）。
 - 风格服务只读引用外部 200 位导演色卡包（`scripts/build_style_registry.py` 生成注册表）；风格默认不注入：先 `style apply` 写风格卡与 `state.style`，再 `style inject` 做结构校验并写注入记录。校验只针对用户正文，风格卡作为提示词前缀；06 用图像工具、08 用视频工具，其他阶段不挂载。
 - 生成发行清单：`python scripts/build_manifest.py`。
@@ -134,6 +137,7 @@ python workbench.py project list --stats                            # 跨项目�
 | M4（7） | 可视化节点工作台体验：运行回放与耗时统计、失败节点定位、流程图 JSON 导入导出（CLI/Web/前端） | 已完成（1.3.0） |
 | M5（8） | 可视化节点工作台增强：并行分支执行（仅只读节点）、节点级重试、跨项目管理面板（阶段/门禁/产物/流程/运行统计） | 已完成（1.4.0） |
 | M6（9） | 可视化节点工作台加固：写状态节点文件锁与事务日志、两次运行 diff 对比、项目面板产物预览与流程图缩略图 | 已完成（1.5.0） |
+| M7（10） | 可视化节点工作台控制流：条件分支/循环节点、运行基线保存与回归阈值告警（CI 闸门）、项目摘要缓存与产物快照差异视图 | 已完成（1.6.0） |
 
 ## 原则
 
@@ -147,7 +151,7 @@ python workbench.py project list --stats                            # 跨项目�
 ## 文档
 
 - `docs/quick-start.md`：第一次拿到发行包的 10 分钟上手（自检/建项目/阶段推进/知识/风格）。
-- `docs/flow-workbench.md`：可视化节点工作台（M1–M6）：架构、10 类节点与端口、模板库、运行历史与恢复、批量运行、Web API、前端交互（撤销/重做/参数编辑/运行回放/JSON 导入导出）、安全边界与限制。
+- `docs/flow-workbench.md`：可视化节点工作台（M1–M7，含条件/循环、基线、产物快照）：架构、10 类节点与端口、模板库、运行历史与恢复、批量运行、Web API、前端交互（撤销/重做/参数编辑/运行回放/JSON 导入导出）、安全边界与限制。
 - `docs/release-notes-1.0.0.md`：1.0.0 发行说明（能力、验证、限制、升级与校验）。
 - `docs/release-notes-1.0.1.md`：1.0.1 补丁说明（P2 四项修复、接口、测试与升级方式）。
 - `docs/release-notes-1.0.2.md`：1.0.2 补丁说明（跨项目总览、风格质量提示、逐镜注入记录、init 引导）。

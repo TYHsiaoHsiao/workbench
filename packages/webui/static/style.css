@@ -373,3 +373,6 @@ button.link:hover { text-decoration: underline; }
 .preview-graph figcaption { font-size: 12px; color: #a0aec0; margin-top: 4px; max-width: 240px; }
 .graph-thumb { display: block; background: #171923; border-radius: 4px; }
 .replay-summary { color: #a0aec0; font-size: 13px; margin: 4px 0 10px; }
+
+.preview-actions { display: flex; gap: 8px; margin: 8px 0; flex-wrap: wrap; }
+.artifact-diff { white-space: pre-wrap; font-size: 12px; line-height: 1.5; background: #0f151d; border: 1px solid #2d3748; padding: 8px 10px; border-radius: 6px; margin-bottom: 10px; color: #cbd5e0; max-height: 200px; overflow: auto; }
