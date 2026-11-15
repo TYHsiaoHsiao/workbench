@@ -639,6 +639,62 @@ def adopt(
     }
 
 
+def adopt_all(
+    project_root: str | Path,
+    *,
+    stage: str = "05",
+    kind: str = "generation",
+    note: str = "",
+    limit: int = 20,
+) -> dict[str, Any]:
+    """批量回填项目内所有 succeeded 且未回填的任务；单任务失败不影响其他任务。"""
+    results: list[dict[str, Any]] = []
+    adopted = 0
+    artifact_paths: list[str] = []
+    for job in list_jobs(project_root, limit=limit):
+        job_id = str(job.get("job_id"))
+        if str(job.get("status")) != "succeeded" or job.get("adopted"):
+            continue
+        try:
+            record = adopt(
+                project_root, job_id, stage=stage, kind=kind, note=note
+            )
+        except GenerateError as exc:
+            results.append({"job_id": job_id, "ok": False, "error": str(exc)})
+            continue
+        adopted += 1
+        artifact_paths.append(str(record["artifact"]))
+        results.append(
+            {
+                "job_id": job_id,
+                "ok": True,
+                "artifact": record["artifact"],
+                "result_url": record["result_url"],
+            }
+        )
+    if artifact_paths:
+        # 逐条 adopt 会覆盖 stage_artifacts 摘要，这里用一次组合登记把本批产物写全。
+        from core_router.project import ProjectError, register_artifacts
+
+        try:
+            register_artifacts(
+                project_root,
+                stage,
+                kind,
+                artifact_paths,
+                note=note or f"批量回填 {len(artifact_paths)} 个生成任务",
+            )
+        except ProjectError as exc:
+            raise GenerateError(f"批量回填产物登记失败：{exc}") from exc
+    return {
+        "ok": True,
+        "stage": stage,
+        "kind": kind,
+        "adopted_count": adopted,
+        "jobs": results,
+    }
+
+
 __all__ = [
     "DEFAULT_PROVIDERS",
     "GenerateError",
@@ -646,6 +702,7 @@ __all__ = [
     "PROVIDERS_SCHEMA",
     "STAGE_DIRS",
     "adopt",
+    "adopt_all",
     "get_provider",
     "job_detail",
     "load_providers",

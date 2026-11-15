@@ -94,6 +94,7 @@ from generate import (
     GenerateError,
     JobError,
     adopt,
+    adopt_all,
     get_provider,
     job_detail,
     list_jobs,
@@ -1886,7 +1887,31 @@ def cmd_generate_retry(args: argparse.Namespace) -> int:
 
 def cmd_generate_adopt(args: argparse.Namespace) -> int:
     project = _resolve_project(args.project)
+    if not args.all and not args.job_id:
+        _print("请提供任务 ID，或使用 --all 批量回填全部 succeeded 任务")
+        return EXIT_USAGE
     try:
+        if args.all:
+            result = adopt_all(
+                project,
+                stage=args.stage,
+                kind=args.kind,
+                note=args.note or "",
+                limit=args.limit,
+            )
+            if args.json:
+                _emit(result, True)
+            else:
+                items = result.get("jobs") or []
+                if not items:
+                    _print("没有可回填的 succeeded 任务")
+                for item in items:
+                    if item.get("ok"):
+                        _print(f"  {item['job_id']} → {item.get('artifact')}")
+                    else:
+                        _print(f"  {item['job_id']} · 回填失败：{item.get('error')}")
+                _print(f"共回填 {result.get('adopted_count', 0)} 个任务到阶段 {result.get('stage')}")
+            return EXIT_OK
         result = adopt(
             project,
             args.job_id,
@@ -2375,8 +2400,10 @@ def build_parser() -> argparse.ArgumentParser:
     gen_adopt = generate_sub.add_parser(
         "adopt", help="把 succeeded 任务的结果回填为项目产物（写凭证并登记 state）"
     )
-    gen_adopt.add_argument("job_id", help="要回填的任务 id")
+    gen_adopt.add_argument("job_id", nargs="?", help="要回填的任务 id（使用 --all 时可省略）")
     gen_adopt.add_argument("--project", required=True, help="项目目录或项目名")
+    gen_adopt.add_argument("--all", action="store_true", help="批量回填全部 succeeded 且未回填任务")
+    gen_adopt.add_argument("--limit", type=int, default=20, help="--all 时最多扫描条数（默认 20）")
     gen_adopt.add_argument("--stage", default="05", help="登记到哪个阶段（默认 05）")
     gen_adopt.add_argument("--kind", default="generation", help="产物类型（默认 generation）")
     gen_adopt.add_argument("--note", default="", help="备注")

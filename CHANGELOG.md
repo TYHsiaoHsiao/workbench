@@ -1,5 +1,13 @@
 # 变更日志
 
+## [1.10.0] - 2026-11-15 — 可视化节点工作台（M11：批量回填、生成平台流程节点与生成面板筛选）
+
+- 批量回填：`adopt_all()` 扫描 succeeded 且未回填任务逐条回填，最后组合登记 `state.stage_artifacts`（逐条 adopt 会覆盖摘要）；CLI `generate adopt --all [--limit]`，Web API `POST /api/generate/jobs/adopt`，生成面板「回填全部已成功」。
+- 生成平台流程节点：新增 `generate_refresh`（查询/刷新状态）与 `generate_adopt`（回填结果），节点类型 15→17，参数 `job_id` 或 `all=true`，dry-run 只计划；EXECUTORS 17 项。
+- 生成面板筛选：任务列表按状态筛选（全部/排队中/成功/失败/已取消/dry-run/计划/已回填）。
+- 测试：新增 10 项（批量回填 3、生成节点 6、批量回填 Web API 1），全量 316 项通过。
+- 兼容性：复用既有 `generation`/`artifact`/`state` 端口，无新契约；旧流程图与节点参数不受影响。
+
 ## [1.9.0] - 2026-11-15 — 可视化节点工作台（M10：生成结果回填、失败重试与任务详情抽屉）
 
 - 结果回填：`packages/generate/providers.py` 新增 `result_url()`（从任务 response 提取 video_url/output_url/嵌套 data 等结果 URL 与 `adopt()`（仅 succeeded 且未回填；在 `<阶段目录>/generations/shot-XX__<job_id>.json` 写结果凭证，经 `register_artifacts` 登记 `state.stage_artifacts`，任务记录写 `adopted`）。

@@ -159,7 +159,7 @@ class WebUIApiTest(unittest.TestCase):
     def test_node_types(self) -> None:
         status, data = self.client.json("GET", "/api/node-types")
         self.assertEqual(200, status)
-        self.assertEqual(15, len(data["types"]))
+        self.assertEqual(17, len(data["types"]))
         self.assertEqual("0.1", data["contract_version"])
 
     def test_workflow_get(self) -> None:
@@ -433,7 +433,7 @@ class WebUIApiTest(unittest.TestCase):
         self.assertEqual(401, status)
         status, data = client.json("GET", "/api/node-types", token=server.token)
         self.assertEqual(200, status)
-        self.assertEqual(15, len(data["types"]))
+        self.assertEqual(17, len(data["types"]))
 
 
     def test_generate_providers_endpoint(self) -> None:
@@ -591,6 +591,30 @@ class WebUIApiTest(unittest.TestCase):
         )
         self.assertEqual(200, status, msg=detail)
         self.assertEqual(artifact, detail["job"]["adopted"]["artifact"])
+
+    def test_generate_adopt_all_endpoint(self) -> None:
+        first = self._terminal_job(
+            "succeeded", response={"video_url": "https://cdn.test/batch1.mp4"}
+        )
+        second = self._terminal_job(
+            "succeeded", response={"video_url": "https://cdn.test/batch2.mp4"}
+        )
+        failed = self._terminal_job("failed")
+        status, data = self.client.json(
+            "POST",
+            "/api/generate/jobs/adopt",
+            {"project": str(self.project), "stage": "05", "limit": 10},
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertEqual(2, data["adopted_count"])
+        items = {item["job_id"]: item for item in data["jobs"]}
+        self.assertEqual({first["job_id"], second["job_id"]}, set(items))
+        for job in (first, second):
+            self.assertTrue(items[job["job_id"]]["ok"])
+            artifact = items[job["job_id"]]["artifact"]
+            self.assertTrue(artifact.startswith("05_shots/generations/"))
+            self.assertTrue((self.project / artifact).is_file())
+        self.assertNotIn(failed["job_id"], items)
 
 
 if __name__ == "__main__":

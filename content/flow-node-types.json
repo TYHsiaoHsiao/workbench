@@ -631,6 +631,115 @@
       "parallel_safe": false
     },
     {
+      "type": "generate_refresh",
+      "label": "生成状态查询",
+      "category": "生成",
+      "description": "查询生成平台任务状态并更新本地记录：指定 job_id 刷单个任务，all=true 批量刷新 submitted 任务。",
+      "ports": {
+        "in": [
+          "state",
+          "generation"
+        ],
+        "out": [
+          "generation",
+          "log"
+        ]
+      },
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "任务 ID（留空且 all=false 时报错）"
+          },
+          "all": {
+            "type": "boolean",
+            "title": "批量刷新 submitted 任务",
+            "default": false
+          },
+          "limit": {
+            "type": "integer",
+            "title": "批量刷新最多扫描条数",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20
+          },
+          "note": {
+            "type": "string",
+            "title": "备注"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "executor": "generate_refresh"
+    },
+    {
+      "type": "generate_adopt",
+      "label": "生成结果回填",
+      "category": "生成",
+      "description": "把 succeeded 任务结果回填为项目产物（写凭证 JSON 并登记 state.stage_artifacts）：指定 job_id 回填单个，all=true 批量回填。",
+      "ports": {
+        "in": [
+          "state",
+          "generation"
+        ],
+        "out": [
+          "artifact",
+          "log"
+        ]
+      },
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "任务 ID（留空且 all=false 时报错）"
+          },
+          "all": {
+            "type": "boolean",
+            "title": "批量回填全部 succeeded 任务",
+            "default": false
+          },
+          "limit": {
+            "type": "integer",
+            "title": "批量回填最多扫描条数",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20
+          },
+          "stage": {
+            "type": "string",
+            "title": "登记阶段",
+            "enum": [
+              "01",
+              "02",
+              "03",
+              "04",
+              "05",
+              "06",
+              "07",
+              "08"
+            ],
+            "default": "05"
+          },
+          "kind": {
+            "type": "string",
+            "title": "产物类型",
+            "default": "generation"
+          },
+          "note": {
+            "type": "string",
+            "title": "备注"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "executor": "generate_adopt",
+      "parallel_safe": false
+    },
+    {
       "type": "confirm",
       "label": "人工确认",
       "category": "控制",

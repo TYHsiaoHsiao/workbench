@@ -131,6 +131,8 @@
 - 刷新后任务仍是 submitted：平台可能仍在排队/生成中；稍后再点刷新或执行 `generate refresh --all`。批量刷新中单个任务失败会返回 `ok=false` 与错误文本，不影响其他任务。
 - `generate retry` 报「只有 failed / canceled 任务可以重试」：重试只针对终态失败任务；排队/成功任务请用 `generate refresh` 或新提交。新任务记录 `retried_from` 指向原任务。
 - `generate adopt` 报「只有 succeeded 任务可以回填结果」/「已回填过」：先 `generate refresh` 确认 succeeded 且未回填；回填默认写 `05_shots/generations/` 凭证并登记 `state.stage_artifacts`，重复回填会被拒绝。
+- `generate_refresh` / `generate_adopt` 节点报「需要 job_id 或 all=true」：节点参数必须显式指定任务或批量开关，节点不会自动轮询/回填。
+- `generate adopt --all` 没有回填任何任务：只处理 succeeded 且未回填的任务；先 `generate refresh --all` 刷新状态，并确认任务响应里有结果 URL。
 - 回填报「没有可回填的结果 URL」：平台成功响应里未带 video_url/output_url 等结果字段；用 `generate show <job_id>` 检查 response 结构，必要时从平台手动获取结果后登记产物。
 
 

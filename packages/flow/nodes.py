@@ -714,6 +714,86 @@ def _exec_generate(node: Node, ctx: NodeContext) -> NodeResult:
     )
 
 
+def _exec_generate_refresh(node: Node, ctx: NodeContext) -> NodeResult:
+    """查询生成任务平台状态（可选单个任务或批量刷新 submitted）。"""
+    params = node.params
+    job_id = str(params.get("job_id") or "").strip()
+    refresh_all_jobs = bool(params.get("all", not job_id))
+    if ctx.dry_run:
+        target = f"任务 {job_id}" if job_id else "全部 submitted 任务"
+        return NodeResult(
+            status="planned",
+            outputs=[f"[dry-run] 将刷新生成平台状态：{target}"],
+            logs=["dry-run 不访问平台"],
+        )
+    from generate import GenerateError, refresh as refresh_job, refresh_all
+
+    try:
+        if job_id:
+            updated = refresh_job(ctx.project_root, job_id)
+            return NodeResult(
+                outputs=[f"任务 {updated['job_id']} → {updated['status']}"],
+                logs=[f"provider {updated.get('provider')}/{updated.get('model')}"],
+            )
+        if not refresh_all_jobs:
+            raise NodeError("刷新节点需要 job_id 或 all=true")
+        result = refresh_all(
+            ctx.project_root, limit=int(params.get("limit") or 20)
+        )
+        items = result.get("refreshed") or []
+        failed = [item for item in items if not item.get("ok")]
+        return NodeResult(
+            outputs=[f"已刷新 {len(items)} 个任务（失败 {len(failed)}）"],
+            logs=[f"失败：{item['job_id']} {item.get('error')}" for item in failed],
+        )
+    except GenerateError as exc:
+        raise NodeError(f"刷新生成任务失败：{exc}") from exc
+
+
+def _exec_generate_adopt(node: Node, ctx: NodeContext) -> NodeResult:
+    """把 succeeded 任务结果回填为项目产物（可选单个任务或批量）。"""
+    params = node.params
+    job_id = str(params.get("job_id") or "").strip()
+    stage = str(params.get("stage") or "05")
+    kind = str(params.get("kind") or "generation")
+    note = str(params.get("note") or "")
+    if ctx.dry_run:
+        target = f"任务 {job_id}" if job_id else "全部 succeeded 任务"
+        return NodeResult(
+            status="planned",
+            outputs=[f"[dry-run] 将回填{target}到阶段 {stage}"],
+            logs=["dry-run 不写产物"],
+        )
+    from generate import GenerateError, adopt as adopt_job, adopt_all
+
+    try:
+        if job_id:
+            record = adopt_job(
+                ctx.project_root, job_id, stage=stage, kind=kind, note=note
+            )
+            return NodeResult(
+                outputs=[f"已回填 {job_id} → {record['artifact']}"],
+                logs=[f"结果 URL：{record['result_url']}"],
+            )
+        if not bool(params.get("all", False)):
+            raise NodeError("回填节点需要 job_id 或 all=true")
+        result = adopt_all(
+            ctx.project_root,
+            stage=stage,
+            kind=kind,
+            note=note,
+            limit=int(params.get("limit") or 20),
+        )
+        items = result.get("jobs") or []
+        failed = [item for item in items if not item.get("ok")]
+        return NodeResult(
+            outputs=[f"已批量回填 {result.get('adopted_count', 0)} 个任务到阶段 {stage}"],
+            logs=[f"失败：{item['job_id']} {item.get('error')}" for item in failed],
+        )
+    except GenerateError as exc:
+        raise NodeError(f"回填生成结果失败：{exc}") from exc
+
+
 EXECUTORS: dict[str, Executor] = {
     "start": _exec_start,
     "stage": _exec_stage,
@@ -728,6 +808,8 @@ EXECUTORS: dict[str, Executor] = {
     "knowledge_adopt": _exec_knowledge_adopt,
     "style_bind": _exec_style_bind,
     "generate": _exec_generate,
+    "generate_refresh": _exec_generate_refresh,
+    "generate_adopt": _exec_generate_adopt,
     "export": _exec_export,
     "end": _exec_end,
 }

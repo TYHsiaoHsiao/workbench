@@ -1,6 +1,7 @@
 """M8 复合节点：knowledge_adopt / style_bind / generate（含 dry-run）。"""
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 import tempfile
@@ -13,7 +14,7 @@ sys.path.insert(0, str(REPO_ROOT / "packages"))
 from core_router.memory import load_memory  # noqa: E402
 from core_router.project import create_project, load_state, save_state  # noqa: E402
 from flow import Runner  # noqa: E402
-from generate.jobs import jobs_dir  # noqa: E402
+from generate.jobs import create_job, jobs_dir, update_job  # noqa: E402
 
 
 def make_node(node_id: str, node_type: str, params: dict, x: int = 0) -> dict:
@@ -302,6 +303,141 @@ class M8CompoundNodesTest(unittest.TestCase):
         result = Runner(self.project, graph, dry_run=True).run()
         self.assertEqual("succeeded", result["run"]["status"], msg=result)
         self.assertEqual([], list(jobs_dir(self.project).glob("gen-*.json")))
+
+
+    def test_generate_refresh_node_dry_run_plans(self) -> None:
+        graph = make_graph(
+            self.project.name,
+            [
+                self._start(),
+                make_node("refresh", "generate_refresh", {"job_id": "gen-20261115-000000-abc123"}, x=320),
+                make_node("end", "end", {}, x=640),
+            ],
+            [
+                edge("e1", "start", "project", "refresh", "state"),
+                edge("e2", "refresh", "generation", "end", "any"),
+            ],
+        )
+        result = Runner(self.project, graph, dry_run=True).run()
+        self.assertEqual("succeeded", result["run"]["status"], msg=result)
+        outputs = " ".join(
+            str(item) for step in result["run"]["steps"] for item in (step.get("outputs") or [])
+        )
+        self.assertIn("[dry-run]", outputs)
+
+    def test_generate_refresh_node_batch_empty(self) -> None:
+        graph = make_graph(
+            self.project.name,
+            [
+                self._start(),
+                make_node("refresh", "generate_refresh", {"all": True}, x=320),
+                make_node("end", "end", {}, x=640),
+            ],
+            [
+                edge("e1", "start", "project", "refresh", "state"),
+                edge("e2", "refresh", "generation", "end", "any"),
+            ],
+        )
+        result = Runner(self.project, graph, dry_run=False).run()
+        self.assertEqual("succeeded", result["run"]["status"], msg=result)
+        outputs = " ".join(
+            str(item) for step in result["run"]["steps"] for item in (step.get("outputs") or [])
+        )
+        self.assertIn("已刷新 0 个任务", outputs)
+
+    def test_generate_refresh_node_requires_target(self) -> None:
+        graph = make_graph(
+            self.project.name,
+            [
+                self._start(),
+                make_node("refresh", "generate_refresh", {"all": False}, x=320),
+                make_node("end", "end", {}, x=640),
+            ],
+            [
+                edge("e1", "start", "project", "refresh", "state"),
+                edge("e2", "refresh", "generation", "end", "any"),
+            ],
+        )
+        result = Runner(self.project, graph, dry_run=False).run()
+        self.assertEqual("failed", result["run"]["status"])
+        self.assertIn("job_id 或 all", str(result["run"]["steps"][1].get("error") or ""))
+
+    def _succeeded_job(self, url: str) -> dict:
+        prompt = self.project / "06_prompts" / "shot-01.txt"
+        prompt.parent.mkdir(parents=True, exist_ok=True)
+        prompt.write_text("镜头 01：雨夜巷口。", encoding="utf-8")
+        text = prompt.read_text(encoding="utf-8")
+        job = create_job(
+            self.project,
+            provider="seedance_2_5",
+            model="seedance-2.5",
+            project=self.project.name,
+            shot="01",
+            prompt_path="06_prompts/shot-01.txt",
+            prompt_sha256=hashlib.sha256(text.encode("utf-8")).hexdigest(),
+            chars=len(text),
+            dry_run=False,
+            status="succeeded",
+        )
+        return update_job(self.project, job["job_id"], response={"video_url": url})
+
+    def test_generate_adopt_node_writes_artifact(self) -> None:
+        job = self._succeeded_job("https://cdn.test/node.mp4")
+        graph = make_graph(
+            self.project.name,
+            [
+                self._start(),
+                make_node("adopt", "generate_adopt", {"job_id": job["job_id"], "stage": "05"}, x=320),
+                make_node("end", "end", {}, x=640),
+            ],
+            [
+                edge("e1", "start", "project", "adopt", "state"),
+                edge("e2", "adopt", "artifact", "end", "any"),
+            ],
+        )
+        result = Runner(self.project, graph, dry_run=False).run()
+        self.assertEqual("succeeded", result["run"]["status"], msg=result)
+        artifact = f"05_shots/generations/shot-01__{job['job_id']}.json"
+        self.assertTrue((self.project / artifact).is_file())
+        state = load_state(self.project)
+        self.assertIn(artifact, state["stage_artifacts"]["05"])
+
+    def test_generate_adopt_node_dry_run_plans_only(self) -> None:
+        prompt = self.project / "06_prompts" / "shot-02.txt"
+        prompt.parent.mkdir(parents=True, exist_ok=True)
+        prompt.write_text("镜头 02：雨夜。", encoding="utf-8")
+        graph = make_graph(
+            self.project.name,
+            [
+                self._start(),
+                make_node("adopt", "generate_adopt", {"all": True}, x=320),
+                make_node("end", "end", {}, x=640),
+            ],
+            [
+                edge("e1", "start", "project", "adopt", "state"),
+                edge("e2", "adopt", "artifact", "end", "any"),
+            ],
+        )
+        result = Runner(self.project, graph, dry_run=True).run()
+        self.assertEqual("succeeded", result["run"]["status"], msg=result)
+        self.assertEqual([], list((self.project / "05_shots" / "generations").glob("*")) if (self.project / "05_shots" / "generations").exists() else [])
+
+    def test_generate_adopt_node_requires_target(self) -> None:
+        graph = make_graph(
+            self.project.name,
+            [
+                self._start(),
+                make_node("adopt", "generate_adopt", {"all": False}, x=320),
+                make_node("end", "end", {}, x=640),
+            ],
+            [
+                edge("e1", "start", "project", "adopt", "state"),
+                edge("e2", "adopt", "artifact", "end", "any"),
+            ],
+        )
+        result = Runner(self.project, graph, dry_run=False).run()
+        self.assertEqual("failed", result["run"]["status"])
+        self.assertIn("job_id 或 all", str(result["run"]["steps"][1].get("error") or ""))
 
 
 if __name__ == "__main__":

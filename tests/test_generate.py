@@ -23,6 +23,7 @@ from generate import (  # noqa: E402
     plan,
     provider_ids,
     adopt,
+    adopt_all,
     refresh,
     refresh_all,
     result_url,
@@ -403,6 +404,56 @@ class GenerateRetryAdoptTest(unittest.TestCase):
         with self.assertRaises(GenerateError) as ctx:
             adopt(self.project, job["job_id"], stage="99")
         self.assertIn("未知阶段", str(ctx.exception))
+
+    def test_adopt_all_skips_unsuitable_jobs(self) -> None:
+        self._job(status="dry_run", dry_run=True)
+        self._job()
+        no_url = self._job(status="succeeded", response={"id": "platform-1"})
+        result = adopt_all(self.project)
+        self.assertEqual(0, result["adopted_count"])
+        self.assertEqual(1, len(result["jobs"]))
+        self.assertFalse(result["jobs"][0]["ok"])
+        self.assertEqual(no_url["job_id"], result["jobs"][0]["job_id"])
+        self.assertIn("没有可回填的结果 URL", result["jobs"][0]["error"])
+
+    def test_adopt_all_adopts_succeeded_jobs_idempotently(self) -> None:
+        first = self._job(
+            status="succeeded", response={"video_url": "https://cdn.test/1.mp4"}
+        )
+        second = self._job(
+            status="succeeded", response={"video_url": "https://cdn.test/2.mp4"}
+        )
+        result = adopt_all(self.project)
+        self.assertEqual(2, result["adopted_count"])
+        artifacts = {item["job_id"]: item["artifact"] for item in result["jobs"]}
+        for job in (first, second):
+            self.assertTrue((self.project / artifacts[job["job_id"]]).is_file())
+            self.assertEqual(
+                artifacts[job["job_id"]],
+                job_detail(self.project, job["job_id"])["adopted"]["artifact"],
+            )
+        state = load_state(self.project)
+        summary = state["stage_artifacts"]["05"]
+        for job in (first, second):
+            self.assertIn(artifacts[job["job_id"]], summary)
+        again = adopt_all(self.project)
+        self.assertEqual(0, again["adopted_count"])
+        self.assertEqual([], again["jobs"])
+
+    def test_adopt_all_stage_option(self) -> None:
+        job = self._job(
+            status="succeeded", response={"video_url": "https://cdn.test/6.mp4"}
+        )
+        result = adopt_all(self.project, stage="06")
+        self.assertEqual(1, result["adopted_count"])
+        artifact = result["jobs"][0]["artifact"]
+        self.assertTrue(artifact.startswith("06_prompts/generations/"))
+        self.assertIn("06_prompts/generations/", artifact)
+        state = load_state(self.project)
+        self.assertIn(artifact, state["stage_artifacts"]["06"])
+        self.assertEqual(
+            artifact, job_detail(self.project, job["job_id"])["adopted"]["artifact"]
+        )
 
 
 if __name__ == "__main__":

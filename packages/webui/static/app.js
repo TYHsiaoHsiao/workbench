@@ -1398,7 +1398,7 @@ async function runBatch() {
 
 /* ---------------- 生成平台面板 ---------------- */
 
-const generateCache = { providers: [], jobs: [] };
+const generateCache = { providers: [], jobs: [], filter: "all" };
 
 async function openGenerate() {
   $("#generate-panel").classList.remove("hidden");
@@ -1428,10 +1428,37 @@ function genProviderRows() {
     "<th>模型</th><th>env key</th></tr></thead><tbody>" + rows + "</tbody></table>";
 }
 
+function genFilterOptions() {
+  const options = [
+    ["all", "全部"],
+    ["submitted", "排队中"],
+    ["succeeded", "成功"],
+    ["failed", "失败"],
+    ["canceled", "已取消"],
+    ["dry_run", "dry-run"],
+    ["planned", "计划"],
+    ["succeeded_adopted", "已回填"],
+  ];
+  const current = generateCache.filter || "all";
+  return options.map((item) =>
+    '<option value="' + item[0] + '"' + (current === item[0] ? " selected" : "") + ">" +
+    item[1] + "</option>"
+  ).join("");
+}
+
 function genJobRows() {
-  const jobs = generateCache.jobs || [];
-  if (!jobs.length) {
+  const filter = generateCache.filter || "all";
+  const allJobs = generateCache.jobs || [];
+  const jobs = allJobs.filter((job) => {
+    if (filter === "all") return true;
+    if (filter === "succeeded_adopted") return job.status === "succeeded" && job.adopted;
+    return job.status === filter;
+  });
+  if (!allJobs.length) {
     return '<p class="hint">暂无任务记录。提交后会写入 00_project/generations/jobs/。</p>';
+  }
+  if (!jobs.length) {
+    return '<p class="hint">当前筛选条件下暂无任务。</p>';
   }
   const rows = jobs.map((job) => {
     const canRefresh = !job.dry_run && job.status === "submitted";
@@ -1490,7 +1517,11 @@ function genFormHtml() {
     '<div class="generate-info">' +
     "<h4>provider 状态</h4>" + genProviderRows() +
     "<h4>任务记录</h4>" +
-    '<div class="generate-actions"><button id="btn-gen-refresh-all">刷新全部 submitted</button></div>' +
+    '<div class="generate-actions"><button id="btn-gen-refresh-all">刷新全部 submitted</button>' +
+    '<button id="btn-gen-adopt-all">回填全部已成功</button>' +
+    '<label class="inline-check">筛选 <select id="gen-filter-status">' +
+    genFilterOptions() +
+    "</select></label></div>" +
     '<div id="gen-job-table-box">' + genJobRows() + "</div>" +
     "</div></div>"
   );
@@ -1700,12 +1731,47 @@ async function adoptGenerateJob(jobId) {
   }
 }
 
+async function adoptGenerateAll() {
+  try {
+    const data = await api("/api/generate/jobs/adopt", {
+      method: "POST",
+      body: JSON.stringify({ project: state.project, stage: "05", limit: 20 }),
+    });
+    const items = data.jobs || [];
+    if (!items.length) {
+      logLine("没有可回填的 succeeded 任务", "warn");
+      return;
+    }
+    for (const item of items) {
+      logLine(
+        "[" + (item.ok ? "OK" : "FAIL") + "] " + item.job_id + " · " +
+          (item.ok ? item.artifact : item.error),
+        item.ok ? "ok" : "err"
+      );
+    }
+    logLine("批量回填完成：共 " + (data.adopted_count || 0) + " 个任务到阶段 " + (data.stage || "05"), "ok");
+    await renderGenerate();
+  } catch (err) {
+    logLine("批量回填失败：" + err.message, "err");
+  }
+}
+
 function bindGeneratePanel() {
   $("#gen-provider").addEventListener("change", syncGenModels);
   syncGenModels();
   $("#btn-gen-plan").addEventListener("click", () => planGenerate());
   $("#btn-gen-submit").addEventListener("click", () => submitGenerate());
   $("#btn-gen-refresh-all").addEventListener("click", () => refreshGenerateAll());
+  $("#btn-gen-adopt-all").addEventListener("click", () => adoptGenerateAll());
+  $("#gen-filter-status").addEventListener("change", (event) => {
+    generateCache.filter = event.target.value || "all";
+    $("#gen-job-table-box").innerHTML = genJobRows();
+    bindJobTableActions();
+  });
+  bindJobTableActions();
+}
+
+function bindJobTableActions() {
   document.querySelectorAll("#gen-job-table-box [data-gen-refresh]").forEach((button) => {
     button.addEventListener("click", () => refreshGenerateJob(button.dataset.genRefresh));
   });

@@ -53,6 +53,7 @@ from generate import (
     GenerateError,
     JobError,
     adopt,
+    adopt_all,
     get_provider,
     job_detail,
     list_jobs,
@@ -597,6 +598,23 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             except (GenerateError, JobError) as exc:
                 raise FlowError(str(exc)) from exc
             self._json({"ok": True, "job": job})
+            return
+        if path == "/api/generate/jobs/adopt":
+            project = resolve_project(
+                body.get("project") or str(self.server.project_root)
+            )
+            try:
+                limit = int(body.get("limit") or 20)
+                result = adopt_all(
+                    project,
+                    stage=str(body.get("stage") or "05"),
+                    kind=str(body.get("kind") or "generation"),
+                    note=str(body.get("note") or ""),
+                    limit=limit,
+                )
+            except (GenerateError, JobError, ValueError) as exc:
+                raise FlowError(str(exc)) from exc
+            self._json(result)
             return
         if path.startswith("/api/generate/jobs/") and path.endswith("/adopt"):
             project = resolve_project(
