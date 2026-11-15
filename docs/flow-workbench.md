@@ -1,6 +1,6 @@
-# 可视化节点工作台（M1–M12）
+# 可视化节点工作台（M1–M12 + 2.0.1 实时预览）
 
-> 版本：2.0.0 · 状态：M1–M12 已完成 · 适用范围：本地单用户
+> 版本：2.0.1 · 状态：M1–M12 已完成；2.0.1 为实时预览与界面迭代补丁 · 适用范围：本地单用户
 
 ## 1. 定位
 
@@ -198,6 +198,7 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 | POST | `/api/workflows/batch` | 批量运行（批次记录；body: project / graph_ids / all / dry_run / auto_confirm / auto_retry / fail_fast / limit） |
 | GET | `/api/batches?project=&limit=` | 批次列表（最近批次摘要） |
 | GET | `/api/batches/<batch_id>?project=` | 批次详情（每图状态/尝试/耗时/错误） |
+| GET | `/api/dev/version` | 静态资源签名（`filename:size:mtime_ns` + `latest_mtime_ns`）；前端每 1.2s 轮询，变更后整页刷新（2.0.1） |
 - 兼容别名：`POST /api/runs/batch` 与 `POST /api/workflows/batch` 等价（旧字段 `count`/`results`），前端已迁移到新端点。
 
 鉴权：默认启用令牌，通过 `?token=` 或请求头 `X-Workbench-Token` 传递；静态页面不拦截（仅本机监听）。
@@ -289,6 +290,12 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - Web：`POST /api/workflows/batch`、`GET /api/batches`、`GET /api/batches/<batch_id>`；`POST /api/runs/batch` 保留兼容别名；前端批量预演展示尝试与耗时。
 
 
+### 2.0.1：实时预览与界面迭代（PATCH）
+
+- 实时预览：`GET /api/dev/version` 返回内置静态资源签名，前端 `startLivePreview()` 每 1.2s 轮询；签名变化时状态栏提示并整页刷新。
+- 界面迭代：节点按分类着色（分类圆点 + 同色徽标）、端口连接圆点、连线贝塞尔箭头；预览演示项目新增「17 类节点演示」图（17 节点/26 连线）。
+- 边界：整页刷新会重置缩放/选中；仅跟踪 3 个静态资源；后端 Python 改动需重启 `serve`。
+
 ## 16. 已知限制
 
 1. 图与 state 仍为单向（图 → state）；不支持从现有 state 自动反推流程图。
@@ -310,6 +317,7 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 16. 生成节点需要显式给出 `job_id` 或 `all=true`，不会自动轮询、自动重试或自动回填。
 17. 批次记录只保存图级汇总与尝试记录，不保存每次重试的完整运行详情；图校验失败的尝试不会生成运行记录。
 18. 自动重试是有限次数（0–3）的同步重跑，不含退避/排队等待；生成长任务请配合 generate 节点与显式状态刷新。
+19. 实时预览基于整页刷新，刷新后缩放/选中状态会重置；仅跟踪 3 个内置静态资源，后端 Python 改动需重启 `serve`。
 
 ## 17. 验证
 
@@ -324,6 +332,7 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - M11（1.10.0）新增 10 项测试（批量回填 3、生成节点 6、批量回填 Web API 1），全量 `Ran 316 tests ... OK`；CLI 冒烟：`generate adopt --all`、`flow validate`（17 类）；Web 冒烟：生成面板状态筛选与「回填全部已成功」。
 - 本地 CI `scripts/run_ci.py`：compile / tests / doctor / brand-guard 全 PASS；品牌守卫 0 命中。
 - M12（2.0.0）新增 7 项测试（批次引擎 6：dry-run 批次记录/自动重试/fail_fast/limit/awaiting_confirm/非法批次；Web API 1：批次运行与历史查询），全量 `Ran 323 tests ... OK`；CLI 冒烟：`flow batch --all --dry-run`、`flow batches`、`flow batch --live --auto-retry 1`、`flow batch-show`；doctor 9 项含 5 份 flow 契约。
+- 2.0.1 新增 2 项测试（dev 版本端点、静态文件变更后签名变化），全量 `Ran 325 tests ... OK`；手动验证：`serve` 后修改 `style.css`，约 1–2s 页面自动刷新（服务端日志可 `GET /api/dev/version` 轮询）。
 
 ## 18. 后续（M13 候选）
 

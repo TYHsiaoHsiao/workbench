@@ -151,10 +151,51 @@ async function boot() {
     logLine("未发现项目。请先运行：workbench.py init <名称> --entry A", "warn");
     return;
   }
-  const preferred = state.projects.find((p) => p.stage !== "done") || state.projects[0];
+  // 优先选中 serve 指定的当前项目（/api/workbench 不带 project 时返回服务端项目根），
+  // 否则回退到第一个未完成项目，保证预览与启动命令一致。
+  let preferred = null;
+  try {
+    const current = await api("/api/workbench");
+    preferred = state.projects.find((p) => p.path === current.project) || null;
+  } catch (err) {
+    preferred = null;
+  }
+  if (!preferred) {
+    preferred = state.projects.find((p) => p.stage !== "done") || state.projects[0];
+  }
   select.value = preferred.path;
   await chooseProject(preferred.path);
   setStatus("就绪");
+  startLivePreview();
+}
+
+/* ---------------- 实时预览（开发模式） ---------------- */
+
+const LIVE_PREVIEW_INTERVAL_MS = 1200;
+let livePreviewSignature = null;
+
+async function startLivePreview() {
+  const badge = $("#live-preview");
+  try {
+    const data = await api("/api/dev/version");
+    livePreviewSignature = data.signature || "";
+    if (badge) badge.classList.remove("hidden");
+  } catch (err) {
+    return;
+  }
+  setInterval(async () => {
+    try {
+      const data = await api("/api/dev/version");
+      const signature = data.signature || "";
+      if (signature && signature !== livePreviewSignature) {
+        livePreviewSignature = signature;
+        setStatus("检测到文件变更，正在刷新预览…");
+        window.location.reload();
+      }
+    } catch (err) {
+      /* 忽略瞬时网络错误，下一轮轮询继续 */
+    }
+  }, LIVE_PREVIEW_INTERVAL_MS);
 }
 
 async function chooseProject(path) {
@@ -360,6 +401,19 @@ function addEdge(fromNode, fromPort, toNode, toPort) {
 
 /* ---------------- 渲染 ---------------- */
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+
+const NODE_CATEGORY_COLORS = {
+  "入口": "#f59e0b",
+  "阶段": "#4f9cf9",
+  "知识": "#22c55e",
+  "风格": "#a855f7",
+  "工具": "#14b8a6",
+  "控制": "#f97316",
+  "生成": "#ec4899",
+  "输出": "#38bdf8",
+};
+
 function renderGraph() {
   const nodesEl = $("#nodes");
   nodesEl.innerHTML = "";
@@ -380,6 +434,8 @@ function renderGraph() {
     el.style.top = (node.position.y || 0) + "px";
 
     const spec = nodeType(node.type) || { ports: { in: [], out: [] } };
+    el.dataset.category = spec.category || "其他";
+    el.style.setProperty("--cat", NODE_CATEGORY_COLORS[spec.category] || "#4f9cf9");
     const head = document.createElement("div");
     head.className = "node-head";
     head.innerHTML = "<span class='title'>" + escapeHtml(node.label || spec.label || node.type) + "</span>" +
@@ -484,14 +540,20 @@ function renderEdges() {
     svg.setAttribute("height", Math.max(800, maxY + 200));
   }
   svg.innerHTML = "";
+  const defs = document.createElementNS(SVG_NS, "defs");
+  defs.innerHTML =
+    '<marker id="edge-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">' +
+    '<path d="M 0 0 L 10 5 L 0 10 z" class="edge-arrow"></path></marker>';
+  svg.appendChild(defs);
   if (!state.graph) return;
   for (const edge of state.graph.edges || []) {
     const a = portCenter(edge.from.node, edge.from.port, "out");
     const b = portCenter(edge.to.node, edge.to.port, "in");
     if (!a || !b) continue;
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    const path = document.createElementNS(SVG_NS, "path");
     path.setAttribute("d", bezier(a, b));
     path.setAttribute("class", "edge");
+    path.setAttribute("marker-end", "url(#edge-arrow)");
     path.addEventListener("click", (e) => {
       e.stopPropagation();
       if (window.confirm("删除这条连线？")) {

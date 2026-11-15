@@ -137,6 +137,8 @@
 - `flow batch-show` 报「非法批次 ID」：`--batch` 需传批次列表中的 `batch-...` ID（不是 run_id）；先 `flow batches` 查看。
 - 批次里某图始终失败：查看批次详情 `attempts`/`error`；`--auto-retry` 只重试失败图（每次新 run_id），图校验失败的尝试不会生成运行记录；修复图后重跑。
 - 旧脚本解析 `flow batch --json` 报错：2.0.0 起输出由 `{count,results}` 改为 `{ok,project,batch}`，请改读 `batch.graphs`（Web 兼容别名 `/api/runs/batch` 仍返回旧字段）。
+- 修改前端文件后页面不自动刷新：确认 `workbench version` ≥ 2.0.1，浏览器可访问 `/api/dev/version`；仅跟踪 3 个内置静态资源，后端 Python 改动需重启 `serve`。
+- 「● 实时预览」不显示或轮询 401：URL 缺 token 或 token 失效，重新复制 `flow serve` 打印的带 token 地址。
 
 
 

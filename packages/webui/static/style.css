@@ -49,6 +49,15 @@ button.danger { background: #7f1d1d; border-color: #991b1b; }
 
 .brand { font-weight: 600; letter-spacing: 0.5px; }
 .version { color: var(--muted); font-weight: 400; margin-left: 6px; }
+.live-preview {
+  padding: 1px 8px;
+  border: 1px solid #2f6f4f;
+  border-radius: 999px;
+  color: #6ee7a8;
+  background: rgba(34, 197, 122, 0.12);
+  font-size: 11px;
+  font-weight: 500;
+}
 
 .topbar-controls { display: flex; align-items: center; gap: 10px; flex: 1; }
 .topbar-controls label { color: var(--muted); display: flex; align-items: center; gap: 6px; }
@@ -130,8 +139,24 @@ button.danger { background: #7f1d1d; border-color: #991b1b; }
   border-radius: 10px 10px 0 0;
   cursor: move;
 }
-.node-head .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.node-head .badge { font-size: 10px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; }
+.node-head::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: var(--cat, #4f9cf9);
+  box-shadow: 0 0 6px var(--cat, #4f9cf9);
+}
+.node-head .title { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.node-head .badge {
+  font-size: 10px;
+  color: var(--cat, var(--muted));
+  border: 1px solid var(--cat, var(--line));
+  background: color-mix(in srgb, var(--cat, #4f9cf9) 12%, transparent);
+  border-radius: 999px;
+  padding: 0 6px;
+}
 
 .node-body { padding: 6px 10px 10px; }
 .node-body .kv { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; gap: 8px; }
@@ -139,6 +164,7 @@ button.danger { background: #7f1d1d; border-color: #991b1b; }
 
 .ports { display: flex; justify-content: space-between; padding: 0 10px 9px; color: var(--muted); font-size: 11px; }
 .ports .col { display: flex; flex-direction: column; gap: 5px; }
+.ports .col:last-child { align-items: flex-end; }
 .port {
   display: flex;
   align-items: center;
@@ -147,17 +173,29 @@ button.danger { background: #7f1d1d; border-color: #991b1b; }
   padding: 1px 2px;
   border-radius: 4px;
 }
+.port::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.75;
+}
+.port.out { flex-direction: row-reverse; }
 .port:hover { background: rgba(79,156,249,0.15); }
 .port.in { color: #93c5fd; }
-.port.out { color: #86efac; justify-content: flex-end; }
+.port.out { color: #86efac; }
 
 #edges path.edge {
   fill: none;
-  stroke: #4b6a94;
+  stroke: #5b7fb0;
   stroke-width: 2;
+  stroke-linecap: round;
   cursor: pointer;
 }
 #edges path.edge:hover { stroke: var(--accent); stroke-width: 3; }
+#edges .edge-arrow { fill: #5b7fb0; }
 #edges path.temp { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; }
 #edges path.edge.selected { stroke: var(--accent); stroke-width: 3; }
 

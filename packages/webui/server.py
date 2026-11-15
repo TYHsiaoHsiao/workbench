@@ -89,6 +89,23 @@ def _workbench_version() -> str:
         return "unknown"
 
 
+def _dev_signature() -> dict[str, Any]:
+    """静态资源版本签名（预览自动刷新用）：文件名 + mtime_ns + 大小。"""
+    files: dict[str, str] = {}
+    latest = 0
+    for child in sorted(STATIC_DIR.glob("*")):
+        if not child.is_file():
+            continue
+        try:
+            stat = child.stat()
+        except OSError:
+            continue
+        files[child.name] = f"{stat.st_mtime_ns}-{stat.st_size}"
+        latest = max(latest, stat.st_mtime_ns)
+    signature = "|".join(f"{name}:{value}" for name, value in files.items())
+    return {"signature": signature, "latest_mtime_ns": latest, "files": files}
+
+
 def _list_projects() -> list[dict[str, Any]]:
     """扫描默认项目根与仓库同级 projects 目录。"""
     roots: list[Path] = []
@@ -313,6 +330,9 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
 
     # ---------------- API 实现 ----------------
     def _api_get(self, path: str, query: dict[str, list[str]]) -> None:
+        if path == "/api/dev/version":
+            self._json({"ok": True, **_dev_signature()})
+            return
         if path == "/api/workbench":
             project = self._project_from(query)
             self._json(

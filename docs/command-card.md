@@ -1,4 +1,4 @@
-# 命令卡（v2.0.0）
+# 命令卡（v2.0.1）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -77,7 +77,7 @@
 
 | 命令 | 作用 |
 |---|---|
-| `python workbench.py flow serve --project 项目名 [--port 8899]` | 启动本机可视化工作台（打印带 token 的 URL；`--no-token` 仅本机调试） |
+| `python workbench.py flow serve --project 项目名 [--port 8899]` | 启动本机可视化工作台（打印带 token 的 URL；页面每 1.2s 轮询 `/api/dev/version` 实现实时预览；`--no-token` 仅本机调试） |
 | `python workbench.py flow templates [--json]` | 模板库（4 套：从零到成片 / 入口接力 / 知识增强 / 风格注入） |
 | `python workbench.py flow new --project 项目名 [--template tpl-full-flow] [--graph 流程id] [--force]` | 新建流程图（默认骨架或模板实例化） |
 | `python workbench.py flow list / show / validate --project 项目名 [--graph 流程id]` | 流程列表 / 详情 / 校验（契约 + 语义 8 条） |

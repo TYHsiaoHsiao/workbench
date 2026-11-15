@@ -19,7 +19,7 @@ from core_router.project import create_project, load_state  # noqa: E402
 from flow import write_graph_data  # noqa: E402
 from generate.jobs import create_job, update_job  # noqa: E402
 from webui import create_server  # noqa: E402
-from webui.server import WorkbenchHandler  # noqa: E402
+from webui.server import STATIC_DIR, WorkbenchHandler  # noqa: E402
 
 WorkbenchHandler.quiet = True
 
@@ -641,6 +641,30 @@ class WebUIApiTest(unittest.TestCase):
             self.assertTrue(artifact.startswith("05_shots/generations/"))
             self.assertTrue((self.project / artifact).is_file())
         self.assertNotIn(failed["job_id"], items)
+
+
+    def test_dev_version_endpoint(self) -> None:
+        status, data = self.client.json("GET", self._q("/api/dev/version"))
+        self.assertEqual(200, status, msg=data)
+        self.assertTrue(data["ok"])
+        self.assertIsInstance(data["signature"], str)
+        self.assertGreaterEqual(len(data["files"]), 3)
+        self.assertIn("app.js", data["files"])
+        self.assertIsInstance(data["latest_mtime_ns"], int)
+        self.assertGreater(data["latest_mtime_ns"], 0)
+
+    def test_dev_version_signature_changes_on_static_edit(self) -> None:
+        _, first = self.client.json("GET", self._q("/api/dev/version"))
+        probe = STATIC_DIR / "__live_preview_probe.txt"
+        try:
+            probe.write_text("probe", encoding="utf-8")
+            _, second = self.client.json("GET", self._q("/api/dev/version"))
+            self.assertNotEqual(first["signature"], second["signature"])
+        finally:
+            if probe.exists():
+                probe.unlink()
+        _, third = self.client.json("GET", self._q("/api/dev/version"))
+        self.assertEqual(first["signature"], third["signature"])
 
 
 if __name__ == "__main__":
