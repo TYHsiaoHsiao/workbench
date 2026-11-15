@@ -1,6 +1,6 @@
-# 可视化节点工作台（M1 / M2 / M3 / M4 / M5）
+# 可视化节点工作台（M1 / M2 / M3 / M4 / M5 / M6）
 
-> 版本：1.4.0 · 状态：M1–M5 已完成 · 适用范围：本地单用户
+> 版本：1.5.0 · 状态：M1–M6 已完成 · 适用范围：本地单用户
 
 ## 1. 定位
 
@@ -210,25 +210,37 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - 风险提示：对写状态的节点开启重试可能产生重复副作用（例如重复登记产物），默认 0；确认节点不会在并行波内执行。
 - 项目管理面板：`GET /api/projects` 返回每个项目的 artifacts / pending_gates / workflows / runs / last_run 统计；Web 顶栏「项目」抽屉可跨项目对比并切换；CLI `project list --stats` 输出同源数据。
 
-## 13. 已知限制
+## 13. 状态锁、运行对比与项目预览（M6）
+
+- 状态锁：所有写 `state.json` 的节点通过 `packages/flow/locks.py` 的项目级文件锁（`00_project/.locks/state.lock`）串行执行；锁持有超时（默认 15s）抛 `LockError`，超过 120s 的陈旧锁自动清理；每次写操作追加 `00_project/history/transactions.jsonl`（含 run_id / node_id / stage / mutations）。
+- 并行安全：标记 `parallel_safe=true` 的写节点（知识检索、风格应用/注入、产物登记、内容检查、导出、end）现在可在同一并行波次内运行；锁保证状态更新不丢。
+- 运行对比：`flow diff --project P --run A [--other-run B] [--json]` 或 Web API `GET /api/runs/<id>/diff?other=`；输出每节点状态变化、耗时差、回归/改善计数。
+- 项目摘要与预览：`project summary --project P` 与 `GET /api/projects/<name>/summary` 汇总已登记产物文件、流程图节点/边与运行数；Web 项目面板「预览」展示产物列表与流程图 SVG 缩略图，点击缩略图直接切换项目并加载该图。
+
+## 14. 已知限制
 
 1. 图与 state 仍为单向（图 → state）；不支持从现有 state 自动反推流程图。
 2. 阶段节点要求当前项目阶段与节点一致；跨阶段自由回退需显式编排并自行确认。
 3. 断点确认会话存于服务内存，服务重启后需重新运行。
 4. 回放依据运行记录时间戳：串行节点精确，并行执行仅为近似。
 5. 图导入导出只含流程图本身，不含项目状态与创作产物（跨项目迁移请用 `export` / `restore`）。
+6. 状态锁只对同一台机器的进程有效；跨机器并发写同一项目不在支持范围。
+7. 运行对比按 `node_id` 对齐；图结构变化较大时会出现 added/removed 噪声。
+8. 项目预览只读取已登记产物与 `00_project/workflows/` 下的图，不扫描未登记的目录。
 
-## 14. 验证
+## 15. 验证
 
 - 新增 22 项 flow 测试（图校验 12、执行引擎 10）+ 12 项 Web API 测试（M1）；M2/M3 新增 18 项（模板 6、能力节点 6、runner 2、Web API 4）。
 - 全量 `Ran 222 tests ... OK`；CLI 冒烟：模板实例化、dry-run、运行历史、批量预演、失败恢复（live 恢复后 01→02）；`doctor` 8 项含 flow 模板检查。
 - M4（1.3.0）新增 5 项回放/导入导出测试 + 2 项 Web API，全量 `Ran 229 tests ... OK`；CLI 冒烟：模板图 → dry-run → replay → export → import → 非法导入被拒。
+- M6（1.5.0）新增 11 项测试（状态锁 5、运行对比 3、并行写锁集成 1、Web API 2），全量 `Ran 247 tests ... OK`；CLI 冒烟：两次 dry-run → `project summary` → `flow diff` → `project list --stats` → `doctor` / `flow validate` 通过。
 - 本地 CI `scripts/run_ci.py`：compile / tests / doctor / brand-guard 全 PASS；品牌守卫 0 命中。
 
-## 15. 后续（M6 候选）
+## 16. 后续（M7 候选）
 
-- 写状态节点的安全并行（锁/事务日志）与依赖冲突检测。
-- 非线性流程的可视化分支条件与运行对比（两次运行 diff）。
-- 项目面板产物预览与流程图缩略图。
-- 知识卡/风格卡确认后写入参考记忆的一体化节点。
+- 条件分支与循环节点（图级 DAG + 运行期选路）。
+- 运行对比的基线保存与回归阈值告警（CI 化）。
+- 项目预览的缩略图缓存与产物体积/差异视图。
+- 知识卡/风格卡确认后自动写入参考记忆的复合节点。
+- 与真实生成平台的 API 对接（Seedance / H3 等）。
 - macOS 实跑与 GitHub Actions 远端 CI 矩阵。

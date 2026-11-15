@@ -986,6 +986,7 @@ async function loadRunHistory() {
   try {
     const data = await api("/api/runs?project=" + encodeURIComponent(state.project) + "&limit=10");
     const runs = data.runs || [];
+    state.runList = runs;
     if (!runs.length) {
       box.innerHTML = "<p class='hint'>暂无运行记录。</p>";
       return;
@@ -1009,6 +1010,128 @@ async function loadRunHistory() {
     }
   } catch (err) {
     box.innerHTML = "<p class='hint'>运行历史加载失败：" + escapeHtml(err.message) + "</p>";
+  }
+}
+
+
+/* ---------------- 运行对比（M6） ---------------- */
+
+async function diffRun() {
+  if (!state.project) {
+    logLine("请先选择项目", "warn");
+    return;
+  }
+  if (!state.run || !state.run.run_id) {
+    logLine("请先运行一次，或从运行历史打开一条运行", "warn");
+    return;
+  }
+  const list = state.runList || [];
+  const other = list.find((item) => item.run_id !== state.run.run_id) || null;
+  try {
+    let url = "/api/runs/" + encodeURIComponent(state.run.run_id) + "/diff?project=" + encodeURIComponent(state.project);
+    if (other) url += "&other=" + encodeURIComponent(other.run_id);
+    const data = await api(url);
+    renderDiff(data.diff);
+  } catch (err) {
+    logLine("运行对比失败：" + err.message, "err");
+  }
+}
+
+function renderDiff(diff) {
+  const box = $("#run-replay");
+  if (!box) return;
+  const s = diff.summary || {};
+  const rows = (diff.node_changes || []).filter((item) => item.change !== "same").map((item) => {
+    const cls = item.change === "status_changed" || item.change === "slower" ? "failed" : (item.change === "faster" ? "succeeded" : "waiting");
+    return (
+      '<div class="replay-step ' + cls + '">' +
+      '<span class="step-idx">' + escapeHtml(item.node_id) + '</span>' +
+      '<span class="step-label">' + escapeHtml(item.change) + '</span>' +
+      '<span class="step-dur">' + fmtMs(item.duration_base_ms) + " → " + fmtMs(item.duration_target_ms) + "</span>" +
+      '<span class="step-status">' + escapeHtml(item.base_status || "-") + " → " + escapeHtml(item.target_status || "-") + "</span>" +
+      "</div>"
+    );
+  }).join("");
+  box.innerHTML =
+    '<div class="replay-head">运行对比：' + escapeHtml(diff.base_run) + " → " + escapeHtml(diff.target_run) + "</div>" +
+    '<div class="replay-summary">步骤 ' + s.base_steps + " → " + s.target_steps +
+    " · 总耗时 " + fmtMs(s.base_total_ms) + " → " + fmtMs(s.target_total_ms) +
+    "（差 " + fmtMs(s.total_delta_ms) + "）· 回归 " + s.regressed + " · 改善 " + s.improved + "</div>" +
+    (rows || '<p class="hint">两次运行的节点状态与耗时一致。</p>');
+  box.classList.remove("hidden");
+}
+
+/* ---------------- 项目预览（M6） ---------------- */
+
+const TYPE_COLORS = {
+  start: "#2f855a", stage: "#2b6cb0", knowledge_search: "#2c7a7b", style_apply: "#b7791f",
+  style_inject: "#b7791f", artifact_register: "#6b46c1", check_content: "#4a5568",
+  confirm: "#805ad5", export: "#3182ce", end: "#4a5568",
+};
+
+function graphThumb(graph) {
+  const nodes = graph.nodes || [];
+  const edges = graph.edges || [];
+  if (!nodes.length) return '<p class="hint">空图</p>';
+  const xs = nodes.map((n) => Number(n.x) || 0);
+  const ys = nodes.map((n) => Number(n.y) || 0);
+  const minX = Math.min(...xs) - 40;
+  const minY = Math.min(...ys) - 30;
+  const w = Math.max(120, Math.max(...xs) - minX + 80);
+  const h = Math.max(80, Math.max(...ys) - minY + 70);
+  const viewW = 240;
+  const viewH = 150;
+  const scale = Math.min(viewW / w, viewH / h);
+  const mapX = (x) => ((Number(x) || 0) - minX) * scale;
+  const mapY = (y) => ((Number(y) || 0) - minY) * scale;
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const lines = edges.map((edge) => {
+    const a = byId.get(edge.from && edge.from.node);
+    const b = byId.get(edge.to && edge.to.node);
+    if (!a || !b) return "";
+    return '<line x1="' + mapX(a.x) + '" y1="' + mapY(a.y) + '" x2="' + mapX(b.x) + '" y2="' + mapY(b.y) + '" stroke="#4a5568" stroke-width="1.2" />';
+  }).join("");
+  const rects = nodes.map((n) => {
+    const color = TYPE_COLORS[n.type] || "#4a5568";
+    return '<rect x="' + (mapX(n.x) - 24) + '" y="' + (mapY(n.y) - 9) + '" width="48" height="18" rx="3" fill="' + color + '" opacity="0.85" />';
+  }).join("");
+  return '<svg class="graph-thumb" viewBox="0 0 ' + viewW + " " + viewH + '" width="' + viewW + '" height="' + viewH + '">' + lines + rects + "</svg>";
+}
+
+async function previewProject(projectPath) {
+  const body = $("#projects-body");
+  try {
+    const data = await api("/api/projects/" + encodeURIComponent(projectPath) + "/summary");
+    const artifacts = (data.artifacts || []).map((item) => {
+      const files = (item.files || []).map((file) => '<li>' + escapeHtml(file.path) + " · " + file.size + "B</li>").join("");
+      return '<div class="preview-block"><h4>阶段 ' + escapeHtml(item.stage) + "</h4><p>" + escapeHtml(item.summary) + "</p><ul>" + files + "</ul></div>";
+    }).join("") || '<p class="hint">暂无登记产物。</p>';
+    const graphs = (data.graphs || []).map((graph) => (
+      '<figure class="preview-graph" data-preview-graph="' + escapeHtml(graph.graph_id) + '">' +
+      graphThumb(graph) +
+      '<figcaption>' + escapeHtml(graph.graph_id) + " · " + escapeHtml(graph.name || "") + "（" + graph.nodes.length + " 节点）</figcaption></figure>"
+    )).join("") || '<p class="hint">暂无流程图。</p>';
+    body.innerHTML =
+      '<div class="project-preview">' +
+      '<button id="btn-back-projects" class="link">← 返回项目列表</button>' +
+      '<h3>' + escapeHtml(data.project) + "（阶段 " + escapeHtml(data.stage || "") + " / " + escapeHtml(data.version || "") + "）</h3>" +
+      "<h4>产物</h4>" + artifacts +
+      "<h4>流程图缩略图</h4><div class='graph-thumbs'>" + graphs + "</div>" +
+      "</div>";
+    $("#btn-back-projects").addEventListener("click", () => renderProjects());
+    body.querySelectorAll("[data-preview-graph]").forEach((figure) => {
+      figure.addEventListener("click", async () => {
+        try {
+          await chooseProject(projectPath);
+          await loadGraph(figure.dataset.previewGraph);
+          closeProjects();
+        } catch (err) {
+          logLine("加载预览图失败：" + err.message, "err");
+        }
+      });
+    });
+  } catch (err) {
+    body.innerHTML = '<p class="hint">加载项目摘要失败：' + escapeHtml(err.message) + "</p>";
   }
 }
 
@@ -1217,12 +1340,13 @@ function renderProjects() {
       "<td>" + (p.runs || 0) + "</td>" +
       "<td>" + escapeHtml(last) + "</td>" +
       "<td>" + escapeHtml(p.updated_at || "") + "</td>" +
+      "<td><button class=\"link\" data-preview=\"1\">预览</button></td>" +
       "</tr>"
     );
   });
   body.innerHTML =
     "<table><thead><tr><th>名称</th><th>入口</th><th>阶段</th><th>版本</th><th>待门禁</th>" +
-    "<th>产物</th><th>流程</th><th>运行</th><th>最近运行</th><th>更新时间</th></tr></thead><tbody>" +
+    "<th>产物</th><th>流程</th><th>运行</th><th>最近运行</th><th>更新时间</th><th>预览</th></tr></thead><tbody>" +
     rows.join("") +
     "</tbody></table>";
   body.querySelectorAll("tr[data-path]").forEach((row) => {
@@ -1231,6 +1355,13 @@ function renderProjects() {
       closeProjects();
       logLine("已切换项目：" + state.projectName);
     });
+    const preview = row.querySelector("button[data-preview]");
+    if (preview) {
+      preview.addEventListener("click", (event) => {
+        event.stopPropagation();
+        previewProject(row.dataset.path);
+      });
+    }
   });
 }
 
@@ -1279,6 +1410,7 @@ function bindUi() {
   });
   $("#btn-run").addEventListener("click", () => runFlow());
   $("#btn-run-history").addEventListener("click", () => loadRunHistory());
+  $("#btn-run-diff").addEventListener("click", () => diffRun());
   $("#btn-run-batch").addEventListener("click", () => runBatch());
   $("#btn-undo").addEventListener("click", () => undo());
   $("#btn-redo").addEventListener("click", () => redo());

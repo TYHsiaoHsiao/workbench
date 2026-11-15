@@ -303,6 +303,53 @@ class FlowRunnerTest(unittest.TestCase):
         self.assertGreaterEqual(elapsed, 0.10)
         self.assertLess(elapsed, 0.30)
 
+    def test_parallel_artifacts_writes_are_locked(self) -> None:
+        """并行波内两个写状态节点持锁串行执行，产物与事务日志都完整。"""
+        (self.project / "01_story").mkdir(parents=True, exist_ok=True)
+        (self.project / "02_script").mkdir(parents=True, exist_ok=True)
+        (self.project / "01_story" / "synopsis.md").write_text("大纲", encoding="utf-8")
+        (self.project / "02_script" / "screenplay.md").write_text("剧本", encoding="utf-8")
+
+        def register(node_id: str, x: int, stage: str, path: str) -> dict:
+            return {
+                "id": node_id,
+                "type": "artifact_register",
+                "label": node_id,
+                "position": {"x": x, "y": 140},
+                "params": {"stage": stage, "kind": "M6 测试产物", "paths": [path]},
+            }
+
+        graph = make_graph(
+            self.project.name,
+            [
+                make_node("start", "start"),
+                register("reg-1", 320, "01", "01_story/synopsis.md"),
+                register("reg-2", 500, "02", "02_script/screenplay.md"),
+                make_node("end", "end", x=760),
+            ],
+            [
+                edge("e1", "start", "project", "reg-1", "state"),
+                edge("e2", "start", "project", "reg-2", "state"),
+                edge("e3", "reg-1", "log", "end", "any"),
+                edge("e4", "reg-2", "log", "end", "any"),
+            ],
+        )
+        graph["settings"]["parallel"] = True
+        write_graph_data(self.project, graph)
+
+        result = Runner(self.project, graph, dry_run=False).run()
+        self.assertEqual("succeeded", result["run"]["status"], msg=result["run"])
+        attempts = {step["node_id"]: step["attempts"] for step in result["run"]["steps"]}
+        self.assertEqual(1, attempts["reg-1"])
+        self.assertEqual(1, attempts["reg-2"])
+        state = load_state(self.project)
+        self.assertIn("01", state["stage_artifacts"])
+        self.assertIn("02", state["stage_artifacts"])
+        txn = self.project / "00_project" / "history" / "transactions.jsonl"
+        self.assertTrue(txn.exists())
+        lines = [line for line in txn.read_text(encoding="utf-8").splitlines() if line.strip()]
+        self.assertGreaterEqual(len(lines), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

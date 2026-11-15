@@ -163,7 +163,8 @@
         ],
         "additionalProperties": false
       },
-      "executor": "knowledge_search"
+      "executor": "knowledge_search",
+      "parallel_safe": true
     },
     {
       "type": "style_apply",
@@ -210,7 +211,8 @@
         ],
         "additionalProperties": false
       },
-      "executor": "style_apply"
+      "executor": "style_apply",
+      "parallel_safe": true
     },
     {
       "type": "style_inject",
@@ -286,7 +288,8 @@
         ],
         "additionalProperties": false
       },
-      "executor": "style_inject"
+      "executor": "style_inject",
+      "parallel_safe": true
     },
     {
       "type": "artifact_register",
@@ -344,7 +347,8 @@
         ],
         "additionalProperties": false
       },
-      "executor": "artifact_register"
+      "executor": "artifact_register",
+      "parallel_safe": true
     },
     {
       "type": "check_content",
@@ -445,7 +449,8 @@
         "required": [],
         "additionalProperties": false
       },
-      "executor": "export"
+      "executor": "export",
+      "parallel_safe": true
     },
     {
       "type": "end",

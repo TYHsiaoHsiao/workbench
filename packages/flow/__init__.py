@@ -22,6 +22,8 @@ from .graph import (
 )
 from .nodes import NodeContext, NodeError, NodeResult
 from .registry import NodeType, NodeTypeRegistry, load_node_types, parse_node_types
+from .compare import compare_runs, format_compare_text
+from .locks import LockError, log_transaction, state_lock
 from .replay import build_replay, format_replay_text
 from .runner import Runner, recover_run, run_flow
 from .templates import (
@@ -61,6 +63,11 @@ __all__ = [
     "build_replay",
     "default_graph",
     "format_replay_text",
+    "LockError",
+    "log_transaction",
+    "state_lock",
+    "format_compare_text",
+    "compare_runs",
     "graph_path",
     "list_graphs",
     "load_node_types",

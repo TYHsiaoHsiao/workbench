@@ -54,6 +54,8 @@ from flow import (
     FlowError,
     Runner,
     build_replay,
+    compare_runs,
+    format_compare_text,
     default_graph,
     format_replay_text,
     instantiate_template,
@@ -1416,6 +1418,95 @@ def cmd_flow_import(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_project_summary(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+    except FlowError as exc:
+        print(f"错误: {exc}")
+        return EXIT_FAILURE
+    state = load_state(project)
+    artifacts = []
+    for stage, summary in (state.get("stage_artifacts") or {}).items():
+        files = []
+        for token in re.findall(r"[0-9A-Za-z_\u4e00-\u9fff./\-]+\.(?:md|json|txt)", str(summary)):
+            path = project / token
+            if path.exists():
+                files.append({"path": token, "size": path.stat().st_size})
+        artifacts.append({"stage": stage, "summary": summary, "files": files})
+    graphs = []
+    for item in list_graphs(project):
+        try:
+            graph = read_graph_data(project, item["graph_id"])
+        except FlowError:
+            continue
+        graphs.append(
+            {
+                "graph_id": item["graph_id"],
+                "name": graph.get("name"),
+                "nodes": [
+                    {
+                        "id": node.get("id"),
+                        "type": node.get("type"),
+                        "label": node.get("label"),
+                        "x": (node.get("position") or {}).get("x"),
+                        "y": (node.get("position") or {}).get("y"),
+                    }
+                    for node in graph.get("nodes") or []
+                ],
+                "edges": [
+                    {"from": edge.get("from"), "to": edge.get("to")}
+                    for edge in graph.get("edges") or []
+                ],
+            }
+        )
+    runs = list_runs(project, limit=20)
+    payload = {
+        "ok": True,
+        "project": project.name,
+        "path": str(project),
+        "stage": state.get("stage"),
+        "version": state.get("version"),
+        "entry": state.get("entry"),
+        "artifacts": artifacts,
+        "graphs": graphs,
+        "runs": len(runs),
+        "latest_runs": runs[:5],
+    }
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        print(
+            f"项目 {payload['project']}（阶段 {payload['stage']} / "
+            f"{payload['version']} / 入口 {payload['entry']}）"
+        )
+        print(f"路径: {payload['path']}")
+        print(f"产物 {len(artifacts)} 组 · 流程图 {len(graphs)} 个 · 运行 {len(runs)} 条")
+        for item in artifacts:
+            print(f"- [{item['stage']}] {item['summary']}")
+        for graph in graphs:
+            print(
+                f"- 图 {graph['graph_id']} {graph.get('name') or ''}"
+                f"（{len(graph['nodes'])} 节点 / {len(graph['edges'])} 连线）"
+            )
+    return EXIT_OK
+
+
+def cmd_flow_diff(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        base = read_run(project, args.run)
+        target = read_run(project, args.other_run)
+        diff = compare_runs(base, target)
+    except FlowError as exc:
+        print(f"错误: {exc}")
+        return EXIT_FAILURE
+    if args.json:
+        print(json.dumps({"ok": True, "project": str(project), "diff": diff}, ensure_ascii=False, indent=2))
+    else:
+        print(format_compare_text(diff))
+    return EXIT_OK
+
+
 def cmd_flow_serve(args: argparse.Namespace) -> int:
     try:
         project = resolve_project(args.project)
@@ -1478,6 +1569,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     project_list.add_argument("--json", action="store_true", help="以 JSON 输出")
     project_list.add_argument("--stats", action="store_true", help="附带流程/运行/产物统计")
+    project_summary = project_sub.add_parser("summary", help="查看项目产物与流程图摘要")
+    project_summary.add_argument("--project", required=True, help="项目名或项目路径")
+    project_summary.add_argument("--json", action="store_true", help="以 JSON 输出")
+    project_summary.set_defaults(func=cmd_project_summary)
     project_list.set_defaults(func=cmd_project_list)
 
     route = sub.add_parser("route", help="意图路由：维护口令 / 知识库 / 阶段 / 入口 / 修订")
@@ -1754,6 +1849,13 @@ def build_parser() -> argparse.ArgumentParser:
     flow_replay.add_argument("--run", required=True, help="run_id")
     flow_replay.add_argument("--json", action="store_true", help="以 JSON 输出")
     flow_replay.set_defaults(func=cmd_flow_replay)
+
+    flow_diff = flow_sub.add_parser("diff", help="对比两次运行（状态/耗时/回归）")
+    flow_diff.add_argument("--project", required=True, help="项目名或项目路径")
+    flow_diff.add_argument("--run", required=True, help="基准 run_id（较早）")
+    flow_diff.add_argument("--other-run", required=True, help="对比 run_id（较新）")
+    flow_diff.add_argument("--json", action="store_true", help="以 JSON 输出")
+    flow_diff.set_defaults(func=cmd_flow_diff)
 
     flow_export = flow_sub.add_parser("export", help="导出流程图 JSON（stdout 或 --out）")
     flow_export.add_argument("--file", help="直接导出指定流程图 JSON 文件")

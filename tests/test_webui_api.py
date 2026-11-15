@@ -321,6 +321,46 @@ class WebUIApiTest(unittest.TestCase):
         status, _ = self.client.request("GET", self._q("/api/unknown"))
         self.assertEqual(404, status)
 
+    def test_project_summary_endpoint(self) -> None:
+        status, data = self.client.json(
+            "GET", f"/api/projects/{quote(str(self.project))}/summary"
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertTrue(data["ok"])
+        self.assertEqual("接口测试", data["project"])
+        self.assertIsInstance(data["artifacts"], list)
+        self.assertIsInstance(data["graphs"], list)
+        self.assertGreaterEqual(len(data["graphs"]), 1)
+        self.assertIn("nodes", data["graphs"][0])
+        self.assertIn("edges", data["graphs"][0])
+
+    def test_run_diff_endpoint(self) -> None:
+        first = self.client.json(
+            "POST",
+            "/api/runs",
+            {"project": str(self.project), "graph_id": "flow-test", "dry_run": True},
+        )
+        self.assertEqual(200, first[0], msg=first[1])
+        run_one = first[1]["run"]["run_id"]
+        second = self.client.json(
+            "POST",
+            "/api/runs",
+            {"project": str(self.project), "graph_id": "flow-test", "dry_run": True},
+        )
+        self.assertEqual(200, second[0], msg=second[1])
+        run_two = second[1]["run"]["run_id"]
+
+        status, data = self.client.json(
+            "GET", self._q(f"/api/runs/{run_two}/diff") + "&other=" + quote(run_one)
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertTrue(data["ok"])
+        diff = data["diff"]
+        self.assertIn("summary", diff)
+        self.assertIn("node_changes", diff)
+        self.assertEqual(3, diff["summary"]["base_steps"])
+        self.assertEqual(3, diff["summary"]["target_steps"])
+
     def test_token_required(self) -> None:
         server = create_server(self.project, port=0, use_token=True)
         thread = threading.Thread(target=server.serve_forever, daemon=True)

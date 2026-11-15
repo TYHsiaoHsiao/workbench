@@ -1,4 +1,4 @@
-# 命令卡（v1.4.0）
+# 命令卡（v1.5.0）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -19,7 +19,8 @@
 | 命令 | 作用 |
 |---|---|
 | `python workbench.py init 项目名 --entry A` | 创建项目骨架（12 个目录 + `00_project/state.json` + 参考记忆 JSON/MD + 状态卡） |
-| `python workbench.py project list`（加 `--stats` 输出流程/运行/待门禁/产物统计，1.4.0） | 跨项目总览：扫描默认项目根与仓库同级 `projects/`（可多次 `--root`），显示阶段/版本/入口/风格/知识桥/更新时间（1.0.2） |
+| `python workbench.py project list`（加 `--stats` 输出流程/运行/待门禁/产物统计，1.4.0） |
+| `python workbench.py project summary --project 项目名 [--json]` | 项目摘要：已登记产物文件、流程图节点/边、运行数（1.5.0） | 跨项目总览：扫描默认项目根与仓库同级 `projects/`（可多次 `--root`），显示阶段/版本/入口/风格/知识桥/更新时间（1.0.2） |
 | `python workbench.py init 项目名 --entry B --force` | 覆盖已存在项目（默认拒绝覆盖） |
 | `python workbench.py route "只做CINEDANCE"` | 意图路由：维护口令 > 知识库请求 > 直接入口 > 修订 > 阶段 > 入口 |
 | `python workbench.py gate list --project 项目名` | 查看当前阶段门禁状态 |
@@ -82,6 +83,7 @@
 | `python workbench.py flow runs --project 项目名 [--limit 20]` | 运行历史（状态/步骤/失败/恢复来源） |
 | `python workbench.py flow recover --run run-id --project 项目名 [--restore-state] [--yes]` | 失败运行恢复（可选回滚 `state_snapshot_before` 快照后重跑） |
 | `python workbench.py flow replay --run run-id --project 项目名 [--json]` | 运行回放（每步耗时、最慢节点、失败定位） |
+| `python workbench.py flow diff --project 项目名 --run run-id [--other-run run-id] [--json]` | 两次运行对比（节点状态/耗时/回归/改善，1.5.0） |
 | `python workbench.py flow export --project 项目名 --graph 流程id --out flow.json` | 导出流程图 JSON（也可 `--file flow.json` 原样输出） |
 | `python workbench.py flow import --project 项目名 --file flow.json [--graph 新id] [--force]` | 导入流程图（先校验，非法不落盘） |
 | `python workbench.py flow batch --project 项目名 --all [--dry-run/--live] [--yes]` | 批量运行项目内全部流程图 |

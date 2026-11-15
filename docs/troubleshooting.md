@@ -124,4 +124,7 @@
 - 回放没有耗时/失败定位：先确认该运行记录含 `started_at` / `ended_at`（旧运行记录缺时间戳时回放只给步骤序列）；`flow replay --json` 可查看原始字段。
 - 导入流程图报「流程图校验失败」：逐条对照图校验 8 条规则；导入前可先 `flow export` 再 `flow import` 自检；同 id 已存在需 `--force`。
 - 导入后运行失败：导入只含流程图，项目状态仍以当前项目 `state.json` 为准；跨项目迁移请用 `export` / `restore`。
+- 运行对比提示「没有可对比的另一次运行」：至少需要两条运行记录（可先 `flow run --dry-run` 两次，或显式传 `--other-run`）。
+- 节点报「状态锁失败」：确认没有残留 `00_project/.locks/state.lock`（超过 120 秒会自动视为陈旧锁清理）；事务记录见 `00_project/history/transactions.jsonl`。
+- 项目预览为空或 404：`project summary` 只读取已登记产物与 `00_project/workflows/` 下的流程图；先运行一次或 `flow new` 建图。
 

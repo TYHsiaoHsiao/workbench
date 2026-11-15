@@ -22,6 +22,7 @@ from core_router.project import (
 from core_router.registry import load_registry
 
 from .graph import Graph, Node
+from .locks import LockError, log_transaction, state_lock
 from .registry import NodeTypeRegistry
 
 
@@ -35,6 +36,7 @@ class NodeContext:
     node_types: NodeTypeRegistry
     graph: Graph | None = None
     dry_run: bool = True
+    run_id: str = ""
     _stage_registry: Any = field(default=None, repr=False)
 
     def stage_registry(self) -> Any:
@@ -54,6 +56,37 @@ class NodeResult:
 
 
 Executor = Callable[[Node, NodeContext], NodeResult]
+
+
+def _locked_mutation(
+    ctx: NodeContext,
+    node: Node,
+    stage: str,
+    mutations: list[str],
+    action: Callable[[], Any],
+) -> Any:
+    """在项目状态锁内执行写操作，并记录事务日志（M6）。
+
+    state.json 是唯一事实来源：写状态的节点（知识卡/风格卡/产物等）即使被并行波次调度，
+    也通过文件锁串行化，避免并发覆盖。
+    """
+    try:
+        with state_lock(ctx.project_root):
+            result = action()
+            log_transaction(
+                ctx.project_root,
+                {
+                    "action": node.type,
+                    "node_id": node.id,
+                    "stage": stage,
+                    "mutations": mutations,
+                    "run_id": ctx.run_id,
+                    "ok": True,
+                },
+            )
+            return result
+    except LockError as exc:
+        raise NodeError(f"状态锁失败: {exc}") from exc
 
 
 def _exec_start(node: Node, ctx: NodeContext) -> NodeResult:
@@ -140,20 +173,30 @@ def _exec_knowledge_search(node: Node, ctx: NodeContext) -> NodeResult:
         card = result
     if card is None:
         raise NodeError("知识服务未返回知识卡")
-    card_dir = ctx.project_root / "00_project" / "knowledge-cards"
-    card_dir.mkdir(parents=True, exist_ok=True)
-    card_path = card_dir / f"{stage}-candidates.json"
-    card_path.write_text(json.dumps(card, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    rel = card_path.relative_to(ctx.project_root).as_posix()
+    def _write_card() -> str:
+        card_dir = ctx.project_root / "00_project" / "knowledge-cards"
+        card_dir.mkdir(parents=True, exist_ok=True)
+        card_path = card_dir / f"{stage}-candidates.json"
+        card_path.write_text(
+            json.dumps(card, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        rel_path = card_path.relative_to(ctx.project_root).as_posix()
 
+        current = load_state(ctx.project_root)
+        bridge_state = dict(current.get("knowledge_bridge") or {})
+        if bridge_state.get("status", "off") == "off":
+            bridge_state["status"] = "requested"
+        bridge_state["last_card"] = rel_path
+        current["knowledge_bridge"] = bridge_state
+        save_state(ctx.project_root, current)
+        refresh_status_card(ctx.project_root)
+        return rel_path
+
+    rel = _locked_mutation(
+        ctx, node, stage, ["knowledge_cards", "knowledge_bridge"], _write_card
+    )
     state = load_state(ctx.project_root)
     bridge = dict(state.get("knowledge_bridge") or {})
-    if bridge.get("status", "off") == "off":
-        bridge["status"] = "requested"
-    bridge["last_card"] = rel
-    state["knowledge_bridge"] = bridge
-    save_state(ctx.project_root, state)
-    refresh_status_card(ctx.project_root)
 
     candidates = card.get("candidates") or []
     evidence = card.get("evidence") or []
@@ -178,7 +221,9 @@ def _exec_style_apply(node: Node, ctx: NodeContext) -> NodeResult:
     from style_service import StyleService, StyleServiceError
 
     try:
-        result = StyleService().apply(ctx.project_root, style, tool)
+        result = _locked_mutation(
+            ctx, node, "", ["style_profile"], lambda: StyleService().apply(ctx.project_root, style, tool)
+        )
     except StyleServiceError as exc:
         raise NodeError(f"风格应用失败: {exc}") from exc
     path = result.get("profile") or result.get("profile_path") or result.get("path")
@@ -203,12 +248,18 @@ def _exec_style_inject(node: Node, ctx: NodeContext) -> NodeResult:
     from style_service import StyleService, StyleServiceError
 
     try:
-        result = StyleService().inject_batch(
-            ctx.project_root,
+        result = _locked_mutation(
+            ctx,
+            node,
             stage,
-            tool,
-            list(items),
-            per_shot_records=bool(node.params.get("per_shot", True)),
+            ["style_injection"],
+            lambda: StyleService().inject_batch(
+                ctx.project_root,
+                stage,
+                tool,
+                list(items),
+                per_shot_records=bool(node.params.get("per_shot", True)),
+            ),
         )
     except StyleServiceError as exc:
         raise NodeError(f"风格注入失败: {exc}") from exc
@@ -231,12 +282,18 @@ def _exec_artifact_register(node: Node, ctx: NodeContext) -> NodeResult:
             logs=["dry-run 不写 stage_artifacts"],
         )
     try:
-        result = register_artifacts(
-            ctx.project_root,
+        result = _locked_mutation(
+            ctx,
+            node,
             stage,
-            kind,
-            paths,
-            note=str(node.params.get("note") or "流程节点登记"),
+            ["stage_artifacts", "revision_log"],
+            lambda: register_artifacts(
+                ctx.project_root,
+                stage,
+                kind,
+                paths,
+                note=str(node.params.get("note") or "流程节点登记"),
+            ),
         )
     except Exception as exc:  # ProjectError 等
         raise NodeError(f"产物登记失败: {exc}") from exc

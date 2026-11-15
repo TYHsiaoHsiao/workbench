@@ -359,3 +359,17 @@ button.link:hover { text-decoration: underline; }
 }
 .projects-body tbody tr { cursor: pointer; }
 .projects-body tbody tr:hover { background: #1d232c; }
+
+
+/* M6: run diff + project preview */
+.project-preview { padding: 8px 12px; }
+.project-preview h3 { margin: 8px 0; }
+.project-preview h4 { margin: 12px 0 6px; color: #a0aec0; }
+.project-preview ul { margin: 4px 0 0 16px; padding: 0; font-size: 12px; color: #cbd5e0; }
+.preview-block { border-top: 1px solid #2d3748; padding: 6px 0; }
+.graph-thumbs { display: flex; flex-wrap: wrap; gap: 12px; }
+.preview-graph { margin: 0; cursor: pointer; border: 1px solid #2d3748; padding: 6px; border-radius: 6px; background: #1a202c; }
+.preview-graph:hover { border-color: #4a5568; }
+.preview-graph figcaption { font-size: 12px; color: #a0aec0; margin-top: 4px; max-width: 240px; }
+.graph-thumb { display: block; background: #171923; border-radius: 4px; }
+.replay-summary { color: #a0aec0; font-size: 13px; margin: 4px 0 10px; }

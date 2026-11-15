@@ -296,6 +296,7 @@ class Runner:
 
     def _continue(self) -> None:
         context = NodeContext(
+            run_id=self.record["run_id"],
             project_root=self.project_root,
             node_types=self.node_types,
             graph=self.graph,

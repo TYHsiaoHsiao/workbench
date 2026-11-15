@@ -153,10 +153,10 @@
 
 - 契约 `contract_version` 固定 `1.0`；破坏性变更必须升 `2.0` 并提供迁移脚本。
 - 注册表与契约同版本发布；`manifest.json` 记录文件哈希，供安装器校验。
-- `VERSION` 遵循 semver：迭代 0 为 `0.1.0`，迭代 1a（B 知识服务 PoC）为 `0.2.0`，迭代 2 方案 A（有限正文回退）为 `0.3.0`，迭代 2.1（精度修订）为 PATCH `0.3.1`，迭代 1b（A 编排硬化）为 `0.4.0`，迭代 3（C 风格服务）为 `0.5.0`，迭代 4（试点与固化）为 `1.0.0`，真实项目补丁为 PATCH `1.0.1`，体验补丁为 PATCH `1.0.2`；可视化节点工作台（M1）为 MINOR `1.1.0`。1.0.0 为功能完善后的首个正式版本；后续 breaking change 升 2.x，M4（运行回放与图导入导出）为 `1.3.0`，M5（并行执行、节点级重试、项目管理面板）为 `1.4.0`。
+- `VERSION` 遵循 semver：迭代 0 为 `0.1.0`，迭代 1a（B 知识服务 PoC）为 `0.2.0`，迭代 2 方案 A（有限正文回退）为 `0.3.0`，迭代 2.1（精度修订）为 PATCH `0.3.1`，迭代 1b（A 编排硬化）为 `0.4.0`，迭代 3（C 风格服务）为 `0.5.0`，迭代 4（试点与固化）为 `1.0.0`，真实项目补丁为 PATCH `1.0.1`，体验补丁为 PATCH `1.0.2`；可视化节点工作台（M1）为 MINOR `1.1.0`。1.0.0 为功能完善后的首个正式版本；后续 breaking change 升 2.x，M4（运行回放与图导入导出）为 `1.3.0`，M5（并行执行、节点级重试、项目管理面板）为 `1.4.0`，M6（状态锁与事务、运行对比、项目预览）为 `1.5.0`。
 - 旧项目的兼容策略：状态卡 v2 新字段全部可选，迁移前旧 `state.json` 仍可校验；规则文件通过 `migrate` / `upgrade` 升级，创作产物字节不动。
 
-## 9. 可视化节点工作台（1.1.0 M1 / 1.2.0 M2+M3 / 1.3.0 M4 / 1.4.0 M5）
+## 9. 可视化节点工作台（1.1.0 M1 / 1.2.0 M2+M3 / 1.3.0 M4 / 1.4.0 M5 / 1.5.0 M6）
 
 - 新增 `packages/flow/`：`graph.py`（图模型、端口兼容、拓扑排序、图校验 8 条规则）、`registry.py`（节点类型注册表与参数校验）、`nodes.py`（start/stage/confirm/end 执行器）、`runner.py`（运行记录、dry-run、确认断点、失败快照）、`store.py`（项目内 `00_project/workflows/` 与 `runs/` 持久化）。
 - 新增 `packages/webui/`：标准库 `ThreadingHTTPServer` + 原生 JS/SVG 前端；默认监听 `127.0.0.1` 且启用 token；API 覆盖工作台信息、项目、节点类型、流程图读写校验、运行与确认。
@@ -167,3 +167,4 @@
 - M2/M3（1.2.0）：新增 10 类节点（知识检索/风格 apply+inject/产物登记/内容检查/导出）、4 套模板、运行历史与失败恢复、任意 DAG/跳阶段、批量运行、撤销重做；对 `flow-run` 契约增加可选 `recovered_from`/`state_restored`；新增 18 项测试合计 222 项。
 - M4（1.3.0）：`packages/flow/replay.py` 派生运行回放（耗时/最慢/失败节点定位），CLI `flow replay`、`flow export` / `flow import`，Web API `GET /api/runs/<id>/replay` 与 `POST /api/workflows/import`；前端运行历史打开回放抽屉并支持 JSON 导入导出；新增 7 项测试合计 229 项。
 - M5（1.4.0）：`runner.py` 增加波次调度与节点级重试（step 记录 `attempts`；仅 `parallel_safe` 只读节点可并行，写状态节点串行）；`flow-graph` 增 `settings.parallel`/`settings.node_retries`/`node.retries`，`flow-node-types` 增 `parallel_safe`；`GET /api/projects` 与 `project list --stats` 提供跨项目统计；Web 顶栏新增项目面板。
+- M6（1.5.0）：`packages/flow/locks.py` 提供项目级状态锁与事务日志；写状态节点（知识检索/风格/产物登记）持锁执行并标记并行安全；`packages/flow/compare.py` 提供两次运行对比（状态/耗时/回归）；`GET /api/projects/<name>/summary` 与 Web 项目面板「预览」提供产物清单与流程图缩略图。

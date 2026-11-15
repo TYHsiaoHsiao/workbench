@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import re
 import secrets
 import threading
 from http import HTTPStatus
@@ -20,10 +21,12 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
+from core_router.project import load_state
 from flow import (
     FlowError,
     Runner,
     build_replay,
+    compare_runs,
     default_graph,
     instantiate_template,
     list_graphs,
@@ -281,6 +284,68 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
         if path == "/api/projects":
             self._json({"ok": True, "projects": _list_projects()})
             return
+        if path.startswith("/api/projects/") and path.endswith("/summary"):
+            name = unquote(path[len("/api/projects/"): -len("/summary")]).strip("/")
+            project = resolve_project(name)
+            state = load_state(project)
+            artifacts = []
+            for stage, summary in (state.get("stage_artifacts") or {}).items():
+                files = []
+                for token in re.findall(
+                    r"[0-9A-Za-z_\u4e00-\u9fff./\-]+\.(?:md|json|txt)", str(summary)
+                ):
+                    file_path = project / token
+                    if file_path.exists():
+                        files.append(
+                            {
+                                "path": token,
+                                "size": file_path.stat().st_size,
+                                "modified_at": file_path.stat().st_mtime,
+                            }
+                        )
+                artifacts.append({"stage": stage, "summary": summary, "files": files})
+            graphs = []
+            for item in list_graphs(project):
+                try:
+                    graph = read_graph_data(project, item["graph_id"])
+                except FlowError:
+                    continue
+                graphs.append(
+                    {
+                        "graph_id": item["graph_id"],
+                        "name": graph.get("name"),
+                        "nodes": [
+                            {
+                                "id": node.get("id"),
+                                "type": node.get("type"),
+                                "label": node.get("label"),
+                                "x": (node.get("position") or {}).get("x"),
+                                "y": (node.get("position") or {}).get("y"),
+                            }
+                            for node in graph.get("nodes") or []
+                        ],
+                        "edges": [
+                            {"from": edge.get("from"), "to": edge.get("to")}
+                            for edge in graph.get("edges") or []
+                        ],
+                    }
+                )
+            runs = list_runs(project, limit=20)
+            self._json(
+                {
+                    "ok": True,
+                    "project": project.name,
+                    "path": str(project),
+                    "stage": state.get("stage"),
+                    "version": state.get("version"),
+                    "entry": state.get("entry"),
+                    "artifacts": artifacts,
+                    "graphs": graphs,
+                    "runs": len(runs),
+                    "latest_runs": runs[:5],
+                }
+            )
+            return
         if path == "/api/node-types":
             registry = load_node_types()
             self._json({"ok": True, **registry.to_dict()})
@@ -307,6 +372,27 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             project = self._project_from(query)
             graph_id = unquote(path[len("/api/workflows/"):]).strip("/")
             self._json({"ok": True, "project": str(project), "graph": read_graph_data(project, graph_id)})
+            return
+        if path.startswith("/api/runs/") and path.endswith("/diff"):
+            project = self._project_from(query)
+            run_id = unquote(path[len("/api/runs/"): -len("/diff")]).strip("/")
+            target = read_run(project, run_id)
+            others = query.get("other") or []
+            if others:
+                other_id = others[0]
+            else:
+                candidates = [
+                    item["run_id"]
+                    for item in list_runs(project, limit=50)
+                    if item.get("run_id") != run_id
+                ]
+                other_id = candidates[0] if candidates else ""
+            if not other_id:
+                raise FlowError("没有可对比的另一次运行")
+            base = read_run(project, other_id)
+            self._json(
+                {"ok": True, "project": str(project), "diff": compare_runs(base, target)}
+            )
             return
         if path.startswith("/api/runs/") and path.endswith("/replay"):
             project = self._project_from(query)

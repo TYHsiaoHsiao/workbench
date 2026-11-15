@@ -1,5 +1,13 @@
 # 变更日志
 
+## [1.5.0] - 2026-11-15 — 可视化节点工作台（M6：状态锁、运行对比、项目预览）
+
+- 写状态节点安全并行：新增 `packages/flow/locks.py`（项目级文件锁 `00_project/.locks/state.lock`，陈旧锁自动清理、超时抛 `LockError`）与事务日志 `00_project/history/transactions.jsonl`；`knowledge_search` / `style_apply` / `style_inject` / `artifact_register` 等写节点持锁执行并标记 `parallel_safe`，可在并行波次中安全运行；`NodeContext.run_id` 写入事务记录。
+- 运行对比：新增 `packages/flow/compare.py`（`compare_runs` / `format_compare_text`），按节点对齐输出 same / status_changed / slower / faster / added / removed 与耗时差值、回归/改善统计；CLI `flow diff`、Web API `GET /api/runs/<id>/diff?other=`。
+- 项目预览：Web API `GET /api/projects/<name>/summary`（已登记产物文件、流程图节点与边、运行数）；项目面板新增「预览」入口，展示产物清单与流程图 SVG 缩略图并可点击切图；CLI 新增 `project summary`。
+- 其他：`flow-run` 契约 step 增可选 `attempts`；修复 CLI 新命令退出码常量（`EXIT_OK`）。
+- 测试：新增 11 项（锁 5、运行对比 3、并行写锁集成 1、Web API 2），全量 247 项通过；CI 全绿、品牌守卫 0 命中。
+
 ## [1.4.0] - 2026-11-15 — 可视化节点工作台（M5：并行执行、节点级重试、项目管理面板）
 
 ### 新增
