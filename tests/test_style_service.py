@@ -22,6 +22,14 @@ COLORS = ["#1A1A2E", "#E94560", "#16213E", "#0F3460", "#533483", "#F5F5F5"]
 
 MJ_BODY = "主体：雨夜旧城街道；风格：冷调悬疑电影感；光线：侧逆光；构图：对称构图 --ar 16:9"
 
+SEEDANCE_BODY = (
+    "【整体】冷峻悬疑短片，节奏克制。"
+    "【光影】无影灯冷白，监护仪绿光。"
+    "【镜头】固定机位缓慢推近。"
+    "【声音】只有监护仪滴答声。"
+    "【对白】无。"
+)
+
 
 def make_entry() -> dict:
     return {
@@ -149,6 +157,30 @@ class StyleServiceTest(unittest.TestCase):
     def test_unknown_ref_raises(self) -> None:
         with self.assertRaises(StyleServiceError):
             self.service.get("999")
+
+    def test_inject_batch_writes_single_record(self) -> None:
+        self.service.apply(self.project, "001")
+        items = [
+            {"shot": "SH-01", "prompt": SEEDANCE_BODY},
+            {"shot": "SH-02", "prompt": SEEDANCE_BODY},
+        ]
+        report = self.service.inject_batch(self.project, "08", "seedance_2_5", items)
+        self.assertEqual(2, report["count"])
+        record_path = Path(report["record"])
+        self.assertTrue(record_path.is_file())
+        self.assertTrue(record_path.name.endswith("-batch.json"))
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        self.assertEqual(2, len(record["items"]))
+        self.assertEqual(64, len(record["items"][0]["prompt_sha256"]))
+        state = load_state(self.project)
+        self.assertIn("批量注入", state["style"]["note"])
+
+    def test_inject_batch_rejects_bad_item(self) -> None:
+        self.service.apply(self.project, "001")
+        with self.assertRaises(StyleServiceError) as ctx:
+            self.service.inject_batch(self.project, "08", "seedance_2_5",
+                                      [{"shot": "SH-01", "prompt": "只有一句话"}])
+        self.assertIn("批量注入结构校验", str(ctx.exception))
 
 
 if __name__ == "__main__":

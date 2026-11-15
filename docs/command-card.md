@@ -1,4 +1,4 @@
-# 命令卡（v1.0）
+# 命令卡（v1.0.1）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -10,6 +10,7 @@
 | `python workbench.py version` | 版本号 + 契约版本 |
 | `python workbench.py doctor` | 7 项自检：Python、目录骨架、7 份契约、阶段注册表、意图规则、风格注册表、品牌词表 |
 | `python workbench.py check` | 校验阶段注册表；`--project <名或路径>` 同时校验项目 `state.json` 与参考记忆 |
+| `python workbench.py check --project 项目名 --content` | 跨阶段内容一致性：风格卡/知识卡/产物文件存在性、`confirmed_references` 子集、treatment↔shot-plan 时长、下游过期提示（1.0.1） |
 | `python workbench.py brand-guard` | 品牌禁用词扫描；`--json` 输出结构化报告 |
 | `python scripts/run_ci.py` | 本地 CI：编译 → 全量测试 → doctor → brand-guard |
 
@@ -24,6 +25,7 @@
 | `python workbench.py gate pass <门禁id> --project 项目名 --note 说明` | 通过门禁（硬门禁不可豁免） |
 | `python workbench.py gate fail <门禁id> --project 项目名 --note 原因` | 标记门禁失败 |
 | `python workbench.py next --project 项目名` | 推进阶段；门禁未通过时退出码 1 并列出原因 |
+| `python workbench.py artifact register --project 项目名 --stage 01 --kind 大纲 --path 01_story/synopsis.md` | 登记阶段产物：SHA-256 + 字节数写入 `stage_artifacts`，追加修订日志并刷新状态卡（1.0.1，支持 glob / 多 `--path`） |
 | `python workbench.py reference list --project 项目名 --stage 05` | 查看当前阶段自动加载的参考方法编号 |
 | `python workbench.py export --project 项目名` | 导出项目 ZIP（含 `export-metadata.json`） |
 | `python workbench.py restore 归档.zip --dest 目标目录` | 还原导出包（校验路径穿越、目标非空拒绝覆盖） |
@@ -51,6 +53,7 @@
 | `... --fallback-files 200 --fallback-bytes 262144` | 调整有限正文回退预算 |
 | `... --no-fallback` | 关闭正文回退，只用元数据候选 |
 | `... --out 项目/00_project/knowledge-cards/05-candidates.json` | 保存知识卡（默认只打印） |
+| `python workbench.py knowledge bridge --project 项目名 --status requested --card 00_project/knowledge-cards/01-candidates.json` | 记录知识桥状态（off/requested/on）与确认编号（1.0.1，不触发检索） |
 
 ## 6. 风格服务（C 挂载，默认不注入）
 
@@ -62,6 +65,7 @@
 | `python workbench.py style validate 001 --tool mj --text "提示词正文"` | 结构校验（必填字段、禁用词、模型约束） |
 | `python workbench.py style apply 001 --project 项目名` | 生成风格卡 `00_project/style-cards/style-001-profile.json` 并更新 `state.style` |
 | `python workbench.py style inject 001 --project 项目名 --stage 06 --tool mj --prompt-file p06.txt` | 注入风格前缀 + 校验正文 + 写注入记录（阶段仅 06/08） |
+| `python workbench.py style inject-batch --project 项目名 --batch batch.json [--out-dir 目录]` | 批量注入：整批校验、失败整批拒绝、写一份 `*-batch.json` 批量记录（1.0.1） |
 
 ## 7. 契约校验
 

@@ -6,8 +6,10 @@
 from __future__ import annotations
 
 import datetime
+import hashlib
 import json
 import os
+import re
 import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -312,6 +314,117 @@ def refresh_status_card(project_root: str | Path, registry: Registry | None = No
     (Path(project_root) / "状态卡.md").write_text(
         _status_card(state, stage_name, registry), encoding="utf-8"
     )
+
+
+def register_artifacts(
+    project_root: str | Path,
+    stage: str,
+    kind: str,
+    paths: list[str],
+    note: str = "",
+    next_action: str | None = None,
+) -> dict[str, Any]:
+    """把阶段产物登记进 state.stage_artifacts（含 sha256 摘要），写 revision_log。
+
+    paths 支持相对项目根目录的路径、glob 模式，以及项目内的绝对路径。
+    """
+    root = Path(project_root)
+    stage = str(stage)
+    kind = (kind or "").strip()
+    if stage not in {f"0{index}" for index in range(1, 9)} | {"done"}:
+        raise ProjectError(f"未知阶段: {stage}")
+    if not kind:
+        raise ProjectError("产物类型不能为空")
+    if not paths:
+        raise ProjectError("至少需要一个产物路径")
+    state = load_state(root)
+
+    files: list[dict[str, Any]] = []
+    missing: list[str] = []
+    seen: set[str] = set()
+    for pattern in paths:
+        candidate = Path(pattern)
+        if candidate.is_absolute():
+            matches = [candidate] if candidate.is_file() else []
+            missing.extend([] if matches else [pattern])
+            base = candidate
+        else:
+            base = root / pattern
+            if any(char in pattern for char in "*?["):
+                matches = [item for item in sorted(root.glob(pattern)) if item.is_file()]
+            else:
+                matches = [base] if base.is_file() else []
+            if not matches:
+                missing.append(pattern)
+        for item in matches:
+            try:
+                item.resolve().relative_to(root.resolve())
+            except ValueError:
+                raise ProjectError(f"产物不在项目目录内: {item}")
+            relative = item.relative_to(root).as_posix()
+            if relative in seen:
+                continue
+            seen.add(relative)
+            digest = hashlib.sha256(item.read_bytes()).hexdigest()
+            files.append(
+                {
+                    "path": relative,
+                    "sha256": digest,
+                    "bytes": item.stat().st_size,
+                }
+            )
+    if not files:
+        raise ProjectError("没有找到可登记的文件: " + "；".join(missing or paths))
+
+    total = sum(item["bytes"] for item in files)
+    summary = (
+        f"{kind}：{len(files)} 个文件，{total} 字节；"
+        + "；".join(f"{item['path']} sha256={item['sha256'][:16]}" for item in files)
+    )
+    state.setdefault("stage_artifacts", {})[stage] = summary
+    log_note = note or f"{kind}：{len(files)} 个文件"
+    state.setdefault("revision_log", []).append(
+        {"at": now(), "action": "artifact_registered", "stage": stage, "note": log_note}
+    )
+    if next_action:
+        state["next_action"] = str(next_action)
+    state_file = save_state(root, state)
+    refresh_status_card(root)
+    return {
+        "ok": True,
+        "stage": stage,
+        "kind": kind,
+        "files": files,
+        "missing": missing,
+        "summary": summary,
+        "state_file": str(state_file),
+    }
+
+
+def update_knowledge_bridge(
+    project_root: str | Path,
+    status: str,
+    last_card: str | None = None,
+    confirmed_references: list[str] | None = None,
+    note: str = "",
+) -> dict[str, Any]:
+    """更新 state.knowledge_bridge（off/requested/on），供 CLI 使用。"""
+    if status not in {"off", "requested", "on"}:
+        raise ProjectError(f"知识桥状态必须是 off/requested/on：{status}")
+    root = Path(project_root)
+    state = load_state(root)
+    bridge = dict(state.get("knowledge_bridge") or {"status": "off"})
+    bridge["status"] = status
+    if last_card is not None:
+        bridge["last_card"] = str(last_card)
+    if confirmed_references is not None:
+        bridge["confirmed_references"] = [str(item) for item in confirmed_references]
+    if note:
+        bridge["note"] = str(note)
+    state["knowledge_bridge"] = bridge
+    state_file = save_state(root, state)
+    refresh_status_card(root)
+    return {"ok": True, "knowledge_bridge": bridge, "state_file": str(state_file)}
 
 
 EXPORT_METADATA = "export-metadata.json"

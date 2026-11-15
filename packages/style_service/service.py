@@ -264,6 +264,123 @@ def inject_prompt(
     }
 
 
+def inject_batch(
+    project_root: str | Path,
+    stage: str,
+    tool: str,
+    items: list[Any],
+    out_dir: str | Path | None = None,
+) -> dict[str, Any]:
+    """批量注入 06/08 提示词，写一份批量记录（避免逐条覆盖丢历史）。
+
+    items: [{"shot": "SH-01", "prompt": "提示词正文"}]
+    """
+    from core_router.project import load_state, refresh_status_card, save_state
+
+    root = Path(project_root)
+    stage = str(stage)
+    allowed = adapters.stage_tools(stage)
+    canonical = adapters.normalize_tool(tool)
+    if canonical not in allowed:
+        raise StyleServiceError(f"阶段 {stage} 只允许 {', '.join(allowed)}；收到 {canonical}")
+    if not isinstance(items, list) or not items:
+        raise StyleServiceError("批量注入需要非空 items 列表")
+
+    state = load_state(root)
+    style_state = state.get("style") or {}
+    profile_path = style_state.get("profile_path")
+    if style_state.get("status") != "on" or not profile_path:
+        raise StyleServiceError("项目尚未启用风格卡；请先运行 style apply")
+    card_path = root / profile_path
+    if not card_path.is_file():
+        raise StyleServiceError(f"风格卡文件不存在：{card_path}")
+    profile = json.loads(card_path.read_text(encoding="utf-8"))
+    style_id = str(profile.get("director_no", ""))
+    style_name = str(profile.get("name", ""))
+
+    problems: list[str] = []
+    entries: list[dict[str, Any]] = []
+    for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            problems.append(f"第 {index + 1} 项不是对象")
+            continue
+        shot = str(item.get("shot") or f"item-{index + 1}")
+        body = str(item.get("prompt") or "").strip()
+        if not body:
+            problems.append(f"{shot}: 提示词为空")
+            continue
+        try:
+            issues = adapters.validate_prompt(canonical, body)
+        except adapters.AdapterError as exc:  # noqa: F841 - AdapterError 已归一为风格服务错误
+            problems.append(f"{shot}: {exc}")
+            continue
+        if issues:
+            problems.append(f"{shot}: " + "；".join(issues))
+            continue
+        combined = adapters.combined_prompt(profile, canonical, body)
+        entries.append(
+            {
+                "shot": shot,
+                "prompt_sha256": hashlib.sha256(body.encode("utf-8")).hexdigest(),
+                "combined_sha256": hashlib.sha256(combined.encode("utf-8")).hexdigest(),
+                "chars": len(body),
+                "combined_prompt": combined,
+            }
+        )
+    if problems:
+        raise StyleServiceError("批量注入结构校验未通过：" + "；".join(problems[:8]))
+
+    record_dir = root / STYLE_CARD_DIR
+    record_dir.mkdir(parents=True, exist_ok=True)
+    record_path = record_dir / f"style-{style_id}-injection-{stage}-{canonical}-batch.json"
+    record = {
+        "contract_version": "1.0",
+        "style_id": style_id,
+        "style_name": style_name,
+        "stage": stage,
+        "tool": canonical,
+        "count": len(entries),
+        "items": entries,
+        "created_at": now(),
+        "note": "批量注入记录：逐条包含 shot / prompt_sha256 / combined_sha256 / chars",
+    }
+    record_path.write_text(
+        json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+
+    written: list[str] = []
+    if out_dir is not None:
+        out_root = Path(out_dir)
+        if not out_root.is_absolute():
+            out_root = root / out_root
+        out_root.mkdir(parents=True, exist_ok=True)
+        for item in entries:
+            out_path = out_root / f"{item['shot']}-{canonical}.txt"
+            out_path.write_text(item["combined_prompt"] + "\n", encoding="utf-8")
+            written.append(str(out_path))
+
+    style_state["note"] = (
+        f"风格 {style_id} {style_name}；最近批量注入 {stage}/{canonical}（{len(entries)} 条）"
+    )[:200]
+    state["style"] = style_state
+    save_state(root, state)
+    refresh_status_card(root)
+    return {
+        "ok": True,
+        "style_id": style_id,
+        "style_name": style_name,
+        "stage": stage,
+        "tool": canonical,
+        "count": len(entries),
+        "record": str(record_path),
+        "items": [
+            {key: item[key] for key in ("shot", "prompt_sha256", "combined_sha256", "chars")}
+            for item in entries
+        ],
+        "written": written,
+    }
+
+
 class StyleService:
     """风格服务门面：注册表查询 + 风格卡 + 注入。"""
 
@@ -310,6 +427,16 @@ class StyleService:
     ) -> dict[str, Any]:
         return inject_prompt(project_root, self.get(ref), stage, tool, prompt)
 
+    def inject_batch(
+        self,
+        project_root: str | Path,
+        stage: str,
+        tool: str,
+        items: list[Any],
+        out_dir: str | Path | None = None,
+    ) -> dict[str, Any]:
+        return inject_batch(project_root, stage, tool, items, out_dir)
+
 
 __all__ = [
     "GENERIC_NEGATIVES",
@@ -319,5 +446,6 @@ __all__ = [
     "StyleServiceError",
     "apply_profile",
     "build_profile",
+    "inject_batch",
     "inject_prompt",
 ]

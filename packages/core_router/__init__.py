@@ -37,8 +37,10 @@ from core_router.project import (
     export_project,
     load_state,
     refresh_status_card,
+    register_artifacts,
     restore_project,
     save_state,
+    update_knowledge_bridge,
     workbench_home,
 )
 from core_router.registry import (
@@ -100,7 +102,9 @@ __all__ = [
     "export_project",
     "load_state",
     "refresh_status_card",
+    "register_artifacts",
     "restore_project",
     "save_state",
+    "update_knowledge_bridge",
     "workbench_home",
 ]

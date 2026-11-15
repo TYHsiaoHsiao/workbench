@@ -1,5 +1,15 @@
 # 变更日志
 
+## [1.0.1] - 2026-11-15 — 真实项目补丁（P2 四项）
+
+- 产物登记 CLI：`artifact register`（相对路径/glob/项目内绝对路径，自动 SHA-256 与字节数，写 `stage_artifacts` + `revision_log` + 刷新状态卡，路径去重）。
+- 知识桥状态 CLI：`knowledge bridge --status off|requested|on`（可写 `last_card` 与 `confirmed_references`，不触发检索、不越过"知识桥不是阶段"的边界）。
+- 跨阶段内容一致性检查：`check --content`（风格卡/知识卡存在性、`confirmed_references` ⊆ `state.references`、产物文件存在性、treatment 与 shot-plan 场次时长比对、acting 时长提示、`stale_downstream` 提示；错误退出码 1，仅提示退出码 0）。
+- 风格批量注入：`StyleService.inject_batch` + CLI `style inject-batch`（整批结构校验、任一条失败整批拒绝、写一份 `style-<id>-injection-<stage>-<tool>-batch.json` 批量记录，可选 `--out-dir` 导出每条 txt）。
+- 新增 18 项测试（`test_artifact.py` 8 / `test_content_check.py` 7 / style 批量 2 / 既有回归），全量 **167 项通过**；本地 CI 全绿、品牌守卫 0 命中。
+- 文档：新增 `docs/release-notes-1.0.1.md`；README、command-card、troubleshooting、architecture、PRD 同步更新。
+- 版本进入 `1.0.1`（契约仍为 v1.0，无破坏性变更）。
+
 ## [1.0.0] - 2026-11-14 — 迭代 4：试点与固化
 
 - 参考记忆加载器 `core_router/memory.py`：阶段→范围映射（01-05 story、06 image、07 performance、08 camera），按 `status=enabled` 与 scope（含 `full`）自动加载；`reference list` CLI 命令。

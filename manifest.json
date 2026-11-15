@@ -1,8 +1,8 @@
 {
-  "version": "1.0.0",
+  "version": "1.0.1",
   "contract_version": "1.0",
-  "generated_at": "2026-11-15T09:10:48",
-  "file_count": 87,
+  "generated_at": "2026-11-15T09:22:14",
+  "file_count": 90,
   "files": [
     {
       "path": ".github/workflows/ci.yml",
@@ -16,8 +16,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "size": 10852,
-      "sha256": "05854f1f891d3e516444a4eb4306a0b20b2e70697fcfbe099877513bc46d5812"
+      "size": 12219,
+      "sha256": "ea452f70a5825912b6ec2ec39ed57318c6ca118f486a54b4e3b2c0de6cb2ee7d"
     },
     {
       "path": "config/brand-allowlist.json",
@@ -46,8 +46,8 @@
     },
     {
       "path": "docs/architecture.md",
-      "size": 11011,
-      "sha256": "d93d02f3849c13b26857e55268fc39b5ac5d1e172c57c2d23f1c9733aea71c03"
+      "size": 11941,
+      "sha256": "d30e2b5a4a648914c970c91b0b166b4349784a39c751f8fb834c661b8dacd857"
     },
     {
       "path": "docs/brand-guard.md",
@@ -56,8 +56,8 @@
     },
     {
       "path": "docs/command-card.md",
-      "size": 5345,
-      "sha256": "860746fd720053d836a69c9d144f55d59af48decf0ab2d684d7a6c2241ce6d6b"
+      "size": 6268,
+      "sha256": "ad51f88e3a28578bfbf4151f9acf97d3a2ee42d9a434d60d60e52278b3d41b99"
     },
     {
       "path": "docs/iteration-0-report.md",
@@ -135,6 +135,11 @@
       "sha256": "d2f5bbf7684b7eb4fbf6b59582b4e81a27f4b00d4162ed98021744b08dea287a"
     },
     {
+      "path": "docs/release-notes-1.0.1.md",
+      "size": 4786,
+      "sha256": "e5d35ffcdaaab97b1428676227a1389746401a0e5baef6b48a490fae2c41bc09"
+    },
+    {
       "path": "docs/style-registry-report.md",
       "size": 993,
       "sha256": "1c08a009b385d3cdbd879f5fb3dc9d8af93847251aac5dd79e4ca8c33ef2365d"
@@ -146,8 +151,8 @@
     },
     {
       "path": "docs/troubleshooting.md",
-      "size": 5737,
-      "sha256": "6bf1faaa157b416899d803105ad591c6728c2051d2e0e3081312d12db26e84a0"
+      "size": 7112,
+      "sha256": "5c1c21b58e8b248d9997b7e8eb01324641c3eca12db2ac8902935582a643dd05"
     },
     {
       "path": "packages/brand_guard/__init__.py",
@@ -171,8 +176,8 @@
     },
     {
       "path": "packages/cli/main.py",
-      "size": 37980,
-      "sha256": "c7a4161d3d066dfce08914b15f08ebd68a8b54334506c2a8fbb9010eeb450b6a"
+      "size": 48980,
+      "sha256": "8524e631ce8c8e28d31cc3bb4a6ecce7377b31ab2784148e6d1fb60e18ac3b2b"
     },
     {
       "path": "packages/contracts/__init__.py",
@@ -216,8 +221,8 @@
     },
     {
       "path": "packages/core_router/__init__.py",
-      "size": 2295,
-      "sha256": "2fc7694a4ba9ea73829f7ebf69cb5f2af44eb8cae611daf60c9f89f986b71a3c"
+      "size": 2405,
+      "sha256": "31e33cccb70ab785bbe5190005cef35c7658745ee125700ec632f468c80b2291"
     },
     {
       "path": "packages/core_router/gates.py",
@@ -241,8 +246,8 @@
     },
     {
       "path": "packages/core_router/project.py",
-      "size": 14882,
-      "sha256": "042a7f0bb67b048fe575955e9a51c99727ec4c0f0a21cc5be783bc741b827382"
+      "size": 18952,
+      "sha256": "afe97b008bb60f574d4876f8c5597b898ebe0bb1e703973fa857629e55a29601"
     },
     {
       "path": "packages/core_router/registry.py",
@@ -281,8 +286,8 @@
     },
     {
       "path": "packages/style_service/__init__.py",
-      "size": 1385,
-      "sha256": "e8c8b51c3d03eaacc3b163a7a75c519565d571cb9cf6060f14675c194dd193cb"
+      "size": 1423,
+      "sha256": "514a2559a011b802b1941a80f5b68cd874a21039e42470f8849d37f9b8c09cf4"
     },
     {
       "path": "packages/style_service/adapters.py",
@@ -296,13 +301,13 @@
     },
     {
       "path": "packages/style_service/service.py",
-      "size": 11632,
-      "sha256": "95696011ef649e03b602495a533ff6cc8752c85ebf76b9c99efde59481cbb835"
+      "size": 16381,
+      "sha256": "5b891ce49454cb37c2cfef0f46eca9be9c35c0783480d24ebe2673a7db4be051"
     },
     {
       "path": "README.md",
-      "size": 10783,
-      "sha256": "7a169833f578d28eac7c9226d82db3d869f5e73d7e41145b8f14450f34ede93b"
+      "size": 11810,
+      "sha256": "19cac30e03425a8bc83ede2d440fbd5191d9a4f0f93bc6f3ca98aa57bf8e86e7"
     },
     {
       "path": "scripts/build_manifest.py",
@@ -340,6 +345,11 @@
       "sha256": "271df38c24d8b4e4783b23717ef7ba0e55e579759cc5ad501a58f786817eb01b"
     },
     {
+      "path": "tests/test_artifact.py",
+      "size": 4707,
+      "sha256": "f8368b6c87106f283b529467bfe18151b408e5bbbfbfcc0604a10d4e62e0ac98"
+    },
+    {
       "path": "tests/test_brand_guard.py",
       "size": 6425,
       "sha256": "25016d555957d00fdb4049e3a4eeaa0b7416f8b758d6e7028daa0e78e5099c12"
@@ -348,6 +358,11 @@
       "path": "tests/test_cli.py",
       "size": 3338,
       "sha256": "ad58491477cdc1a3a1418af4dbdf31b88859d8098b79826c1e1471325e010d6e"
+    },
+    {
+      "path": "tests/test_content_check.py",
+      "size": 4347,
+      "sha256": "524b8eb8fdccd9a661c88aba45c5bdf40c49537c5f5f2caafc318aeb44faaa44"
     },
     {
       "path": "tests/test_contracts.py",
@@ -426,13 +441,13 @@
     },
     {
       "path": "tests/test_style_service.py",
-      "size": 6743,
-      "sha256": "9e85d68a67cb4d6529923def77e9956d5f1238747c59ae616a124bc6d80f0e23"
+      "size": 8221,
+      "sha256": "d1183f4768dfa891e8be3d487000cc7ef86f798f9122c676ba687101943952a8"
     },
     {
       "path": "VERSION",
       "size": 6,
-      "sha256": "59854984853104df5c353e2f681a15fc7924742f9a2e468c29af248dce45ce03"
+      "sha256": "44e161e4495cac2cf7858043e9e6418e9579f0ddcfae826f9a372622968ce066"
     },
     {
       "path": "workbench.py",

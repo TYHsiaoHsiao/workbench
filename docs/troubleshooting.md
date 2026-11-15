@@ -79,12 +79,26 @@
 | `导出包含非法路径` | 归档被篡改或非本工具生成；使用可信归档 |
 | 还原后 stage 不一致 | 用 `check --project` 校验 state；`export-metadata.json` 内有导出时版本/阶段 |
 
-## 11. CI 与 PowerShell 退出码
+## 11. `check --content` 与批量注入报错（1.0.1）
+
+| 提示 | 含义与处理 |
+|---|---|
+| `风格卡文件不存在: …` | `state.style.status=on` 但卡片被删；重跑 `style apply <编号> --project <项目>` |
+| `知识卡文件不存在: …` | `knowledge_bridge.status` 为 requested/on 但 `last_card` 不存在；重跑 `knowledge search --out` 或把状态改回 `off` |
+| `confirmed_references 中的 参考方法0xx 不在 state.references` | 先通过采用流程写入参考记忆，再更新知识桥；不要手改 state.json |
+| `stage_artifacts 引用的文件不存在: …` | 产物被移动/删除；重新 `artifact register` 最新路径 |
+| `时长不一致: 场次 1-0X treatment=Ns，shot-plan=Ms` | treatment 预算与镜头规划不一致；改 shot-plan 的「场次时长预算」或在汇报中说明并统一 |
+| `批量注入结构校验未通过：SH-xx: …` | 该条提示词缺必填结构（如 seedance_2_5 需要【整体】【光影】【镜头】【声音】【对白】）；修正后整批重跑，工作台不会写入半批 |
+| `stage_artifacts 引用的文件不存在` 与 `--note` | 登记命令支持多 `--path`；同路径重复不会重复计数 |
+
+说明：`check --content` 有错误时退出码 1，仅提示（warnings）时退出码 0；CI 不强制内容检查，需在阶段收尾时手动跑一次。
+
+## 12. CI 与 PowerShell 退出码
 
 - PowerShell 把 Python stderr 包装成 `NativeCommandError` 时，`$LASTEXITCODE` 可能不可靠；以 `scripts/run_ci.py` 输出中的 PASS/FAILED 与最终 `CI_EXIT` 为准。
 - 本地推荐：`python scripts/run_ci.py`（内部逐项检查，失败即非零）。
 
-## 12. 快速恢复
+## 13. 快速恢复
 
 ```text
 1) python workbench.py doctor

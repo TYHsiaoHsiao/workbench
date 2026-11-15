@@ -33,6 +33,7 @@ from .service import (
     StyleServiceError,
     apply_profile,
     build_profile,
+    inject_batch,
     inject_prompt,
 )
 
@@ -64,5 +65,6 @@ __all__ = [
     "StyleServiceError",
     "apply_profile",
     "build_profile",
+    "inject_batch",
     "inject_prompt",
 ]

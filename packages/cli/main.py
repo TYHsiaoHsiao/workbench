@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -33,9 +34,11 @@ from core_router import (
     migrate_project,
     pass_gate,
     refresh_status_card,
+    register_artifacts,
     restore_project,
     save_state,
     summarize_memory,
+    update_knowledge_bridge,
     upgrade_project_rules,
     validate_registry,
     waive_gate,
@@ -168,11 +171,117 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return EXIT_OK if failures == 0 else EXIT_ENV
 
 
+_ARTIFACT_TOKEN = re.compile(r"[0-9A-Za-z_\u4e00-\u9fff./\-]+\.(?:md|json|txt)")
+_SCENE_ROW = re.compile(r"^\|\s*(1-0[1-8])\b")
+_SCENE_BUDGET = re.compile(r"场次时长预算[：:]\s*(\d+)\s*s")
+
+
+def _read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def _scene_seconds(text: str) -> dict[str, int]:
+    """从以 `| 1-0X |` 开头的表格行里取第一段「N s / N 秒」。"""
+    result: dict[str, int] = {}
+    for line in text.splitlines():
+        match = _SCENE_ROW.match(line)
+        if not match:
+            continue
+        found = re.findall(r"(\d+)\s*(?:s|秒)(?![A-Za-z0-9])", line)
+        if found:
+            result[match.group(1)] = int(found[0])
+    return result
+
+
+def _content_checks(project_dir: Path, state: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """阶段内容一致性检查（1.0.1）：风格/知识桥引用、产物存在性、跨阶段时长。"""
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    style = state.get("style") or {}
+    if style.get("status") == "on":
+        profile_path = style.get("profile_path")
+        if not profile_path:
+            errors.append("style.status=on 但缺少 profile_path")
+        elif not (project_dir / str(profile_path)).is_file():
+            errors.append(f"风格卡文件不存在: {profile_path}")
+    elif style.get("status") == "off" and style.get("profile_path"):
+        warnings.append("style.status=off 但仍保留 profile_path")
+
+    bridge = state.get("knowledge_bridge") or {}
+    bridge_status = bridge.get("status", "off")
+    last_card = bridge.get("last_card")
+    if bridge_status in {"requested", "on"}:
+        if not last_card:
+            errors.append(f"knowledge_bridge.status={bridge_status} 但缺少 last_card")
+        elif not (project_dir / str(last_card)).is_file():
+            errors.append(f"知识卡文件不存在: {last_card}")
+    if bridge_status == "on":
+        confirmed = bridge.get("confirmed_references") or []
+        if not confirmed:
+            errors.append("knowledge_bridge.status=on 但 confirmed_references 为空")
+        known = set(state.get("references") or [])
+        for ref in confirmed:
+            if ref not in known:
+                errors.append(f"confirmed_references 中的 {ref} 不在 state.references")
+
+    artifacts = state.get("stage_artifacts") or {}
+    checked: set[str] = set()
+    for key, value in artifacts.items():
+        tokens: list[str] = []
+        if "/" in str(key) or str(key).endswith((".md", ".json", ".txt")):
+            tokens.append(str(key))
+        if isinstance(value, str):
+            tokens.extend(_ARTIFACT_TOKEN.findall(value))
+        for token in tokens:
+            rel = token.strip("/")
+            if rel in checked or " " in rel:
+                continue
+            checked.add(rel)
+            if "/" not in rel:
+                # 裸文件名无法确定所在目录（多为旧版自由文本摘要），跳过核验
+                continue
+            if not (project_dir / rel).exists():
+                errors.append(f"stage_artifacts 引用的文件不存在: {rel}")
+
+    if state.get("stale_downstream"):
+        warnings.append(f"stale_downstream 非空: {state['stale_downstream']}")
+
+    treatment = project_dir / "01_story" / "treatment.md"
+    acting = project_dir / "04_performance" / "acting-v01.md"
+    shot_dir = project_dir / "05_shots"
+    if treatment.is_file() and shot_dir.is_dir():
+        budgets = _scene_seconds(_read_text(treatment))
+        for plan in sorted(shot_dir.glob("1-0[1-8]-shot-plan-v*.md")):
+            match = re.match(r"(1-0[1-8])", plan.name)
+            if not match:
+                continue
+            scene = match.group(1)
+            found = _SCENE_BUDGET.search(_read_text(plan))
+            if scene in budgets and found and budgets[scene] != int(found.group(1)):
+                errors.append(
+                    f"时长不一致: 场次 {scene} treatment={budgets[scene]}s，shot-plan={found.group(1)}s"
+                )
+        if acting.is_file():
+            acting_seconds = _scene_seconds(_read_text(acting))
+            for scene, seconds in acting_seconds.items():
+                if scene in budgets and budgets[scene] != seconds:
+                    warnings.append(
+                        f"时长提示不一致: 场次 {scene} treatment={budgets[scene]}s，acting 交接={seconds}s"
+                    )
+    return errors, warnings
+
+
 def cmd_check(args: argparse.Namespace) -> int:
     errors: list[str] = []
+    warnings: list[str] = []
     registry_path = Path(args.registry) if args.registry else None
     errors.extend(validate_registry(registry_path))
     report: dict[str, Any] = {"registry_errors": list(errors)}
+    state: dict[str, Any] | None = None
 
     if args.project:
         project_dir = Path(args.project)
@@ -191,6 +300,10 @@ def cmd_check(args: argparse.Namespace) -> int:
         memory_path = project_dir / "00_project" / "reference-memory.json"
         if memory_path.is_file():
             errors.extend(validate_file(memory_path, "reference-memory"))
+        if args.content and state is not None:
+            content_errors, content_warnings = _content_checks(project_dir, state)
+            errors.extend(content_errors)
+            warnings.extend(content_warnings)
         report["project"] = str(project_dir)
 
     if args.reference_memory:
@@ -201,6 +314,7 @@ def cmd_check(args: argparse.Namespace) -> int:
             errors.extend(validate_file(memory_path, "reference-memory"))
 
     report["errors"] = list(errors)
+    report["warnings"] = list(warnings)
     report["ok"] = not errors
     if args.json:
         _emit(report, True)
@@ -211,6 +325,8 @@ def cmd_check(args: argparse.Namespace) -> int:
                 _print(f"- {error}")
         else:
             _print("校验通过")
+        for warning in warnings:
+            _print(f"[提示] {warning}")
     return EXIT_OK if not errors else EXIT_FAIL
 
 
@@ -748,6 +864,95 @@ def cmd_restore(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_artifact_register(args: argparse.Namespace) -> int:
+    project = _resolve_project(args.project)
+    try:
+        report = register_artifacts(
+            project,
+            args.stage,
+            args.kind,
+            list(args.path),
+            note=args.note,
+            next_action=args.next_action,
+        )
+    except ProjectError as exc:
+        _print(str(exc))
+        return EXIT_FAIL
+    if args.json:
+        _emit(report, True)
+    else:
+        _print(
+            f"已登记阶段 {report['stage']}：{report['kind']}（{len(report['files'])} 个文件）"
+        )
+        for item in report["files"]:
+            _print(f"- {item['path']}  {item['bytes']} 字节  sha256={item['sha256'][:16]}")
+        if report["missing"]:
+            _print("[提示] 未找到: " + "；".join(report["missing"]))
+        _print(f"状态文件: {report['state_file']}")
+    return EXIT_OK
+
+
+def cmd_knowledge_bridge(args: argparse.Namespace) -> int:
+    project = _resolve_project(args.project)
+    references = [item.strip() for item in args.references.split(",") if item.strip()] if args.references else None
+    try:
+        report = update_knowledge_bridge(
+            project,
+            args.status,
+            last_card=args.card,
+            confirmed_references=references,
+            note=args.note,
+        )
+    except ProjectError as exc:
+        _print(str(exc))
+        return EXIT_FAIL
+    if args.json:
+        _emit(report, True)
+    else:
+        bridge = report["knowledge_bridge"]
+        _print(f"知识桥状态: {bridge.get('status')}")
+        if bridge.get("last_card"):
+            _print(f"- 知识卡: {bridge['last_card']}")
+        if bridge.get("confirmed_references"):
+            _print(f"- 已确认参考: {', '.join(bridge['confirmed_references'])}")
+        _print(f"状态文件: {report['state_file']}")
+    return EXIT_OK
+
+
+def cmd_style_inject_batch(args: argparse.Namespace) -> int:
+    project = _resolve_project(args.project)
+    try:
+        payload = json.loads(Path(args.batch).read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError) as exc:
+        _print(f"读取批量文件失败: {exc}")
+        return EXIT_ENV
+    if not isinstance(payload, dict):
+        _print("批量文件必须是 JSON 对象")
+        return EXIT_USAGE
+    stage = str(payload.get("stage") or args.stage)
+    tool = str(payload.get("tool") or args.tool)
+    items = payload.get("items")
+    try:
+        report = _style_service().inject_batch(
+            project, stage, tool, items if isinstance(items, list) else [], args.out_dir
+        )
+    except (StyleServiceError, AdapterError, ProjectError) as exc:
+        _print(str(exc))
+        return EXIT_FAIL
+    if args.json:
+        _emit(report, True)
+    else:
+        _print(
+            f"阶段 {report['stage']} / 工具 {report['tool']}：批量注入 {report['count']} 条"
+        )
+        _print(f"批量记录: {report['record']}")
+        for item in report["items"]:
+            _print(f"- {item['shot']}  sha256={item['prompt_sha256'][:16]}  {item['chars']} 字")
+        if report["written"]:
+            _print(f"组合提示词: {len(report['written'])} 个文件 → {Path(report['written'][0]).parent}")
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="workbench",
@@ -766,6 +971,7 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument("--registry", help="阶段注册表路径（默认仓库内）")
     check.add_argument("--project", help="项目目录（读取 00_project/state.json）")
     check.add_argument("--reference-memory", help="reference-memory JSON 路径")
+    check.add_argument("--content", action="store_true", help="内容一致性检查（风格/知识桥/产物/时长）")
     check.add_argument("--json", action="store_true", help="以 JSON 输出")
     check.set_defaults(func=cmd_check)
 
@@ -835,6 +1041,23 @@ def build_parser() -> argparse.ArgumentParser:
     restore_cmd.add_argument("--json", action="store_true", help="以 JSON 输出")
     restore_cmd.set_defaults(func=cmd_restore)
 
+    artifact = sub.add_parser("artifact", help="阶段产物登记（写 state.stage_artifacts 与 revision_log）")
+    artifact_sub = artifact.add_subparsers(dest="artifact_command", required=True)
+    artifact_register = artifact_sub.add_parser("register", help="登记阶段产物文件（支持 glob）")
+    artifact_register.add_argument("--project", required=True, help="项目名或项目路径")
+    artifact_register.add_argument(
+        "--stage", required=True,
+        choices=[f"0{index}" for index in range(1, 9)] + ["done"], help="阶段 01-08 或 done",
+    )
+    artifact_register.add_argument("--kind", required=True, help="产物类型（如 剧本/镜头规划/提示词）")
+    artifact_register.add_argument(
+        "--path", action="append", required=True, help="项目内相对路径或 glob（可多次传入）"
+    )
+    artifact_register.add_argument("--note", default="", help="revision_log 备注")
+    artifact_register.add_argument("--next-action", help="覆盖 state.next_action")
+    artifact_register.add_argument("--json", action="store_true", help="以 JSON 输出")
+    artifact_register.set_defaults(func=cmd_artifact_register)
+
     validate_cmd = sub.add_parser("validate", help="校验任意 JSON 文件")
     validate_cmd.add_argument("path", help="JSON 文件路径")
     validate_cmd.add_argument("--schema", required=True, help="schema 名称（如 state.schema.json）")
@@ -875,6 +1098,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     knowledge_search.add_argument("--json", action="store_true", help="以 JSON 输出")
     knowledge_search.set_defaults(func=cmd_knowledge_search)
+
+    knowledge_bridge = knowledge_sub.add_parser("bridge", help="更新项目知识桥状态（off/requested/on）")
+    knowledge_bridge.add_argument("--project", required=True, help="项目名或项目路径")
+    knowledge_bridge.add_argument("--status", required=True, choices=["off", "requested", "on"])
+    knowledge_bridge.add_argument("--card", help="知识卡项目内相对路径")
+    knowledge_bridge.add_argument("--references", help="已确认参考方法编号，逗号分隔")
+    knowledge_bridge.add_argument("--note", default="", help="备注")
+    knowledge_bridge.add_argument("--json", action="store_true", help="以 JSON 输出")
+    knowledge_bridge.set_defaults(func=cmd_knowledge_bridge)
 
     reference = sub.add_parser("reference", help="跨阶段参考记忆：统计与按阶段加载")
     reference_sub = reference.add_subparsers(dest="reference_command", required=True)
@@ -929,6 +1161,18 @@ def build_parser() -> argparse.ArgumentParser:
     style_inject.add_argument("--prompt-file", required=True, help="原始提示词文件（UTF-8）")
     style_inject.add_argument("--json", action="store_true", help="以 JSON 输出")
     style_inject.set_defaults(func=cmd_style_inject)
+
+    style_batch = style_sub.add_parser("inject-batch", help="批量注入并写一份批量记录")
+    style_batch.add_argument("--project", required=True, help="项目目录或项目名")
+    style_batch.add_argument(
+        "--batch", required=True,
+        help="批量 JSON（{stage, tool, items:[{shot, prompt}]}）",
+    )
+    style_batch.add_argument("--stage", choices=["06", "08"], help="覆盖 JSON 中的 stage")
+    style_batch.add_argument("--tool", help="覆盖 JSON 中的 tool")
+    style_batch.add_argument("--out-dir", help="把组合提示词逐条写入该目录")
+    style_batch.add_argument("--json", action="store_true", help="以 JSON 输出")
+    style_batch.set_defaults(func=cmd_style_inject_batch)
 
     return parser
 
