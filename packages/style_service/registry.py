@@ -88,6 +88,7 @@ class StyleRegistry:
                     "category": entry.get("category", ""),
                     "quality": entry.get("quality", ""),
                     "issues": len(entry.get("issues") or []),
+                    "issue_labels": list(entry.get("issues") or []),
                 }
             )
         return result

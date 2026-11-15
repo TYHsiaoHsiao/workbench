@@ -175,6 +175,24 @@ class StyleServiceTest(unittest.TestCase):
         state = load_state(self.project)
         self.assertIn("批量注入", state["style"]["note"])
 
+    def test_inject_batch_per_shot_records(self) -> None:
+        self.service.apply(self.project, "001")
+        items = [
+            {"shot": "SH-01", "prompt": SEEDANCE_BODY},
+            {"shot": "SH-02", "prompt": SEEDANCE_BODY},
+        ]
+        report = self.service.inject_batch(
+            self.project, "08", "seedance_2_5", items, per_shot_records=True
+        )
+        self.assertEqual(2, len(report["shot_records"]))
+        for path, shot in zip(report["shot_records"], ("SH-01", "SH-02")):
+            record = json.loads(Path(path).read_text(encoding="utf-8"))
+            self.assertEqual(shot, record["shot"])
+            self.assertEqual(64, len(record["prompt_sha256"]))
+            self.assertTrue(Path(path).name.endswith(f"{shot}.json"))
+        batch = json.loads(Path(report["record"]).read_text(encoding="utf-8"))
+        self.assertEqual(2, len(batch["items"]))
+
     def test_inject_batch_rejects_bad_item(self) -> None:
         self.service.apply(self.project, "001")
         with self.assertRaises(StyleServiceError) as ctx:

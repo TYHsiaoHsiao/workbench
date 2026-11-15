@@ -1,5 +1,15 @@
 # 变更日志
 
+## [1.0.2] - 2026-11-15 — 工作台体验补丁
+
+- 跨项目总览：`workbench.py project list`（缺省同时扫描文档目录默认项目根与仓库同级 `projects/`，可多次 `--root`；输出名称/阶段/版本/入口/风格/知识桥/更新时间，支持 `--json`，损坏项目跳过并提示）。
+- 风格质量提示：`style list` 文本输出显示 A/B/C 分级数量、非 A 级条目的待核问题摘要；`style show` 增加「质量提示」行（等级 + 待核问题），JSON 输出保持原结构不变。
+- 批量逐镜注入记录：`style inject-batch --per-shot-records` 在单份批量记录之外，为每条提示词写一份 `style-<id>-injection-<stage>-<tool>-<shot>.json`，便于逐镜追溯；`StyleService.inject_batch(..., per_shot_records=True)` 同步支持。
+- `init` 输出补充：项目根目录、逐步下一步命令（check --content / gate / project list）与 `AI_FILM_PROJECTS_ROOT` 固定位置提示，减少项目分散摩擦。
+- 新增 3 项测试（project list、init 提示、批量逐镜记录），全量 **170 项通过**；本地 CI 全绿、品牌守卫 0 命中。
+- 文档：新增 `docs/release-notes-1.0.2.md`；README、command-card、troubleshooting、architecture、PRD 同步更新。
+- 版本进入 `1.0.2`（契约仍为 v1.0，无破坏性变更）。
+
 ## [1.0.1] - 2026-11-15 — 真实项目补丁（P2 四项）
 
 - 产物登记 CLI：`artifact register`（相对路径/glob/项目内绝对路径，自动 SHA-256 与字节数，写 `stage_artifacts` + `revision_log` + 刷新状态卡，路径去重）。

@@ -7,7 +7,7 @@
 - **契约先行**：阶段产物、参考记忆、知识卡、风格画像、项目状态全部有 JSON Schema；
 - **品牌守卫**：仓库与工作区零品牌残留，CI 阻断回归。
 
-当前版本 `1.0.1`：迭代 0（地基）、迭代 1a（B 知识服务 PoC）、迭代 2 方案 A（有限正文回退）、迭代 2.1（精度修订）、迭代 1b（A 编排硬化）、迭代 3（C 风格服务）、迭代 4（试点与固化）与 1.0.1（真实项目补丁）已完成。三个试点：从零到 08（`试点A-雨夜回声`）、既有剧本到 05（`试点B-旧剧本接管`）、真实项目从零到 done（《死亡外科医生》，见 `docs/pilot-c-report.md`），指标与证据见 `docs/pilots/`。
+当前版本 `1.0.2`：迭代 0（地基）、迭代 1a（B 知识服务 PoC）、迭代 2 方案 A（有限正文回退）、迭代 2.1（精度修订）、迭代 1b（A 编排硬化）、迭代 3（C 风格服务）、迭代 4（试点与固化）、1.0.1（真实项目补丁）与 1.0.2（工作台体验补丁）已完成。三个试点：从零到 08（`试点A-雨夜回声`）、既有剧本到 05（`试点B-旧剧本接管`）、真实项目从零到 done（《死亡外科医生》，见 `docs/pilot-c-report.md`），指标与证据见 `docs/pilots/`。
 
 ## 目录结构
 
@@ -31,7 +31,7 @@ workbench/
     knowledge_service/       # 只读知识适配、元数据+有限正文回退、证据质量评分、行级证据链、知识卡
     style_service/           # 风格注册表解析、风格卡构建、8 工具适配、06/08 注入与记录
     installer/               # Skill 安装/升级：备份、幂等、回滚、配置保留
-  tests/                     # 167 个 unittest 用例
+  tests/                     # 170 个 unittest 用例
   scripts/                   # run_ci.py / build_manifest.py / pilot_matrix.py / 平台包装
   docs/                      # 架构、品牌守卫、命令卡、故障排查、迁移说明、迭代报告、pilots/
   .github/workflows/ci.yml   # GitHub Actions
@@ -47,6 +47,7 @@ python workbench.py doctor           # 环境与仓库自检（失败退出码 3
 python workbench.py check            # 校验阶段注册表
 python workbench.py brand-guard      # 扫描品牌禁用词（命中退出码 1）
 python workbench.py init 我的短片 --entry A   # 创建项目骨架（状态卡 v2）
+python workbench.py project list              # 跨项目总览（阶段/版本/风格/知识桥，扫描默认与仓库同级 projects/）
 python workbench.py route "只做CINEDANCE"     # 意图路由（维护口令优先隔离）
 python workbench.py gate list --project 我的短片        # 查看当前阶段门禁
 python workbench.py gate pass positioning_menu --project 我的短片
@@ -63,6 +64,7 @@ python workbench.py style list --json                    # 风格注册表 200 �
 python workbench.py style apply 001 --project 我的短片   # 生成风格卡并更新 state.style
 python workbench.py style inject 001 --project 我的短片 --stage 06 --tool mj --prompt-file p06.txt
 python workbench.py style inject-batch --project 我的短片 --batch batch.json  # 批量注入，写一份批量记录
+python workbench.py style inject-batch --project 我的短片 --batch batch.json --per-shot-records  # 再写逐镜注入记录
 python workbench.py artifact register --project 我的短片 --stage 01 --kind 大纲 --path 01_story/synopsis.md
 python workbench.py knowledge bridge --project 我的短片 --status requested --card 00_project/knowledge-cards/01-candidates.json
 python workbench.py check --project 我的短片 --content        # 跨阶段内容一致性检查（风格卡/知识卡/产物/时长）
@@ -74,7 +76,7 @@ python workbench.py validate 文件.json --schema state.schema.json
 
 - 项目默认创建在「文档目录/AI 影视工作台/projects/<名称>/」，可用 `--project-root` 或环境变量 `AI_FILM_PROJECTS_ROOT` 覆盖；包含 `00_project/`（状态、参考记忆、历史、知识卡、风格卡）、`00_inbox/`、`01_story/` … `06_prompts/`。
 - 项目状态以 `00_project/state.json` 为唯一事实来源，必须通过 `state.schema.json`（v2 字段）校验；门禁与修订日志同文件持久化。
-- 本地 CI：`python scripts/run_ci.py`（编译 → 167 项测试 → doctor → brand-guard）。
+- 本地 CI：`python scripts/run_ci.py`（编译 → 170 项测试 → doctor → brand-guard）。
 - 知识服务只读现有索引，不改知识库本体；先做元数据候选，召回不足时按预算做有限正文回退；只有路径/行号/命中词齐全才输出 `ok` 知识卡。回退可用 `--no-fallback` 关闭、用 `--fallback-files` / `--fallback-bytes` 调预算。证据按质量评分排序，并过滤「反转身」等动作误命中；高置信证据足够时会丢弃纯字面低置信证据（统计见 `report.evidence_quality`）。
 - 风格服务只读引用外部 200 位导演色卡包（`scripts/build_style_registry.py` 生成注册表）；风格默认不注入：先 `style apply` 写风格卡与 `state.style`，再 `style inject` 做结构校验并写注入记录。校验只针对用户正文，风格卡作为提示词前缀；06 用图像工具、08 用视频工具，其他阶段不挂载。
 - 生成发行清单：`python scripts/build_manifest.py`。
@@ -104,6 +106,7 @@ python workbench.py validate 文件.json --schema state.schema.json
 | 3 | C 风格服务：200 导演色卡 → 风格画像 → 多模型提示词适配与 06/08 注入记录 | 已完成（0.5.0） |
 | 4 | 试点项目与发布：试点 A（从零到 08）、试点 B（B 入口到 05）、M1–M9 复核、文档定稿、1.0.0 发行包与回滚演练 | 已完成（1.0.0） |
 | 1.0.1 | 真实项目补丁：产物登记 CLI、知识桥状态 CLI、跨阶段内容一致性检查、风格批量注入 API | 已完成（1.0.1） |
+| 1.0.2 | 工作台体验补丁：跨项目总览（project list）、风格质量提示、批量逐镜注入记录、init 下一步引导 | 已完成（1.0.2） |
 
 ## 原则
 
@@ -118,6 +121,7 @@ python workbench.py validate 文件.json --schema state.schema.json
 - `docs/quick-start.md`：第一次拿到发行包的 10 分钟上手（自检/建项目/阶段推进/知识/风格）。
 - `docs/release-notes-1.0.0.md`：1.0.0 发行说明（能力、验证、限制、升级与校验）。
 - `docs/release-notes-1.0.1.md`：1.0.1 补丁说明（P2 四项修复、接口、测试与升级方式）。
+- `docs/release-notes-1.0.2.md`：1.0.2 补丁说明（跨项目总览、风格质量提示、逐镜注入记录、init 引导）。
 - `docs/pilot-c-report.md`：真实项目试点报告（《死亡外科医生》从零到 done、M1–M9、摩擦与 1.0.x 清单）。
 - `docs/architecture.md`：分层、数据流、阶段加载顺序、与现有 Skill 子系统的映射。
 - `docs/command-card.md`：全部命令速查（环境、项目、迁移、安装、知识、风格、契约）。

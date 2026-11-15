@@ -6,6 +6,7 @@ import argparse
 import json
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -371,6 +372,12 @@ def cmd_init(args: argparse.Namespace) -> int:
             f"入口 {report['entry']}；当前阶段 {report['stage']} {report['stage_name']}；"
             f"状态文件 00_project/state.json；参考记忆 00_project/reference-memory.json"
         )
+        _print(f"项目根目录: {Path(report['path']).parent}")
+        _print(
+            "下一步：workbench.py check --project <路径> --content；"
+            "gate list / gate pass；跨项目总览：workbench.py project list"
+        )
+        _print("如需固定项目位置：设置环境变量 AI_FILM_PROJECTS_ROOT 指向统一目录后重新 init。")
     return EXIT_OK
 
 
@@ -695,11 +702,23 @@ def cmd_style_list(args: argparse.Namespace) -> int:
         summary = service.status()
         _print(f"风格注册表：{summary['directors']} 条 / {summary['categories']} 类")
         for item in entries:
+            issue_note = ""
+            if item.get("issues"):
+                labels = item.get("issue_labels") or []
+                issue_note = "；待核：" + "、".join(labels[:2]) + ("…" if len(labels) > 2 else "")
             _print(
                 f"- {item['id']}  {item['name_zh'] or item['name_en']}"
-                f"（分类 {item['category']}，等级 {item['quality']}，待核问题 {item['issues']}）"
+                f"（分类 {item['category']}，等级 {item['quality']}，待核问题 {item['issues']}{issue_note}）"
             )
         _print(f"共 {len(entries)} 条")
+        grade_counts = summary.get("grade_counts") or {}
+        if grade_counts and not args.quality:
+            _print(
+                "质量分级："
+                + "；".join(f"{key} {grade_counts.get(key, 0)} 条" for key in ("A", "B", "C"))
+            )
+            if any(item.get("quality") != "A" for item in entries):
+                _print("提示：非 A 级条目存在待核元数据（如图链/目录命名），结构校验不受影响，建议生成前抽查。")
     return EXIT_OK
 
 
@@ -713,6 +732,16 @@ def cmd_style_show(args: argparse.Namespace) -> int:
         _emit(profile, True)
         return EXIT_OK
     _print(f"{profile['name']}（编号 {profile['director_no']}，分类 {profile['category']}，等级 {profile['quality']}）")
+    try:
+        entry = _style_service().get(args.ref)
+    except StyleServiceError:
+        entry = {}
+    issues = entry.get("issues") or []
+    if (entry.get("quality") and entry.get("quality") != "A") or issues:
+        _print(
+            f"质量提示：{entry.get('quality', profile['quality'])} 级"
+            + (f"，待核问题 {len(issues)} 条：" + "；".join(str(item) for item in issues[:3]) if issues else "，元数据完整")
+        )
     _print(f"标签: {'、'.join(profile['tags'])}")
     _print("调色板:")
     for item in profile["palette"]:
@@ -934,7 +963,12 @@ def cmd_style_inject_batch(args: argparse.Namespace) -> int:
     items = payload.get("items")
     try:
         report = _style_service().inject_batch(
-            project, stage, tool, items if isinstance(items, list) else [], args.out_dir
+            project,
+            stage,
+            tool,
+            items if isinstance(items, list) else [],
+            args.out_dir,
+            per_shot_records=args.per_shot_records,
         )
     except (StyleServiceError, AdapterError, ProjectError) as exc:
         _print(str(exc))
@@ -950,6 +984,80 @@ def cmd_style_inject_batch(args: argparse.Namespace) -> int:
             _print(f"- {item['shot']}  sha256={item['prompt_sha256'][:16]}  {item['chars']} 字")
         if report["written"]:
             _print(f"组合提示词: {len(report['written'])} 个文件 → {Path(report['written'][0]).parent}")
+        if report.get("shot_records"):
+            _print(
+                f"逐镜记录: {len(report['shot_records'])} 份 → "
+                f"{Path(report['shot_records'][0]).parent}"
+            )
+    return EXIT_OK
+
+
+def cmd_project_list(args: argparse.Namespace) -> int:
+    if args.root:
+        roots = [Path(item).expanduser() for item in args.root]
+    else:
+        roots = [default_projects_root()]
+        repo_sibling = WORKBENCH_ROOT.parent / "projects"
+        if repo_sibling != roots[0]:
+            roots.append(repo_sibling)
+    rows: list[dict[str, Any]] = []
+    problems: list[str] = []
+    seen_paths: set[Path] = set()
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for child in sorted(root.iterdir()):
+            state_file = child / "00_project" / "state.json"
+            if not child.is_dir() or not state_file.is_file():
+                continue
+            resolved = child.resolve()
+            if resolved in seen_paths:
+                continue
+            seen_paths.add(resolved)
+            try:
+                state = load_state(child)
+            except ProjectError as exc:
+                problems.append(f"{child.name}: {exc}")
+                continue
+            revision = state.get("revision_log") or []
+            if revision and revision[-1].get("at"):
+                updated = str(revision[-1]["at"])
+            else:
+                updated = datetime.fromtimestamp(state_file.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+            rows.append(
+                {
+                    "name": child.name,
+                    "project": state.get("project", child.name),
+                    "entry": state.get("entry", ""),
+                    "stage": state.get("stage", ""),
+                    "version": state.get("version", ""),
+                    "mode": state.get("mode", ""),
+                    "style": (state.get("style") or {}).get("status", "off"),
+                    "knowledge": (state.get("knowledge_bridge") or {}).get("status", "off"),
+                    "updated": updated,
+                    "path": str(child),
+                    "root": str(root),
+                }
+            )
+    rows.sort(key=lambda item: item["updated"], reverse=True)
+    payload = {
+        "root": str(roots[0]),
+        "roots": [str(root) for root in roots],
+        "count": len(rows),
+        "projects": rows,
+        "problems": problems,
+    }
+    if args.json:
+        _emit(payload, True)
+    else:
+        _print(f"项目根目录: {'；'.join(payload['roots'])}（{len(rows)} 个项目）")
+        for item in rows:
+            _print(
+                f"- {item['name']}  阶段 {item['stage']}  {item['version']}  入口 {item['entry']}"
+                f"  风格 {item['style']}  知识桥 {item['knowledge']}  更新 {item['updated']}"
+            )
+        for problem in problems:
+            _print(f"  [跳过] {problem}")
     return EXIT_OK
 
 
@@ -990,6 +1098,16 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--force", action="store_true", help="目标存在时覆盖")
     init.add_argument("--json", action="store_true", help="以 JSON 输出")
     init.set_defaults(func=cmd_init)
+
+    project = sub.add_parser("project", help="跨项目总览")
+    project_sub = project.add_subparsers(dest="project_command", required=True)
+    project_list = project_sub.add_parser("list", help="列出项目根目录下的项目状态")
+    project_list.add_argument(
+        "--root", action="append",
+        help="项目根目录（可多次传入；缺省扫描默认项目根与仓库同级 projects/）",
+    )
+    project_list.add_argument("--json", action="store_true", help="以 JSON 输出")
+    project_list.set_defaults(func=cmd_project_list)
 
     route = sub.add_parser("route", help="意图路由：维护口令 / 知识库 / 阶段 / 入口 / 修订")
     route.add_argument("text", help="用户输入文本")
@@ -1171,6 +1289,10 @@ def build_parser() -> argparse.ArgumentParser:
     style_batch.add_argument("--stage", choices=["06", "08"], help="覆盖 JSON 中的 stage")
     style_batch.add_argument("--tool", help="覆盖 JSON 中的 tool")
     style_batch.add_argument("--out-dir", help="把组合提示词逐条写入该目录")
+    style_batch.add_argument(
+        "--per-shot-records", action="store_true",
+        help="除批量记录外，再为每条写一份独立注入记录（逐镜追溯）",
+    )
     style_batch.add_argument("--json", action="store_true", help="以 JSON 输出")
     style_batch.set_defaults(func=cmd_style_inject_batch)
 

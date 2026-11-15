@@ -26,6 +26,7 @@
 - 处理：`--project` 可传**项目名**（自动到默认项目根找）或**绝对/相对路径**；默认根查看 `python workbench.py doctor` 或代码 `default_projects_root()`（默认「文档目录/AI 影视工作台/projects」）。
 - 环境变量：`AI_FILM_PROJECTS_ROOT` 覆盖项目根；`AI_FILM_WORKBENCH_HOME` 覆盖工作台配置目录。
 - `init` 对已存在目录默认拒绝，加 `--force` 才会覆盖。
+- 项目分散在多个根：`python workbench.py project list` 一次列出默认根与仓库同级 `projects/` 的全部项目（可多次 `--root` 追加其他根）；加 `--json` 便于脚本处理。
 
 ## 4. 门禁未通过，`next` 被拒绝（退出码 1）
 

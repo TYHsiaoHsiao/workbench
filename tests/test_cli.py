@@ -80,6 +80,27 @@ class CliTest(unittest.TestCase):
             self.assertEqual(0, payload["count"])
             self.assertEqual("05", payload["stage"])
 
+    def test_project_list(self) -> None:
+        from core_router.project import create_project
+
+        with tempfile.TemporaryDirectory() as tmp:
+            create_project("甲项目", base=Path(tmp))
+            create_project("乙项目", base=Path(tmp))
+            code, output = run_cli(["project", "list", "--root", tmp, "--json"])
+            self.assertEqual(0, code, msg=output)
+            payload = json.loads(output)
+            self.assertEqual(2, payload["count"])
+            names = {item["name"] for item in payload["projects"]}
+            self.assertEqual({"甲项目", "乙项目"}, names)
+            self.assertIn("01", {item["stage"] for item in payload["projects"]})
+
+    def test_init_prints_next_steps(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code, output = run_cli(["init", "提示项目", "--project-root", tmp])
+            self.assertEqual(0, code, msg=output)
+            self.assertIn("project list", output)
+            self.assertIn("AI_FILM_PROJECTS_ROOT", output)
+
     def test_unknown_command_exits_with_usage_code(self) -> None:
         with self.assertRaises(SystemExit) as ctx:
             main(["not-a-command"])

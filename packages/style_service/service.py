@@ -270,10 +270,12 @@ def inject_batch(
     tool: str,
     items: list[Any],
     out_dir: str | Path | None = None,
+    per_shot_records: bool = False,
 ) -> dict[str, Any]:
     """批量注入 06/08 提示词，写一份批量记录（避免逐条覆盖丢历史）。
 
     items: [{"shot": "SH-01", "prompt": "提示词正文"}]
+    per_shot_records=True 时再为每条写一份独立注入记录，便于逐镜追溯。
     """
     from core_router.project import load_state, refresh_status_card, save_state
 
@@ -348,6 +350,32 @@ def inject_batch(
         json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )
 
+    shot_records: list[str] = []
+    if per_shot_records:
+        for item in entries:
+            shot_path = (
+                record_dir
+                / f"style-{style_id}-injection-{stage}-{canonical}-{item['shot']}.json"
+            )
+            shot_record = {
+                "contract_version": "1.0",
+                "style_id": style_id,
+                "style_name": style_name,
+                "stage": stage,
+                "tool": canonical,
+                "shot": item["shot"],
+                "prompt_sha256": item["prompt_sha256"],
+                "combined_sha256": item["combined_sha256"],
+                "chars": item["chars"],
+                "combined_prompt": item["combined_prompt"],
+                "created_at": now(),
+                "note": "逐镜注入记录：来自批量注入（per_shot_records=true）",
+            }
+            shot_path.write_text(
+                json.dumps(shot_record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+            )
+            shot_records.append(str(shot_path))
+
     written: list[str] = []
     if out_dir is not None:
         out_root = Path(out_dir)
@@ -373,6 +401,7 @@ def inject_batch(
         "tool": canonical,
         "count": len(entries),
         "record": str(record_path),
+        "shot_records": shot_records,
         "items": [
             {key: item[key] for key in ("shot", "prompt_sha256", "combined_sha256", "chars")}
             for item in entries
@@ -434,8 +463,11 @@ class StyleService:
         tool: str,
         items: list[Any],
         out_dir: str | Path | None = None,
+        per_shot_records: bool = False,
     ) -> dict[str, Any]:
-        return inject_batch(project_root, stage, tool, items, out_dir)
+        return inject_batch(
+            project_root, stage, tool, items, out_dir, per_shot_records=per_shot_records
+        )
 
 
 __all__ = [

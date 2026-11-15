@@ -1,4 +1,4 @@
-# 命令卡（v1.0.1）
+# 命令卡（v1.0.2）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -19,6 +19,7 @@
 | 命令 | 作用 |
 |---|---|
 | `python workbench.py init 项目名 --entry A` | 创建项目骨架（12 个目录 + `00_project/state.json` + 参考记忆 JSON/MD + 状态卡） |
+| `python workbench.py project list` | 跨项目总览：扫描默认项目根与仓库同级 `projects/`（可多次 `--root`），显示阶段/版本/入口/风格/知识桥/更新时间（1.0.2） |
 | `python workbench.py init 项目名 --entry B --force` | 覆盖已存在项目（默认拒绝覆盖） |
 | `python workbench.py route "只做CINEDANCE"` | 意图路由：维护口令 > 知识库请求 > 直接入口 > 修订 > 阶段 > 入口 |
 | `python workbench.py gate list --project 项目名` | 查看当前阶段门禁状态 |
@@ -59,13 +60,14 @@
 
 | 命令 | 作用 |
 |---|---|
-| `python workbench.py style list --json` | 200 位导演；可按 `--category 01` / `--quality A` 筛选 |
-| `python workbench.py style show 001` | 查看风格卡详情（调色板、光线、镜头、工具适配） |
+| `python workbench.py style list --json` | 200 位导演；可按 `--category 01` / `--quality A` 筛选；文本模式显示分级数量与待核问题（1.0.2） |
+| `python workbench.py style show 001` | 查看风格卡详情（调色板、光线、镜头、工具适配）；非 A 级会显示「质量提示」（1.0.2） |
 | `python workbench.py style resolve 希区柯克` | 按编号/中英文名/目录解析 |
 | `python workbench.py style validate 001 --tool mj --text "提示词正文"` | 结构校验（必填字段、禁用词、模型约束） |
 | `python workbench.py style apply 001 --project 项目名` | 生成风格卡 `00_project/style-cards/style-001-profile.json` 并更新 `state.style` |
 | `python workbench.py style inject 001 --project 项目名 --stage 06 --tool mj --prompt-file p06.txt` | 注入风格前缀 + 校验正文 + 写注入记录（阶段仅 06/08） |
 | `python workbench.py style inject-batch --project 项目名 --batch batch.json [--out-dir 目录]` | 批量注入：整批校验、失败整批拒绝、写一份 `*-batch.json` 批量记录（1.0.1） |
+| `python workbench.py style inject-batch ... --per-shot-records` | 额外写逐镜注入记录 `style-<id>-injection-<stage>-<tool>-<shot>.json`（1.0.2） |
 
 ## 7. 契约校验
 
