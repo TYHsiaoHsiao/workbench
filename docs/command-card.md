@@ -1,4 +1,4 @@
-# 命令卡（v2.5.0）
+# 命令卡（v2.6.0）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -161,3 +161,12 @@ python workbench.py flow run --project 雨夜回声 --graph flow-main --dry-run
 | `python scripts/build_manifest.py` | 生成发行清单 `manifest.json`（文件级 SHA256） |
 | `python scripts/build_release.py` | 生成发行包 `dist/workbench-<版本>.zip` 与 `.sha256` |
 | `python scripts/package_smoke.py [--zip <路径>] [--json]` | 发行包冒烟：SHA256 → 解压到临时目录 → `version`/`doctor`/manifest 一致性 |
+| `python scripts/rollback_drill.py [--json] [--dist <目录>]` | 发行包升级→回滚演练：安装上一版→升级最新→回滚上一版并校验版本 |
+
+## 11. 项目快照与回滚（M18）
+
+| 命令 | 作用 |
+|---|---|
+| `python workbench.py rollback create --project <项目> [--label 标签] [--json]` | 创建项目状态快照（`00_project/history/snapshots/`，含 state/参考记忆/状态卡/流程图 JSON） |
+| `python workbench.py rollback list --project <项目> [--json]` | 快照列表（创建时间倒序） |
+| `python workbench.py rollback apply --project <项目> --snapshot <snap_id> [--dry-run] [--json]` | 回滚到快照：回滚前自动创建安全快照；`--dry-run` 只显示计划 |

@@ -150,6 +150,8 @@
 - `flow queue retry` 报「只能重试失败条目」：仅 failed 可重置，pending/running 无需重试；用 `flow queue list --status failed` 确认。
 - `--retry-failed` 没有效果：仅重置 `attempts < N` 的失败条目；达到上限后不再重试，需手动 `flow queue retry` 或调大 N。
 - `--notify-cmd` 未收到通知：命令按 `shlex` 拆分且消息作为最后一个参数传入，超时 10 秒；失败静默跳过，可用 `flow queue notifications` 查看 JSONL 日志确认通知是否已生成。
+- `rollback apply` 报「快照 ID 非法」或「快照文件缺失」：确认 `rollback list` 中存在该快照（格式 `snap-YYYYmmdd-HHMMSS-xxxx`）；快照缺失/损坏需重新 `rollback create`。
+- `rollback apply` 报路径不允许：快照 metadata 只允许项目内 `00_project/` 与 `状态卡.md`；可用 `--dry-run` 先查看计划覆盖的文件。
 
 
 

@@ -26,11 +26,13 @@ from core_router import (
     can_advance,
     classify,
     create_project,
+    create_snapshot as create_state_snapshot,
     ensure_stage_gates,
     entries_for_stage,
     export_project,
     fail_gate,
     gate_detail,
+    list_snapshots as list_state_snapshots,
     load_memory,
     load_registry,
     load_rules,
@@ -40,6 +42,7 @@ from core_router import (
     refresh_status_card,
     register_artifacts,
     restore_project,
+    rollback_to,
     save_state,
     summarize_memory,
     update_knowledge_bridge,
@@ -926,6 +929,70 @@ def cmd_restore(args: argparse.Namespace) -> int:
             f"项目 {report['project']}；版本 {report['state_version']}；"
             f"阶段 {report['stage']}；{report['files']} 个文件"
         )
+    return EXIT_OK
+
+
+def cmd_rollback_create(args: argparse.Namespace) -> int:
+    project = _resolve_project(args.project)
+    try:
+        report = create_state_snapshot(project, args.label or "")
+    except (ProjectError, OSError) as exc:
+        _print(str(exc))
+        return EXIT_FAIL
+    if args.json:
+        _emit(report, True)
+    else:
+        _print(f"已创建快照: {report['snapshot_id']}")
+        _print(
+            f"项目 {report['project']}；状态版本 {report['state_version']}；阶段 {report['stage']}；"
+            f"{len(report['files'])} 个文件 / {report['bytes']} 字节"
+        )
+        _print(f"路径: {report['path']}")
+    return EXIT_OK
+
+
+def cmd_rollback_list(args: argparse.Namespace) -> int:
+    project = _resolve_project(args.project)
+    try:
+        rows = list_state_snapshots(project)
+    except (ProjectError, OSError) as exc:
+        _print(str(exc))
+        return EXIT_FAIL
+    if args.json:
+        _emit({"ok": True, "project": str(project), "count": len(rows), "snapshots": rows}, True)
+    elif not rows:
+        _print("暂无快照（使用 `rollback create` 创建）。")
+    else:
+        _print(f"快照（{len(rows)} 个，新→旧）：")
+        for row in rows:
+            label = f" · {row['label']}" if row.get("label") else ""
+            _print(
+                f"- {row['snapshot_id']}  阶段 {row['stage']}  版本 {row['state_version']}"
+                f"  {row['files']} 文件{label}  {row['created_at']}"
+            )
+    return EXIT_OK
+
+
+def cmd_rollback_apply(args: argparse.Namespace) -> int:
+    project = _resolve_project(args.project)
+    try:
+        report = rollback_to(project, args.snapshot, dry_run=args.dry_run)
+    except (ProjectError, OSError) as exc:
+        _print(str(exc))
+        return EXIT_FAIL
+    if args.json:
+        _emit(report, True)
+    elif report["dry_run"]:
+        _print(f"回滚预演（未写盘）：将恢复快照 {report['snapshot_id']} 的 {len(report['files'])} 个文件")
+        for rel in report["files"]:
+            _print(f"- {rel}")
+    else:
+        _print(f"已回滚到快照: {report['snapshot_id']}")
+        _print(
+            f"项目 {report['project']}；当前状态版本 {report['state_version']}；阶段 {report['stage']}；"
+            f"恢复 {len(report['restored_files'])} 个文件"
+        )
+        _print(f"回滚前安全快照: {report['safety_snapshot']}")
     return EXIT_OK
 
 
@@ -2463,6 +2530,24 @@ def build_parser() -> argparse.ArgumentParser:
     restore_cmd.add_argument("--dest", help="还原目标根目录（缺省项目默认根目录）")
     restore_cmd.add_argument("--json", action="store_true", help="以 JSON 输出")
     restore_cmd.set_defaults(func=cmd_restore)
+
+    rollback = sub.add_parser("rollback", help="项目状态快照与回滚（PRD §11.4）")
+    rollback_sub = rollback.add_subparsers(dest="rollback_command", required=True)
+    rollback_create = rollback_sub.add_parser("create", help="创建项目状态快照")
+    rollback_create.add_argument("--project", required=True, help="项目名或项目路径")
+    rollback_create.add_argument("--label", default="", help="快照备注")
+    rollback_create.add_argument("--json", action="store_true", help="以 JSON 输出")
+    rollback_create.set_defaults(func=cmd_rollback_create)
+    rollback_list = rollback_sub.add_parser("list", help="列出项目快照")
+    rollback_list.add_argument("--project", required=True, help="项目名或项目路径")
+    rollback_list.add_argument("--json", action="store_true", help="以 JSON 输出")
+    rollback_list.set_defaults(func=cmd_rollback_list)
+    rollback_apply = rollback_sub.add_parser("apply", help="回滚到指定快照（自动先建安全快照）")
+    rollback_apply.add_argument("--project", required=True, help="项目名或项目路径")
+    rollback_apply.add_argument("--snapshot", required=True, help="快照 ID（rollback list 查看）")
+    rollback_apply.add_argument("--dry-run", action="store_true", help="只预演，不写盘")
+    rollback_apply.add_argument("--json", action="store_true", help="以 JSON 输出")
+    rollback_apply.set_defaults(func=cmd_rollback_apply)
 
     artifact = sub.add_parser("artifact", help="阶段产物登记（写 state.stage_artifacts 与 revision_log）")
     artifact_sub = artifact.add_subparsers(dest="artifact_command", required=True)

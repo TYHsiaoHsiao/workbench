@@ -43,6 +43,13 @@ from core_router.project import (
     update_knowledge_bridge,
     workbench_home,
 )
+from core_router.rollback import (
+    create_snapshot,
+    latest_snapshot,
+    list_snapshots,
+    rollback_to,
+    snapshots_dir,
+)
 from core_router.registry import (
     DEFAULT_REGISTRY,
     REPO_ROOT,
@@ -107,4 +114,9 @@ __all__ = [
     "save_state",
     "update_knowledge_bridge",
     "workbench_home",
+    "create_snapshot",
+    "latest_snapshot",
+    "list_snapshots",
+    "rollback_to",
+    "snapshots_dir",
 ]

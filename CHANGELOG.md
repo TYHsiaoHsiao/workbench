@@ -1,5 +1,15 @@
 # 变更日志
 
+## [2.6.0] - 2026-11-15 — 项目状态快照与回滚、发行包回滚演练（M18）
+
+- 项目快照：新增 `packages/core_router/rollback.py`；`rollback create` 将 `00_project/state.json`、参考记忆（JSON/MD）、状态卡与 `00_project/workflows/**/*.json`（排除 runs/batches/generations）打包为 `00_project/history/snapshots/<snap-id>.zip` 并写 metadata；`rollback list` 按创建时间倒序；快照 ID 格式 `snap-YYYYmmdd-HHMMSS-xxxx`。
+- 回滚：`rollback apply` 覆盖快照内文件并刷新状态卡，回滚前自动创建安全快照；`--dry-run` 只输出计划；路径仅允许 `00_project/` 或 `状态卡.md`，拒绝路径穿越；回滚写事务日志（action=rollback）。
+- 回滚演练：新增 `scripts/rollback_drill.py`（安装上一版→升级最新→回滚上一版，校验三者版本一致关系），支持 `--json/--keep/--workdir`。
+- CLI：`workbench.py rollback create/list/apply`（`--json`/`--label`/`--snapshot`/`--dry-run`）。
+- PRD：v2.16；新增 §9.23 迭代 21（M18）、E2E-13（快照与回滚）；§11.4 rollback 由遗留项改为已实现。
+- 测试：新增 `tests/test_rollback.py` 10 项，合计 378 项；CI 全绿、品牌守卫 0 命中；真实发行包回滚演练通过（2.4.0→2.5.0→2.4.0）。
+- 兼容性：仅新增命令/脚本与 PRD 内容，state/契约不变；`VERSION` 升 2.6.0（MINOR）。
+
 ## [2.5.0] - 2026-11-15 — PRD 验收对齐：打包冒烟、文档链接检查与 NFR 基准（M17）
 
 - 打包冒烟：新增 `scripts/package_smoke.py`（SHA256 校验 → 解压到临时目录 → `version`/`doctor`/manifest 一致性），对应 PRD §11.3-4 与 §11.4；发行后执行，失败即阻断交付。
