@@ -272,3 +272,40 @@ def run_flow(
 
 def dump_run(run: dict[str, Any]) -> str:
     return json.dumps(run, ensure_ascii=False, indent=2)
+
+
+def recover_run(
+    project_root: str | Path,
+    run_id: str,
+    restore_state: bool = False,
+    auto_confirm: bool = True,
+) -> dict[str, Any]:
+    """从历史运行恢复：可选回滚运行前状态快照，然后按当前项目状态重跑同一流程图。"""
+    project = Path(project_root)
+    original = store.read_run(project, run_id)
+    state_restored = False
+    if restore_state:
+        snapshot = original.get("state_snapshot_before")
+        if isinstance(snapshot, dict) and snapshot:
+            from core_router.project import load_state, refresh_status_card, save_state
+
+            current = load_state(project)
+            history = project / "00_project" / "history"
+            history.mkdir(parents=True, exist_ok=True)
+            backup = history / f"state-before-recover-{_now().replace(':', '')}.json"
+            backup.write_text(json.dumps(current, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            save_state(project, snapshot)
+            refresh_status_card(project)
+            state_restored = True
+    graph_id = original.get("graph_id") or ""
+    graph = store.read_graph_data(project, graph_id)
+    runner = Runner(project, graph, dry_run=False, auto_confirm=auto_confirm)
+    result = runner.run(mode=original.get("mode") or "full", target=original.get("target_node"))
+    record = result["run"]
+    record["recovered_from"] = run_id
+    record["state_restored"] = state_restored
+    store.write_run(project, record)
+    result["run"] = record
+    result["recovered_from"] = run_id
+    result["state_restored"] = state_restored
+    return result

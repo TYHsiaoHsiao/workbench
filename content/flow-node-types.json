@@ -5,72 +5,196 @@
       "type": "start",
       "label": "开始",
       "category": "入口",
-      "description": "绑定已有项目（项目需先 init）；记录入口与流程起点。",
+      "description": "流程入口，绑定一个已有项目，并记录入口 A/B/C/D。",
       "ports": { "in": [], "out": ["project"] },
       "params_schema": {
         "type": "object",
-        "required": ["project"],
-        "additionalProperties": false,
         "properties": {
-          "project": { "type": "string", "minLength": 1 },
-          "entry": { "type": "string", "enum": ["A", "B", "C", "D"] },
-          "note": { "type": "string" }
-        }
+          "project": { "type": "string", "title": "项目目录或名称" },
+          "entry": { "type": "string", "title": "入口", "enum": ["A", "B", "C", "D"], "default": "A" },
+          "note": { "type": "string", "title": "备注" }
+        },
+        "required": ["project"],
+        "additionalProperties": false
       },
-      "executor": "start",
-      "constraints": ["全图必须且只能有一个 start"]
+      "executor": "start"
     },
     {
       "type": "stage",
-      "label": "阶段",
+      "label": "阶段执行",
       "category": "阶段",
-      "description": "执行 01-08 中的一个阶段：通过本阶段门禁并推进到下一阶段。",
+      "description": "执行 01-08 中一个创作阶段；可自动通过该阶段硬门禁后推进。",
       "ports": { "in": ["state", "artifact"], "out": ["artifact", "log"] },
       "params_schema": {
         "type": "object",
-        "required": ["stage"],
-        "additionalProperties": false,
         "properties": {
-          "stage": { "type": "string", "enum": ["01", "02", "03", "04", "05", "06", "07", "08"] },
-          "auto_gates": { "type": "boolean", "default": true },
-          "note": { "type": "string" }
-        }
+          "stage": { "type": "string", "title": "阶段", "enum": ["01", "02", "03", "04", "05", "06", "07", "08"] },
+          "auto_gates": { "type": "boolean", "title": "自动通过硬门禁", "default": true },
+          "note": { "type": "string", "title": "备注" }
+        },
+        "required": ["stage"],
+        "additionalProperties": false
       },
-      "executor": "stage",
-      "constraints": ["同图内同一阶段最多一个节点", "当前项目阶段必须与节点阶段一致"]
+      "executor": "stage"
+    },
+    {
+      "type": "knowledge_search",
+      "label": "知识检索",
+      "category": "知识",
+      "description": "只读检索本地知识库，生成待确认知识卡（不写参考记忆）。",
+      "ports": { "in": ["state"], "out": ["knowledge_card", "log"] },
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "stage": { "type": "string", "title": "服务阶段", "enum": ["01", "02", "03", "04", "05", "06", "07", "08"] },
+          "problem": { "type": "string", "title": "待解问题" },
+          "queries": { "type": "array", "title": "查询（lane:查询词）", "items": { "type": "string" }, "minItems": 1 },
+          "candidates_limit": { "type": "integer", "title": "候选上限", "default": 40, "minimum": 1 },
+          "evidence_limit": { "type": "integer", "title": "证据上限", "default": 8, "minimum": 1 },
+          "fallback": { "type": "boolean", "title": "启用有限正文回退", "default": true },
+          "kb_root": { "type": "string", "title": "知识库根目录（可空）" }
+        },
+        "required": ["stage", "problem", "queries"],
+        "additionalProperties": false
+      },
+      "executor": "knowledge_search"
+    },
+    {
+      "type": "style_apply",
+      "label": "风格卡",
+      "category": "风格",
+      "description": "把 200 导演风格包中的一位应用到项目（写风格卡并更新项目状态）。",
+      "ports": { "in": ["state"], "out": ["style_card", "log"] },
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "style": { "type": "string", "title": "风格编号或名称" },
+          "tool": { "type": "string", "title": "适配工具（可空）", "enum": ["mj", "banana", "seedance_2_0", "seedance_2_5", "h3", "sd", "runway", "pika"] },
+          "note": { "type": "string", "title": "备注" }
+        },
+        "required": ["style"],
+        "additionalProperties": false
+      },
+      "executor": "style_apply"
+    },
+    {
+      "type": "style_inject",
+      "label": "风格注入",
+      "category": "风格",
+      "description": "把已应用风格卡注入一批提示词（06/08），写批量注入记录。",
+      "ports": { "in": ["state", "text"], "out": ["injection", "log"] },
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "stage": { "type": "string", "title": "阶段", "enum": ["06", "08"] },
+          "tool": { "type": "string", "title": "工具", "enum": ["mj", "banana", "seedance_2_0", "seedance_2_5", "h3", "sd", "runway", "pika"] },
+          "items": {
+            "type": "array",
+            "title": "提示词条目",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "properties": {
+                "shot": { "type": "string" },
+                "prompt": { "type": "string" }
+              },
+              "required": ["shot", "prompt"],
+              "additionalProperties": false
+            }
+          },
+          "per_shot": { "type": "boolean", "title": "逐条记录", "default": true }
+        },
+        "required": ["stage", "tool", "items"],
+        "additionalProperties": false
+      },
+      "executor": "style_inject"
+    },
+    {
+      "type": "artifact_register",
+      "label": "产物登记",
+      "category": "工具",
+      "description": "登记阶段产物到项目状态（写 stage_artifacts 与修订日志）。",
+      "ports": { "in": ["state"], "out": ["artifact", "log"] },
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "stage": { "type": "string", "title": "阶段", "enum": ["01", "02", "03", "04", "05", "06", "07", "08", "done"] },
+          "kind": { "type": "string", "title": "产物类型" },
+          "paths": { "type": "array", "title": "相对路径（支持 glob）", "items": { "type": "string" }, "minItems": 1 },
+          "note": { "type": "string", "title": "备注" }
+        },
+        "required": ["stage", "kind", "paths"],
+        "additionalProperties": false
+      },
+      "executor": "artifact_register"
+    },
+    {
+      "type": "check_content",
+      "label": "内容检查",
+      "category": "工具",
+      "description": "跨阶段一致性检查（风格卡/知识卡/产物/时长），默认失败即中止。",
+      "ports": { "in": ["state"], "out": ["log"] },
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "fail_on_error": { "type": "boolean", "title": "有错误即中止", "default": true }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "executor": "check_content"
     },
     {
       "type": "confirm",
       "label": "人工确认",
-      "category": "阶段",
-      "description": "断点节点：运行到这里暂停，等待人工确认后继续。",
-      "ports": { "in": ["artifact", "text", "card", "log"], "out": ["confirmed"] },
+      "category": "控制",
+      "description": "运行断点：展示确认信息，等待用户确认后才继续下游。",
+      "ports": {
+        "in": ["artifact", "knowledge_card", "style_card", "injection", "text", "card", "log"],
+        "out": ["confirmed"]
+      },
       "params_schema": {
         "type": "object",
-        "required": ["prompt"],
-        "additionalProperties": false,
         "properties": {
-          "prompt": { "type": "string", "minLength": 1 },
-          "detail_path": { "type": "string", "description": "项目内相对路径，UI 可预览该文件" },
-          "note": { "type": "string" }
-        }
+          "prompt": { "type": "string", "title": "确认提示" },
+          "detail_path": { "type": "string", "title": "详情文件（可空）" },
+          "note": { "type": "string", "title": "备注" }
+        },
+        "required": ["prompt"],
+        "additionalProperties": false
       },
-      "executor": "confirm",
-      "constraints": ["未确认前下游节点不执行"]
+      "executor": "confirm"
+    },
+    {
+      "type": "export",
+      "label": "导出项目",
+      "category": "输出",
+      "description": "把项目打包为可移交的 zip（导出产物与状态）。",
+      "ports": { "in": ["state"], "out": ["artifact", "log"] },
+      "params_schema": {
+        "type": "object",
+        "properties": {
+          "out": { "type": "string", "title": "输出 zip 路径（可空=默认）" },
+          "note": { "type": "string", "title": "备注" }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "executor": "export"
     },
     {
       "type": "end",
       "label": "结束",
-      "category": "输出",
-      "description": "流程结束标记；至少一个，不产生副作用。",
+      "category": "控制",
+      "description": "流程终点。",
       "ports": { "in": ["any"], "out": [] },
       "params_schema": {
         "type": "object",
-        "additionalProperties": false,
-        "properties": { "note": { "type": "string" } }
+        "properties": { "note": { "type": "string", "title": "备注" } },
+        "required": [],
+        "additionalProperties": false
       },
-      "executor": "end",
-      "constraints": ["全图至少一个 end"]
+      "executor": "end"
     }
   ]
 }

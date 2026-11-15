@@ -22,10 +22,18 @@ from .graph import (
 )
 from .nodes import NodeContext, NodeError, NodeResult
 from .registry import NodeType, NodeTypeRegistry, load_node_types, parse_node_types
-from .runner import Runner, run_flow
+from .runner import Runner, recover_run, run_flow
+from .templates import (
+    TemplateError,
+    get_template,
+    instantiate,
+    instantiate_template,
+    load_templates,
+)
 from .store import (
     graph_path,
     list_graphs,
+    list_runs,
     read_graph_data,
     read_run,
     resolve_project,
@@ -66,4 +74,11 @@ __all__ = [
     "workflows_dir",
     "write_graph_data",
     "write_run",
+    "list_runs",
+    "recover_run",
+    "TemplateError",
+    "get_template",
+    "instantiate",
+    "instantiate_template",
+    "load_templates",
 ]

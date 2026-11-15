@@ -44,6 +44,7 @@ from core_router import (
     validate_registry,
     waive_gate,
 )
+from core_router.check import content_checks
 from core_router.project import PROJECT_DIRS, default_projects_root
 from core_router.registry import REPO_ROOT as WORKBENCH_ROOT
 from core_router.state import validate_state
@@ -53,9 +54,13 @@ from flow import (
     FlowError,
     Runner,
     default_graph,
+    instantiate_template,
     list_graphs,
+    list_runs,
     load_node_types,
+    load_templates,
     read_graph_data,
+    recover_run,
     resolve_project,
     validate_graph,
     write_graph_data,
@@ -144,6 +149,7 @@ def _check_layout() -> tuple[bool, str]:
         "content/intent-rules.json",
         "content/style-registry.json",
         "content/flow-node-types.json",
+        "content/flow-templates.json",
         "config/brand-guard.json",
     ]
     missing = [rel for rel in required if not (WORKBENCH_ROOT / rel).is_file()]
@@ -168,14 +174,22 @@ def _check_style_registry() -> tuple[bool, str]:
 def _check_flow() -> tuple[bool, str]:
     try:
         types = load_node_types()
+        templates = load_templates()
     except FlowError as exc:
         return False, str(exc)
-    required = ["flow-graph.schema.json", "flow-node-types.schema.json", "flow-run.schema.json"]
+    except Exception as exc:  # TemplateError
+        return False, str(exc)
+    required = [
+        "flow-graph.schema.json",
+        "flow-node-types.schema.json",
+        "flow-run.schema.json",
+        "flow-templates.schema.json",
+    ]
     schemas = set(list_schemas())
     missing = [name for name in required if name not in schemas]
     if missing:
         return False, "缺少流程契约: " + ", ".join(missing)
-    return True, f"流程节点类型 {len(types)} 个、契约 {len(required)} 份"
+    return True, f"流程节点类型 {len(types)} 个、模板 {len(templates)} 个、契约 {len(required)} 份"
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
@@ -225,82 +239,8 @@ def _scene_seconds(text: str) -> dict[str, int]:
 
 
 def _content_checks(project_dir: Path, state: dict[str, Any]) -> tuple[list[str], list[str]]:
-    """阶段内容一致性检查（1.0.1）：风格/知识桥引用、产物存在性、跨阶段时长。"""
-    errors: list[str] = []
-    warnings: list[str] = []
-
-    style = state.get("style") or {}
-    if style.get("status") == "on":
-        profile_path = style.get("profile_path")
-        if not profile_path:
-            errors.append("style.status=on 但缺少 profile_path")
-        elif not (project_dir / str(profile_path)).is_file():
-            errors.append(f"风格卡文件不存在: {profile_path}")
-    elif style.get("status") == "off" and style.get("profile_path"):
-        warnings.append("style.status=off 但仍保留 profile_path")
-
-    bridge = state.get("knowledge_bridge") or {}
-    bridge_status = bridge.get("status", "off")
-    last_card = bridge.get("last_card")
-    if bridge_status in {"requested", "on"}:
-        if not last_card:
-            errors.append(f"knowledge_bridge.status={bridge_status} 但缺少 last_card")
-        elif not (project_dir / str(last_card)).is_file():
-            errors.append(f"知识卡文件不存在: {last_card}")
-    if bridge_status == "on":
-        confirmed = bridge.get("confirmed_references") or []
-        if not confirmed:
-            errors.append("knowledge_bridge.status=on 但 confirmed_references 为空")
-        known = set(state.get("references") or [])
-        for ref in confirmed:
-            if ref not in known:
-                errors.append(f"confirmed_references 中的 {ref} 不在 state.references")
-
-    artifacts = state.get("stage_artifacts") or {}
-    checked: set[str] = set()
-    for key, value in artifacts.items():
-        tokens: list[str] = []
-        if "/" in str(key) or str(key).endswith((".md", ".json", ".txt")):
-            tokens.append(str(key))
-        if isinstance(value, str):
-            tokens.extend(_ARTIFACT_TOKEN.findall(value))
-        for token in tokens:
-            rel = token.strip("/")
-            if rel in checked or " " in rel:
-                continue
-            checked.add(rel)
-            if "/" not in rel:
-                # 裸文件名无法确定所在目录（多为旧版自由文本摘要），跳过核验
-                continue
-            if not (project_dir / rel).exists():
-                errors.append(f"stage_artifacts 引用的文件不存在: {rel}")
-
-    if state.get("stale_downstream"):
-        warnings.append(f"stale_downstream 非空: {state['stale_downstream']}")
-
-    treatment = project_dir / "01_story" / "treatment.md"
-    acting = project_dir / "04_performance" / "acting-v01.md"
-    shot_dir = project_dir / "05_shots"
-    if treatment.is_file() and shot_dir.is_dir():
-        budgets = _scene_seconds(_read_text(treatment))
-        for plan in sorted(shot_dir.glob("1-0[1-8]-shot-plan-v*.md")):
-            match = re.match(r"(1-0[1-8])", plan.name)
-            if not match:
-                continue
-            scene = match.group(1)
-            found = _SCENE_BUDGET.search(_read_text(plan))
-            if scene in budgets and found and budgets[scene] != int(found.group(1)):
-                errors.append(
-                    f"时长不一致: 场次 {scene} treatment={budgets[scene]}s，shot-plan={found.group(1)}s"
-                )
-        if acting.is_file():
-            acting_seconds = _scene_seconds(_read_text(acting))
-            for scene, seconds in acting_seconds.items():
-                if scene in budgets and budgets[scene] != seconds:
-                    warnings.append(
-                        f"时长提示不一致: 场次 {scene} treatment={budgets[scene]}s，acting 交接={seconds}s"
-                    )
-    return errors, warnings
+    """阶段内容一致性检查（委托 core_router.check，流程节点复用同一实现）。"""
+    return content_checks(project_dir, state)
 
 
 def cmd_check(args: argparse.Namespace) -> int:
@@ -1108,9 +1048,13 @@ def cmd_flow_new(args: argparse.Namespace) -> int:
     try:
         project = resolve_project(args.project)
         graph_id = args.graph or graph_id_from_name(args.name)
-        data = default_graph(project.name, graph_id=graph_id)
-        data["name"] = args.name
-        data["nodes"][0]["params"]["project"] = project.name
+        template_id = getattr(args, "template", None)
+        if template_id:
+            data = instantiate_template(template_id, project.name, graph_id=graph_id, name=args.name)
+        else:
+            data = default_graph(project.name, graph_id=graph_id)
+            data["name"] = args.name
+            data["nodes"][0]["params"]["project"] = project.name
         target = project / "00_project" / "workflows" / f"{graph_id}.json"
         if target.is_file() and not args.force:
             _print(f"流程图已存在: {target}（如需覆盖请加 --force）")
@@ -1214,6 +1158,128 @@ def cmd_flow_run(args: argparse.Namespace) -> int:
             _print("提示: 浏览器端 `flow serve` 可确认；或加 --yes 自动确认。")
         _print("运行记录: " + str(project / "00_project" / "workflows" / "runs" / (run["run_id"] + ".json")))
     return EXIT_OK if run.get("status") in {"succeeded", "awaiting_confirm"} else EXIT_FAIL
+
+
+def cmd_flow_templates(args: argparse.Namespace) -> int:
+    try:
+        templates = load_templates()
+    except Exception as exc:  # TemplateError
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    if args.json:
+        _emit({"ok": True, "count": len(templates), "templates": templates}, True)
+        return EXIT_OK
+    _print(f"预置模板: {len(templates)} 个")
+    for item in templates:
+        graph = item.get("graph") or {}
+        _print(f"- {item['template_id']}  {item['name']}（节点 {len(graph.get('nodes') or [])} / 连线 {len(graph.get('edges') or [])}）")
+        _print(f"  {item['description']}")
+    return EXIT_OK
+
+
+def cmd_flow_runs(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        runs = list_runs(project, limit=args.limit)
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    if args.json:
+        _emit({"ok": True, "project": str(project), "count": len(runs), "runs": runs}, True)
+        return EXIT_OK
+    _print(f"项目: {project}")
+    _print(f"运行历史: {len(runs)} 条")
+    for run in runs:
+        line = f"- {run['run_id']}  {run['status']}  {run['mode']}"
+        if run.get("dry_run"):
+            line += "  dry-run"
+        line += f"  步骤 {run['steps']}"
+        if run.get("failed"):
+            line += f"  失败 {run['failed']}"
+        if run.get("recovered_from"):
+            line += f"  恢复自 {run['recovered_from']}"
+        _print(line)
+        if run.get("error"):
+            _print(f"  错误: {run['error']}")
+    return EXIT_OK
+
+
+def cmd_flow_recover(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        result = recover_run(project, args.run, restore_state=args.restore_state, auto_confirm=args.yes)
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    run = result["run"]
+    if args.json:
+        _emit(result, True)
+        return EXIT_OK if run.get("status") in {"succeeded", "awaiting_confirm"} else EXIT_FAIL
+    _print(
+        f"恢复运行 {run['run_id']}（来自 {args.run}）：{run['status']}"
+        + ("，已回滚状态快照" if result.get("state_restored") else "")
+    )
+    for step in run.get("steps") or []:
+        flag = "OK" if step.get("status") in {"succeeded", "planned"} else step.get("status", "").upper()
+        line = f"[{flag}] {step['node_id']}"
+        if step.get("outputs"):
+            line += "  " + "；".join(str(x) for x in step["outputs"])
+        if step.get("error"):
+            line += "  错误: " + step["error"]
+        _print(line)
+    return EXIT_OK if run.get("status") in {"succeeded", "awaiting_confirm"} else EXIT_FAIL
+
+
+def cmd_flow_batch(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        if args.all:
+            graph_ids = [item["graph_id"] for item in list_graphs(project)]
+        else:
+            graph_ids = [item.strip() for item in (args.graphs or "").split(",") if item.strip()]
+        if not graph_ids:
+            _print("错误: 请用 --graphs a,b 指定流程图，或使用 --all")
+            return EXIT_USAGE
+        results: list[dict[str, Any]] = []
+        for graph_id in graph_ids:
+            try:
+                data = read_graph_data(project, graph_id)
+                runner = Runner(project, data, dry_run=args.dry_run, auto_confirm=args.yes)
+                result = runner.run(mode="full")
+                run = result["run"]
+                results.append(
+                    {
+                        "graph_id": graph_id,
+                        "ok": run.get("status") in {"succeeded", "awaiting_confirm"},
+                        "status": run.get("status"),
+                        "run_id": run.get("run_id"),
+                        "steps": len(run.get("steps") or []),
+                        "error": next(
+                            (step.get("error") for step in run.get("steps") or [] if step.get("error")),
+                            None,
+                        ),
+                    }
+                )
+            except FlowError as exc:
+                results.append({"graph_id": graph_id, "ok": False, "status": "error", "error": str(exc)})
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    ok = all(item.get("ok") for item in results)
+    payload = {"ok": ok, "project": str(project), "count": len(results), "results": results}
+    if args.json:
+        _emit(payload, True)
+    else:
+        _print(f"批量运行: {len(results)} 个流程图")
+        for item in results:
+            line = f"- {item['graph_id']}  {item.get('status')}"
+            if item.get("run_id"):
+                line += f"  运行 {item['run_id']}"
+            if item.get("error"):
+                line += f"  错误: {item['error']}"
+            _print(line)
+        _print("全部成功" if ok else "存在失败，请查看运行记录")
+    return EXIT_OK if ok else EXIT_FAIL
 
 
 def cmd_flow_serve(args: argparse.Namespace) -> int:
@@ -1473,6 +1539,7 @@ def build_parser() -> argparse.ArgumentParser:
     flow_new.add_argument("--project", required=True, help="项目名或项目路径")
     flow_new.add_argument("--name", required=True, help="流程图名称")
     flow_new.add_argument("--graph", help="graph_id（缺省由名称生成）")
+    flow_new.add_argument("--template", help="从预置模板创建（见 flow templates）")
     flow_new.add_argument("--force", action="store_true", help="覆盖同名流程图")
     flow_new.add_argument("--json", action="store_true", help="以 JSON 输出")
     flow_new.set_defaults(func=cmd_flow_new)
@@ -1516,6 +1583,35 @@ def build_parser() -> argparse.ArgumentParser:
     flow_serve.add_argument("--port", type=int, default=8899, help="监听端口（默认 8899）")
     flow_serve.add_argument("--no-token", action="store_true", help="关闭访问令牌（本机调试用）")
     flow_serve.set_defaults(func=cmd_flow_serve)
+
+    flow_templates = flow_sub.add_parser("templates", help="列出预置流程模板")
+    flow_templates.add_argument("--json", action="store_true", help="以 JSON 输出")
+    flow_templates.set_defaults(func=cmd_flow_templates)
+
+    flow_runs = flow_sub.add_parser("runs", help="列出项目运行历史")
+    flow_runs.add_argument("--project", required=True, help="项目名或项目路径")
+    flow_runs.add_argument("--limit", type=int, default=20, help="最多显示条数")
+    flow_runs.add_argument("--json", action="store_true", help="以 JSON 输出")
+    flow_runs.set_defaults(func=cmd_flow_runs)
+
+    flow_recover = flow_sub.add_parser("recover", help="从历史运行恢复（可回滚运行前状态快照）")
+    flow_recover.add_argument("--project", required=True, help="项目名或项目路径")
+    flow_recover.add_argument("--run", required=True, help="run_id")
+    flow_recover.add_argument("--restore-state", action="store_true", help="先回滚到运行前状态快照")
+    flow_recover.add_argument("--yes", action="store_true", help="自动确认 confirm 节点")
+    flow_recover.add_argument("--json", action="store_true", help="以 JSON 输出")
+    flow_recover.set_defaults(func=cmd_flow_recover)
+
+    flow_batch = flow_sub.add_parser("batch", help="批量运行多个流程图")
+    flow_batch.add_argument("--project", required=True, help="项目名或项目路径")
+    flow_batch.add_argument("--graphs", help="逗号分隔的 graph_id 列表")
+    flow_batch.add_argument("--all", action="store_true", help="运行项目内全部流程图")
+    flow_batch_dry = flow_batch.add_mutually_exclusive_group()
+    flow_batch_dry.add_argument("--dry-run", dest="dry_run", action="store_true", default=None, help="只预演不写盘")
+    flow_batch_dry.add_argument("--live", dest="dry_run", action="store_false", default=None, help="真实执行并写盘")
+    flow_batch.add_argument("--yes", action="store_true", help="自动确认 confirm 节点")
+    flow_batch.add_argument("--json", action="store_true", help="以 JSON 输出")
+    flow_batch.set_defaults(func=cmd_flow_batch)
 
     return parser
 

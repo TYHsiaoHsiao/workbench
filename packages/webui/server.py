@@ -24,10 +24,14 @@ from flow import (
     FlowError,
     Runner,
     default_graph,
+    instantiate_template,
     list_graphs,
+    list_runs,
     load_node_types,
+    load_templates,
     read_graph_data,
     read_run,
+    recover_run,
     resolve_project,
     validate_graph,
     write_graph_data,
@@ -257,9 +261,23 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             registry = load_node_types()
             self._json({"ok": True, **registry.to_dict()})
             return
+        if path == "/api/templates":
+            self._json({"ok": True, "templates": load_templates()})
+            return
         if path == "/api/workflows":
             project = self._project_from(query)
             self._json({"ok": True, "project": str(project), "graphs": list_graphs(project)})
+            return
+        if path == "/api/runs":
+            project = self._project_from(query)
+            limit = 30
+            values = query.get("limit") or []
+            if values:
+                try:
+                    limit = max(1, min(200, int(values[0])))
+                except ValueError:
+                    pass
+            self._json({"ok": True, "project": str(project), "runs": list_runs(project, limit=limit)})
             return
         if path.startswith("/api/workflows/"):
             project = self._project_from(query)
@@ -280,9 +298,13 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             if not name:
                 raise FlowError("缺少流程图名称 name")
             graph_id = str(body.get("graph_id") or "").strip() or graph_id_from_name(name)
-            data = default_graph(project.name, graph_id=graph_id)
-            data["name"] = name
-            data["nodes"][0]["params"]["project"] = project.name
+            template_id = str(body.get("template_id") or "").strip()
+            if template_id:
+                data = instantiate_template(template_id, project.name, graph_id=graph_id, name=name)
+            else:
+                data = default_graph(project.name, graph_id=graph_id)
+                data["name"] = name
+                data["nodes"][0]["params"]["project"] = project.name
             write_graph_data(project, data)
             self._json({"ok": True, "graph_id": graph_id, "graph": data})
             return
@@ -308,6 +330,52 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 target=body.get("target_node") or None,
             )
             self.server.sessions[result["run"]["run_id"]] = runner
+            self._json(result)
+            return
+        if path == "/api/runs/batch":
+            project = resolve_project(body.get("project") or str(self.server.project_root))
+            graph_ids = body.get("graph_ids") or []
+            if not graph_ids:
+                graph_ids = [item["graph_id"] for item in list_graphs(project)]
+            dry_run = body.get("dry_run")
+            auto_confirm = bool(body.get("auto_confirm", True))
+            results = []
+            for graph_id in graph_ids:
+                try:
+                    graph = read_graph_data(project, str(graph_id))
+                    runner = Runner(project, graph, dry_run=dry_run, auto_confirm=auto_confirm)
+                    run_result = runner.run(mode="full")
+                    run = run_result["run"]
+                    self.server.sessions[run["run_id"]] = runner
+                    results.append(
+                        {
+                            "graph_id": graph_id,
+                            "ok": run.get("status") in {"succeeded", "awaiting_confirm"},
+                            "status": run.get("status"),
+                            "run_id": run.get("run_id"),
+                            "steps": len(run.get("steps") or []),
+                        }
+                    )
+                except FlowError as exc:
+                    results.append({"graph_id": graph_id, "ok": False, "status": "error", "error": str(exc)})
+            self._json(
+                {
+                    "ok": all(item.get("ok") for item in results),
+                    "project": str(project),
+                    "count": len(results),
+                    "results": results,
+                }
+            )
+            return
+        if path.startswith("/api/runs/") and path.endswith("/recover"):
+            run_id = unquote(path[len("/api/runs/"): -len("/recover")]).strip("/")
+            project = resolve_project(body.get("project") or str(self.server.project_root))
+            result = recover_run(
+                project,
+                run_id,
+                restore_state=bool(body.get("restore_state")),
+                auto_confirm=bool(body.get("auto_confirm", True)),
+            )
             self._json(result)
             return
         if path.startswith("/api/runs/") and path.endswith("/confirm"):

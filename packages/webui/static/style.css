@@ -221,3 +221,46 @@ button.danger { background: #7f1d1d; border-color: #991b1b; }
 }
 
 .hidden { display: none !important; }
+
+
+/* ---- M2/M3：参数 JSON、运行历史 ---- */
+.inspector-body textarea {
+  width: 100%;
+  min-height: 90px;
+  margin: 4px 0 12px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line, #333);
+  background: #11151c;
+  color: #dbe2ea;
+  font: 12px/1.5 Consolas, "Courier New", monospace;
+  resize: vertical;
+}
+.inspector-body textarea.invalid {
+  border-color: #c0392b;
+  box-shadow: 0 0 0 1px rgba(192, 57, 43, 0.4);
+}
+.run-history {
+  margin-top: 10px;
+  border-top: 1px solid var(--line, #333);
+  padding-top: 8px;
+  max-height: 180px;
+  overflow: auto;
+}
+.run-history-item {
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #b9c4d0;
+}
+.run-history-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.run-history-item.failed,
+.run-history-item.canceled {
+  color: #e07b6b;
+}
+.run-history-item.succeeded {
+  color: #7fc98f;
+}

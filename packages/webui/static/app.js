@@ -2,12 +2,16 @@
 "use strict";
 
 const PORT_COMPAT = {
-  project: ["project", "state"],
+  project: ["project", "state", "text", "card", "log"],
+  state: ["state"],
   artifact: ["artifact", "state", "text", "card", "log", "any"],
   log: ["log", "text", "card", "any"],
   text: ["text", "card", "log", "any"],
-  card: ["text", "card", "log", "any"],
+  card: ["card", "text", "log", "any"],
   confirmed: ["confirmed", "artifact", "log", "any"],
+  knowledge_card: ["knowledge_card", "card", "text", "log", "artifact", "any"],
+  style_card: ["style_card", "card", "text", "log", "artifact", "any"],
+  injection: ["injection", "artifact", "log", "text", "any"],
   any: ["any"],
 };
 
@@ -32,6 +36,9 @@ const state = {
   saveTimer: null,
   run: null,
   awaiting: null,
+  templates: [],
+  history: [],
+  future: [],
   layoutReady: false,
 };
 
@@ -118,6 +125,12 @@ async function boot() {
   state.nodeTypes = types.types || [];
   state.typeMap = new Map(state.nodeTypes.map((item) => [item.type, item]));
   renderPalette();
+  try {
+    const tpl = await api("/api/templates");
+    state.templates = tpl.templates || [];
+  } catch (err) {
+    state.templates = [];
+  }
 
   setStatus("加载项目…");
   const projects = await api("/api/projects");
@@ -147,6 +160,7 @@ async function chooseProject(path) {
   const info = await api("/api/workbench?project=" + encodeURIComponent(path));
   $("#version").textContent = "v" + info.version;
   await loadWorkflows();
+  loadRunHistory();
 }
 
 async function loadWorkflows() {
@@ -198,11 +212,23 @@ async function newGraph() {
     logLine("请先选择项目", "warn");
     return;
   }
-  const name = window.prompt("新流程图名称", "流程-" + new Date().toISOString().slice(0, 10));
+  let templateHint = "";
+  if (state.templates.length) {
+    templateHint = "\n\n可用模板（留空=空白流程图）：\n" + state.templates
+      .map((t) => "- " + t.template_id + "：" + t.name)
+      .join("\n");
+  }
+  const name = window.prompt("新流程图名称" + templateHint, "流程-" + new Date().toISOString().slice(0, 10));
   if (!name) return;
+  let templateId = "";
+  if (state.templates.length) {
+    templateId = (window.prompt("模板 ID（留空=空白流程图）\n" + state.templates.map((t) => t.template_id).join(" / "), "") || "").trim();
+  }
+  const payload = { project: state.project, name };
+  if (templateId) payload.template_id = templateId;
   const data = await api("/api/workflows/new", {
     method: "POST",
-    body: JSON.stringify({ project: state.project, name }),
+    body: JSON.stringify(payload),
   });
   await loadWorkflows();
   await loadGraph(data.graph_id);
@@ -495,6 +521,7 @@ function selectNode(nodeId) {
 function beginNodeDrag(event, node) {
   if (event.button !== 0) return;
   event.preventDefault();
+  remember();
   const start = screenToWorld(event.clientX, event.clientY);
   state.drag = {
     node,
@@ -601,6 +628,16 @@ function bindGlobalHandlers() {
   }, { passive: false });
 
   window.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && !event.shiftKey) {
+      event.preventDefault();
+      undo();
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && (event.key.toLowerCase() === "y" || (event.shiftKey && event.key.toLowerCase() === "z"))) {
+      event.preventDefault();
+      redo();
+      return;
+    }
     if (event.key === "Delete" || event.key === "Backspace") {
       if (state.selection && document.activeElement === document.body) {
         event.preventDefault();
@@ -615,6 +652,39 @@ function bindGlobalHandlers() {
 }
 
 /* ---------------- 保存 / 校验 / 布局 ---------------- */
+
+function remember() {
+  if (!state.graph) return;
+  state.history.push(JSON.stringify(state.graph));
+  if (state.history.length > 60) state.history.shift();
+  state.future = [];
+}
+
+function undo() {
+  if (!state.graph || !state.history.length) {
+    logLine("没有可撤销的操作", "warn");
+    return;
+  }
+  state.future.push(JSON.stringify(state.graph));
+  state.graph = JSON.parse(state.history.pop());
+  state.selection = null;
+  renderGraph();
+  touchGraph();
+  logLine("已撤销");
+}
+
+function redo() {
+  if (!state.graph || !state.future.length) {
+    logLine("没有可重做的操作", "warn");
+    return;
+  }
+  state.history.push(JSON.stringify(state.graph));
+  state.graph = JSON.parse(state.future.pop());
+  state.selection = null;
+  renderGraph();
+  touchGraph();
+  logLine("已重做");
+}
 
 function touchGraph() {
   if (!state.graph) return;
@@ -657,12 +727,14 @@ async function validateGraph() {
 
 function autoLayout() {
   if (!state.graph) return;
+  remember();
   const nodes = state.graph.nodes.slice();
   const rank = (node) => {
     if (node.type === "start") return 0;
     if (node.type === "stage") return 1 + parseInt(node.params.stage || "0", 10);
-    if (node.type === "confirm") return 100;
-    return 200;
+    if (node.type === "confirm") return 200;
+    if (node.type === "end") return 300;
+    return 150;
   };
   nodes.sort((a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id));
   nodes.forEach((node, index) => {
@@ -742,6 +814,20 @@ function renderInspector() {
       input.addEventListener("input", () => {
         node.params[key] = Number(input.value);
         touchGraph();
+      });
+    } else if (prop.type === "array" || prop.type === "object") {
+      input = document.createElement("textarea");
+      input.rows = 5;
+      input.value = JSON.stringify(node.params[key] != null ? node.params[key] : (prop.type === "array" ? [] : {}), null, 2);
+      input.addEventListener("change", () => {
+        try {
+          node.params[key] = JSON.parse(input.value);
+          input.classList.remove("invalid");
+          touchGraph();
+        } catch (err) {
+          input.classList.add("invalid");
+          logLine("参数 " + key + " 不是合法 JSON：" + err.message, "err");
+        }
       });
     } else {
       input = document.createElement("input");
@@ -826,6 +912,13 @@ function renderRun() {
     awaiting.appendChild(no);
     box.appendChild(awaiting);
   }
+  if (run.status === "failed") {
+    const retry = document.createElement("button");
+    retry.className = "primary";
+    retry.textContent = "恢复重跑";
+    retry.addEventListener("click", () => recoverRun(run.run_id));
+    box.appendChild(retry);
+  }
 }
 
 async function runFlow() {
@@ -882,6 +975,78 @@ async function confirmRun(approved) {
   }
 }
 
+/* ---------------- 运行历史 / 恢复 / 批量 ---------------- */
+
+async function loadRunHistory() {
+  const box = $("#run-history");
+  if (!box) return;
+  box.innerHTML = "";
+  if (!state.project) return;
+  try {
+    const data = await api("/api/runs?project=" + encodeURIComponent(state.project) + "&limit=10");
+    const runs = data.runs || [];
+    if (!runs.length) {
+      box.innerHTML = "<p class='hint'>暂无运行记录。</p>";
+      return;
+    }
+    for (const run of runs) {
+      const item = document.createElement("div");
+      item.className = "run-history-item " + (run.status || "");
+      item.textContent = run.run_id + " · " + run.status + (run.failed ? " · 失败 " + run.failed : "");
+      item.title = "点击恢复重跑";
+      item.addEventListener("click", () => recoverRun(run.run_id));
+      box.appendChild(item);
+    }
+  } catch (err) {
+    box.innerHTML = "<p class='hint'>运行历史加载失败：" + escapeHtml(err.message) + "</p>";
+  }
+}
+
+async function recoverRun(runId, restoreState) {
+  const restore = restoreState != null
+    ? restoreState
+    : window.confirm("恢复重跑该运行？\n确定 = 先回滚到运行前状态快照再重跑；取消 = 直接按当前图重跑。");
+  try {
+    const data = await api("/api/runs/" + encodeURIComponent(runId) + "/recover", {
+      method: "POST",
+      body: JSON.stringify({
+        project: state.project,
+        restore_state: restore,
+        auto_confirm: true,
+      }),
+    });
+    state.run = data;
+    state.awaiting = data.awaiting || null;
+    for (const step of data.run.steps || []) {
+      logLine("[" + step.status + "] " + step.node_id, step.status === "failed" ? "err" : "ok");
+    }
+    setStatus("恢复运行：" + data.run.status);
+    renderGraph();
+    renderRun();
+    loadRunHistory();
+  } catch (err) {
+    logLine("恢复失败：" + err.message, "err");
+  }
+}
+
+async function runBatch() {
+  if (!state.project) return;
+  if (!window.confirm("批量预演项目内全部流程图？（dry-run，不写盘）")) return;
+  try {
+    const data = await api("/api/runs/batch", {
+      method: "POST",
+      body: JSON.stringify({ project: state.project, dry_run: true, auto_confirm: true }),
+    });
+    for (const item of data.results || []) {
+      logLine("[" + (item.ok ? "OK" : "FAIL") + "] " + item.graph_id + " · " + item.status, item.ok ? "ok" : "err");
+    }
+    setStatus("批量预演完成：" + data.count + " 个流程图");
+    loadRunHistory();
+  } catch (err) {
+    logLine("批量运行失败：" + err.message, "err");
+  }
+}
+
 /* ---------------- 事件绑定 ---------------- */
 
 function bindUi() {
@@ -921,6 +1086,11 @@ function bindUi() {
     renderEdges();
   });
   $("#btn-run").addEventListener("click", () => runFlow());
+  $("#btn-run-history").addEventListener("click", () => loadRunHistory());
+  $("#btn-run-batch").addEventListener("click", () => runBatch());
+  $("#btn-undo").addEventListener("click", () => undo());
+  $("#btn-redo").addEventListener("click", () => redo());
+  $("#inspector-body").addEventListener("focusin", () => remember());
   $("#run-mode").addEventListener("change", () => renderRun());
 }
 

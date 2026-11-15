@@ -15,7 +15,9 @@ from flow import (  # noqa: E402
     Runner,
     default_graph,
     list_graphs,
+    list_runs,
     read_graph_data,
+    recover_run,
     resolve_project,
     run_flow,
     validate_graph,
@@ -185,6 +187,29 @@ class FlowRunnerTest(unittest.TestCase):
         result = validate_graph(data, load_node_types())
         self.assertFalse(result["ok"])  # 骨架尚未连线
         self.assertTrue(any("入边" in item or "end" in item for item in result["errors"]))
+
+    def test_list_runs_and_recover(self) -> None:
+        write_graph_data(self.project, self._graph())
+        result = run_flow(self.project, self._graph(), dry_run=True)
+        run_id = result["run"]["run_id"]
+        runs = list_runs(self.project, limit=5)
+        self.assertGreaterEqual(len(runs), 1)
+        self.assertEqual(run_id, runs[0]["run_id"])
+        recovered = recover_run(self.project, run_id, restore_state=False, auto_confirm=True)
+        self.assertEqual("succeeded", recovered["run"]["status"])
+        self.assertEqual(run_id, recovered["recovered_from"])
+        self.assertFalse(recovered["state_restored"])
+
+    def test_recover_with_state_restore(self) -> None:
+        graph = self._graph()
+        write_graph_data(self.project, graph)
+        first = Runner(self.project, graph, dry_run=False).run()
+        self.assertEqual("02", load_state(self.project)["stage"])
+        recovered = recover_run(self.project, first["run"]["run_id"], restore_state=True, auto_confirm=True)
+        self.assertTrue(recovered["state_restored"])
+        self.assertEqual("02", load_state(self.project)["stage"])
+        backups = list((self.project / "00_project" / "history").glob("state-before-recover-*.json"))
+        self.assertTrue(backups)
 
 
 if __name__ == "__main__":

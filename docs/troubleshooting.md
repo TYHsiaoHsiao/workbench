@@ -109,3 +109,11 @@
 5) Skill 安装：python workbench.py install --dry-run 预演
 6) 仍失败：保留 00_project/history 下备份与终端输出，按报告路径排查
 ```
+
+## 14. 可视化工作台（flow）常见问题
+
+- `flow serve` 打不开：确认 127.0.0.1 端口未被占用（用 `--port` 换端口）；URL 必须带 token，`--no-token` 只用于本机临时使用。
+- 图校验报「端口类型不兼容」：确认连接方向与端口类型（`artifact` 可连 `confirm` 与阶段，`state` 只进阶段/能力节点）。
+- 运行停在 `awaiting_confirm`：人工确认节点未处理；在页面抽屉点确认，或重新运行验证。
+- 运行失败想重跑：先 `flow runs --project <项目>` 查看记录，再 `flow recover --run <run_id> --project <项目> --yes`；需要回滚状态快照时加 `--restore-state`。
+- 批量运行默认 dry-run，真实执行需显式 `--live`。

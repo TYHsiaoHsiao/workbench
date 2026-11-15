@@ -1,0 +1,130 @@
+{
+  "contract_version": "0.1",
+  "templates": [
+    {
+      "template_id": "tpl-full-flow",
+      "name": "从零到成片（01→08）",
+      "description": "8 阶段顺序执行，跳过可选 03 世界观；每阶段自动通过硬门禁。",
+      "graph": {
+        "graph_id": "tpl-full-flow",
+        "name": "从零到成片",
+        "project": "",
+        "contract_version": "0.1",
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z",
+        "settings": { "auto_advance": true, "allow_skip_stages": true, "dry_run_first": true },
+        "nodes": [
+          { "id": "n-start", "type": "start", "label": "开始", "position": { "x": 80, "y": 320 }, "params": { "project": "", "entry": "A" } },
+          { "id": "n-01", "type": "stage", "label": "01 概念锚定", "position": { "x": 340, "y": 80 }, "params": { "stage": "01", "auto_gates": true } },
+          { "id": "n-02", "type": "stage", "label": "02 角色圣经", "position": { "x": 340, "y": 210 }, "params": { "stage": "02", "auto_gates": true } },
+          { "id": "n-04", "type": "stage", "label": "04 分场大纲", "position": { "x": 340, "y": 340 }, "params": { "stage": "04", "auto_gates": true } },
+          { "id": "n-05", "type": "stage", "label": "05 剧本融合", "position": { "x": 340, "y": 470 }, "params": { "stage": "05", "auto_gates": true } },
+          { "id": "n-06", "type": "stage", "label": "06 图像资产", "position": { "x": 340, "y": 600 }, "params": { "stage": "06", "auto_gates": true } },
+          { "id": "n-07", "type": "stage", "label": "07 表演", "position": { "x": 340, "y": 730 }, "params": { "stage": "07", "auto_gates": true } },
+          { "id": "n-08", "type": "stage", "label": "08 视频提示词", "position": { "x": 340, "y": 860 }, "params": { "stage": "08", "auto_gates": true } },
+          { "id": "n-end", "type": "end", "label": "结束", "position": { "x": 640, "y": 320 }, "params": {} }
+        ],
+        "edges": [
+          { "id": "e-1", "from": { "node": "n-start", "port": "project" }, "to": { "node": "n-01", "port": "state" } },
+          { "id": "e-2", "from": { "node": "n-01", "port": "artifact" }, "to": { "node": "n-02", "port": "artifact" } },
+          { "id": "e-3", "from": { "node": "n-02", "port": "artifact" }, "to": { "node": "n-04", "port": "artifact" } },
+          { "id": "e-4", "from": { "node": "n-04", "port": "artifact" }, "to": { "node": "n-05", "port": "artifact" } },
+          { "id": "e-5", "from": { "node": "n-05", "port": "artifact" }, "to": { "node": "n-06", "port": "artifact" } },
+          { "id": "e-6", "from": { "node": "n-06", "port": "artifact" }, "to": { "node": "n-07", "port": "artifact" } },
+          { "id": "e-7", "from": { "node": "n-07", "port": "artifact" }, "to": { "node": "n-08", "port": "artifact" } },
+          { "id": "e-8", "from": { "node": "n-08", "port": "artifact" }, "to": { "node": "n-end", "port": "any" } }
+        ]
+      }
+    },
+    {
+      "template_id": "tpl-relay",
+      "name": "B 入口接力（接管确认 → 05）",
+      "description": "已有完整剧本：先人工确认接管，再进 05 剧本融合。",
+      "graph": {
+        "graph_id": "tpl-relay",
+        "name": "B 入口接力",
+        "project": "",
+        "contract_version": "0.1",
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z",
+        "settings": { "auto_advance": true, "allow_skip_stages": true, "dry_run_first": true },
+        "nodes": [
+          { "id": "n-start", "type": "start", "label": "开始（B 入口）", "position": { "x": 80, "y": 200 }, "params": { "project": "", "entry": "B" } },
+          { "id": "n-confirm", "type": "confirm", "label": "接管确认", "position": { "x": 340, "y": 200 }, "params": { "prompt": "确认保持作者剧本原文不变，仅从剧本提取并补齐生产资料？" } },
+          { "id": "n-05", "type": "stage", "label": "05 剧本融合", "position": { "x": 600, "y": 200 }, "params": { "stage": "05", "auto_gates": true } },
+          { "id": "n-end", "type": "end", "label": "结束", "position": { "x": 860, "y": 200 }, "params": {} }
+        ],
+        "edges": [
+          { "id": "e-1", "from": { "node": "n-start", "port": "project" }, "to": { "node": "n-confirm", "port": "text" } },
+          { "id": "e-2", "from": { "node": "n-confirm", "port": "confirmed" }, "to": { "node": "n-05", "port": "artifact" } },
+          { "id": "e-3", "from": { "node": "n-05", "port": "artifact" }, "to": { "node": "n-end", "port": "any" } }
+        ]
+      }
+    },
+    {
+      "template_id": "tpl-knowledge",
+      "name": "知识增强（检索 → 确认 → 01）",
+      "description": "先只读检索生成知识卡，人工确认后再进入 01 概念锚定。",
+      "graph": {
+        "graph_id": "tpl-knowledge",
+        "name": "知识增强",
+        "project": "",
+        "contract_version": "0.1",
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z",
+        "settings": { "auto_advance": true, "allow_skip_stages": false, "dry_run_first": true },
+        "nodes": [
+          { "id": "n-start", "type": "start", "label": "开始", "position": { "x": 80, "y": 200 }, "params": { "project": "", "entry": "A" } },
+          {
+            "id": "n-kb",
+            "type": "knowledge_search",
+            "label": "知识检索",
+            "position": { "x": 340, "y": 200 },
+            "params": {
+              "stage": "01",
+              "problem": "本项目需要哪些可迁移的同类剧本结构与创作方法？",
+              "queries": ["screenplay:悬疑 反转 短片", "method_book:三幕式结构 悬念"],
+              "candidates_limit": 40,
+              "evidence_limit": 8,
+              "fallback": true
+            }
+          },
+          { "id": "n-confirm", "type": "confirm", "label": "知识卡确认", "position": { "x": 600, "y": 200 }, "params": { "prompt": "请确认知识卡是否作为本阶段参考（确认后由创作阶段使用）。" } },
+          { "id": "n-01", "type": "stage", "label": "01 概念锚定", "position": { "x": 860, "y": 200 }, "params": { "stage": "01", "auto_gates": true } },
+          { "id": "n-end", "type": "end", "label": "结束", "position": { "x": 1120, "y": 200 }, "params": {} }
+        ],
+        "edges": [
+          { "id": "e-1", "from": { "node": "n-start", "port": "project" }, "to": { "node": "n-kb", "port": "state" } },
+          { "id": "e-2", "from": { "node": "n-kb", "port": "knowledge_card" }, "to": { "node": "n-confirm", "port": "knowledge_card" } },
+          { "id": "e-3", "from": { "node": "n-confirm", "port": "confirmed" }, "to": { "node": "n-01", "port": "artifact" } },
+          { "id": "e-4", "from": { "node": "n-01", "port": "artifact" }, "to": { "node": "n-end", "port": "any" } }
+        ]
+      }
+    },
+    {
+      "template_id": "tpl-style",
+      "name": "风格注入（风格卡 → 人工确认）",
+      "description": "应用一位导演风格卡，人工确认风格方向后结束。",
+      "graph": {
+        "graph_id": "tpl-style",
+        "name": "风格注入",
+        "project": "",
+        "contract_version": "0.1",
+        "created_at": "2026-01-01T00:00:00Z",
+        "updated_at": "2026-01-01T00:00:00Z",
+        "settings": { "auto_advance": true, "allow_skip_stages": false, "dry_run_first": true },
+        "nodes": [
+          { "id": "n-start", "type": "start", "label": "开始", "position": { "x": 80, "y": 200 }, "params": { "project": "", "entry": "A" } },
+          { "id": "n-style", "type": "style_apply", "label": "应用风格卡", "position": { "x": 340, "y": 200 }, "params": { "style": "002", "tool": "seedance_2_5" } },
+          { "id": "n-confirm", "type": "confirm", "label": "风格确认", "position": { "x": 600, "y": 200 }, "params": { "prompt": "请确认该导演风格卡是否作为本项目视觉方向。" } },
+          { "id": "n-end", "type": "end", "label": "结束", "position": { "x": 860, "y": 200 }, "params": {} }
+        ],
+        "edges": [
+          { "id": "e-1", "from": { "node": "n-start", "port": "project" }, "to": { "node": "n-style", "port": "state" } },
+          { "id": "e-2", "from": { "node": "n-style", "port": "style_card" }, "to": { "node": "n-confirm", "port": "style_card" } },
+          { "id": "e-3", "from": { "node": "n-confirm", "port": "confirmed" }, "to": { "node": "n-end", "port": "any" } }
+        ]
+      }
+    }
+  ]
+}

@@ -1,6 +1,6 @@
-# 可视化节点工作台（M1）
+# 可视化节点工作台（M1 / M2 / M3）
 
-> 版本：1.1.0 · 状态：M1 骨架已完成 · 适用范围：本地单用户
+> 版本：1.2.0 · 状态：M1/M2/M3 已完成 · 适用范围：本地单用户
 
 ## 1. 定位
 
@@ -60,23 +60,32 @@ packages/flow/            packages/cli/main.py
 core_router（state/门禁/advance） · knowledge_service · style_service · contracts · brand_guard
 ```
 
-## 4. 节点类型（M1 四类）
+## 4. 节点类型（10 类）
 
 | 类型 | 分类 | 输入端口 | 输出端口 | 关键参数 | 执行语义 |
 |---|---|---|---|---|---|
 | `start` | 入口 | — | `project` | `project`（必填）、`entry`（A–D）、`note` | 加载 state、校验项目存在；入口不一致仅记录日志 |
-| `stage` | 阶段 | `state`、`artifact` | `artifact`、`log` | `stage`（01–08 必填）、`auto_gates`（默认 true）、`note` | 要求 `state.stage` 与节点阶段一致；`auto_gates` 时自动通过当前阶段 pending 门禁；仍有门禁未过则失败；通过后 `advance` 推进 |
-| `confirm` | 阶段 | `artifact`、`text`、`card`、`log` | `confirmed` | `prompt`（必填）、`detail_path`、`note` | 运行到此暂停（`awaiting_confirm`），人工确认后继续；取消则流程 `canceled` |
+| `stage` | 阶段 | `state`、`artifact` | `artifact`、`log` | `stage`（01–08 必填）、`auto_gates`（默认 true）、`note` | 要求 `state.stage` 与节点阶段一致；`auto_gates` 时自动通过当前阶段 pending 门禁；仍有未过则失败；通过后 `advance` |
+| `knowledge_search` | 知识 | `state` | `knowledge_card`、`log` | `stage`、`problem`、`queries`（必填）、`candidates_limit`(40)、`evidence_limit`(8)、`fallback`(true)、`kb_root` | 调用只读知识服务检索，写 `00_project/knowledge-cards/<stage>-candidates.json`；知识桥状态 off→requested 并更新最近知识卡 |
+| `style_apply` | 风格 | `state` | `style_card`、`log` | `style`（必填）、`tool`（8 工具之一） | 生成风格卡并更新 `state.style` |
+| `style_inject` | 风格 | `state`、`text` | `injection`、`log` | `stage`（06/08）、`tool`、`items[{shot,prompt}]`、`per_shot` | 批量结构校验并写注入记录（可选逐镜记录） |
+| `artifact_register` | 工具 | `state` | `artifact`、`log` | `stage`（01–08/done）、`kind`、`paths[]` | 登记产物到 `state.stage_artifacts` 与修订日志 |
+| `check_content` | 工具 | `state` | `log` | `fail_on_error`（默认 true） | 执行跨阶段内容一致性检查；有错误时失败（除非关闭） |
+| `confirm` | 控制 | `artifact`、`knowledge_card`、`style_card`、`injection`、`text`、`card`、`log` | `confirmed` | `prompt`（必填）、`detail_path`、`note` | 运行暂停（`awaiting_confirm`），人工确认后继续；拒绝则 `canceled` |
+| `export` | 输出 | `state` | `artifact`、`log` | `out`（可选） | 导出项目 ZIP 并返回路径 |
 | `end` | 输出 | `any` | — | `note` | 流程结束标记，输出当前阶段与版本 |
 
 端口兼容表（`flow.graph.PORT_COMPAT`）：
 
 | 输出端口 | 可连接输入端口 |
 |---|---|
-| `project` | `project`、`state` |
+| `project` | `project`、`state`、`text`、`card`、`log` |
+| `state` | `state` |
 | `artifact` | `artifact`、`state`、`text`、`card`、`log`、`any` |
 | `log` / `text` / `card` | `log`、`text`、`card`、`any`（互连） |
 | `confirmed` | `confirmed`、`artifact`、`log`、`any` |
+| `knowledge_card` / `style_card` | 同类、`card`、`text`、`log`、`artifact`、`any` |
+| `injection` | `injection`、`artifact`、`log`、`text`、`any` |
 | `any` | `any` |
 
 ## 5. 数据结构
@@ -172,7 +181,7 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - 写操作限制：流程图存于项目 `00_project/workflows/`，运行记录存于 `runs/`；不提供任意文件读写 API。
 - live 运行会真实推进 state/门禁，属于显式操作（默认 dry-run 兜底）。
 
-## 11. 已知限制（M1）
+## 11. 已知限制
 
 1. 首版仅 4 类节点（start/stage/confirm/end）；知识检索、风格注入、产物登记、内容检查、导出等能力节点在 M2 接入。
 2. 不支持撤销/重做、复制粘贴、框选多选、模板库。
@@ -182,11 +191,13 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 
 ## 12. 验证
 
-- 新增 22 项 flow 测试（图校验 12、执行引擎 10）+ 12 项 Web API 测试；全量 204 项通过。
-- 冒烟：start→stage01→confirm→end 图 dry-run/live/awaiting/resume 全链路；Web 静态页 200、API 200、未授权 401、非法图 422。
-- CI：compile/tests/doctor（8 项，含 flow）/brand-guard 全绿。
+- 新增 22 项 flow 测试（图校验 12、执行引擎 10）+ 12 项 Web API 测试（M1）；M2/M3 新增 18 项（模板 6、能力节点 6、runner 2、Web API 4）。
+- 全量 `Ran 222 tests ... OK`；CLI 冒烟：模板实例化、dry-run、运行历史、批量预演、失败恢复（live 恢复后 01→02）；`doctor` 8 项含 flow 模板检查。
+- 本地 CI `scripts/run_ci.py`：compile / tests / doctor / brand-guard 全 PASS；品牌守卫 0 命中。
 
-## 13. 后续（M2 / M3）
+## 13. 后续（M4 候选）
 
-- **M2**：能力节点（knowledge-search、style-apply/inject、artifact-register、check-content、export）、运行记录与状态卡联动、API 失败恢复与运行历史面板。
-- **M3**：任意 DAG/跳阶段编排、模板库（从零/接力/B 检索/C 注入）、撤销重做、批量运行、与产物追踪表联动、文档与发行包固化。
+- 运行回放与节点耗时统计；失败节点可视化定位到日志行。
+- 更多节点：批量产物登记、跨项目对比、知识卡确认后写入参考记忆的一体化节点。
+- 图模板市场与导入/导出（JSON 文件即契约）。
+- macOS 实跑与 GitHub Actions 远端 CI 矩阵。

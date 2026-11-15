@@ -16,13 +16,16 @@ STAGE_ORDER = [f"0{index}" for index in range(1, 9)]
 
 # 端口类型兼容表：输出端口 -> 允许连接的输入端口类型
 PORT_COMPAT: dict[str, set[str]] = {
-    "project": {"project", "state"},
+    "project": {"project", "state", "text", "card", "log"},
     "state": {"state"},
     "artifact": {"artifact", "state", "text", "card", "log", "any"},
     "log": {"log", "text", "card", "any"},
     "text": {"text", "card", "log", "any"},
     "card": {"card", "text", "log", "any"},
     "confirmed": {"confirmed", "artifact", "log", "any"},
+    "knowledge_card": {"knowledge_card", "card", "text", "log", "artifact", "any"},
+    "style_card": {"style_card", "card", "text", "log", "artifact", "any"},
+    "injection": {"injection", "artifact", "log", "text", "any"},
     "any": {"any"},
 }
 

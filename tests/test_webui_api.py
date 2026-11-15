@@ -154,7 +154,7 @@ class WebUIApiTest(unittest.TestCase):
     def test_node_types(self) -> None:
         status, data = self.client.json("GET", "/api/node-types")
         self.assertEqual(200, status)
-        self.assertEqual(4, len(data["types"]))
+        self.assertEqual(10, len(data["types"]))
         self.assertEqual("0.1", data["contract_version"])
 
     def test_workflow_get(self) -> None:
@@ -234,6 +234,47 @@ class WebUIApiTest(unittest.TestCase):
         self.assertEqual(200, status, msg=data)
         self.assertEqual("succeeded", data["run"]["status"])
 
+    def test_templates_endpoint(self) -> None:
+        status, data = self.client.json("GET", "/api/templates")
+        self.assertEqual(200, status)
+        self.assertEqual(4, len(data["templates"]))
+        ids = {item["template_id"] for item in data["templates"]}
+        self.assertEqual({"tpl-full-flow", "tpl-relay", "tpl-knowledge", "tpl-style"}, ids)
+
+    def test_new_from_template(self) -> None:
+        status, data = self.client.json(
+            "POST",
+            self._q("/api/workflows/new"),
+            {"name": "模板流程", "graph_id": "tpl-test", "template_id": "tpl-knowledge"},
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertEqual("tpl-test", data["graph_id"])
+        self.assertEqual(5, len(data["graph"]["nodes"]))
+        status, data = self.client.json("GET", self._q("/api/workflows/tpl-test"))
+        self.assertEqual(200, status)
+        self.assertEqual("模板流程", data["graph"]["name"])
+
+    def test_runs_list_endpoint(self) -> None:
+        self.client.json(
+            "POST",
+            "/api/runs",
+            {"project": str(self.project), "graph_id": "flow-test", "dry_run": True},
+        )
+        status, data = self.client.json("GET", self._q("/api/runs?limit=5"))
+        self.assertEqual(200, status)
+        self.assertGreaterEqual(len(data["runs"]), 1)
+        self.assertIn("run_id", data["runs"][0])
+
+    def test_batch_endpoint_dry_run(self) -> None:
+        status, data = self.client.json(
+            "POST",
+            "/api/runs/batch",
+            {"project": str(self.project), "dry_run": True, "auto_confirm": True},
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertTrue(data["ok"], msg=data)
+        self.assertGreaterEqual(data["count"], 1)
+
     def test_unknown_api_404(self) -> None:
         status, _ = self.client.request("GET", self._q("/api/unknown"))
         self.assertEqual(404, status)
@@ -248,7 +289,7 @@ class WebUIApiTest(unittest.TestCase):
         self.assertEqual(401, status)
         status, data = client.json("GET", "/api/node-types", token=server.token)
         self.assertEqual(200, status)
-        self.assertEqual(4, len(data["types"]))
+        self.assertEqual(10, len(data["types"]))
 
 
 if __name__ == "__main__":

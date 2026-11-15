@@ -68,8 +68,22 @@ class FlowGraphTest(unittest.TestCase):
         cls.types = load_node_types()
 
     def test_node_types_registry_loads(self) -> None:
-        self.assertEqual(4, len(self.types))
-        self.assertEqual({"start", "stage", "confirm", "end"}, {item.type for item in self.types.types()})
+        self.assertEqual(10, len(self.types))
+        self.assertEqual(
+            {
+                "start",
+                "stage",
+                "knowledge_search",
+                "style_apply",
+                "style_inject",
+                "artifact_register",
+                "check_content",
+                "confirm",
+                "export",
+                "end",
+            },
+            {item.type for item in self.types.types()},
+        )
 
     def test_linear_graph_valid(self) -> None:
         graph = make_graph(
@@ -125,14 +139,15 @@ class FlowGraphTest(unittest.TestCase):
 
     def test_port_type_mismatch_detected(self) -> None:
         graph = make_graph(
-            [make_node("start", "start"), make_node("confirm-01", "confirm", x=320), make_node("end", "end", x=640)],
+            [make_node("start", "start"), make_node("stage-01", "stage", "01", x=320), make_node("end", "end", x=640)],
             [
-                edge("e1", "start", "project", "confirm-01", "text"),
-                edge("e2", "confirm-01", "confirmed", "end", "any"),
+                edge("e1", "start", "project", "stage-01", "artifact"),
+                edge("e2", "stage-01", "artifact", "end", "any"),
             ],
         )
         result = validate_graph(graph, self.types)
         self.assertFalse(result["ok"])
+        self.assertTrue(any("不兼容" in item for item in result["errors"]))
         self.assertTrue(any("端口" in item for item in result["errors"]))
 
     def test_unknown_node_type_detected(self) -> None:

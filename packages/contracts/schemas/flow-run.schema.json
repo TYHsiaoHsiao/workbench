@@ -2,41 +2,114 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Flow Run v0.1",
   "type": "object",
-  "required": ["contract_version", "run_id", "graph_id", "project", "status", "mode", "started_at", "steps"],
+  "required": [
+    "contract_version",
+    "run_id",
+    "graph_id",
+    "project",
+    "status",
+    "mode",
+    "started_at",
+    "steps"
+  ],
   "additionalProperties": false,
   "properties": {
-    "contract_version": { "type": "string", "const": "0.1" },
-    "run_id": { "type": "string", "pattern": "^[a-z0-9-]{4,80}$" },
-    "graph_id": { "type": "string" },
-    "project": { "type": "string" },
+    "contract_version": {
+      "type": "string",
+      "const": "0.1"
+    },
+    "run_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]{4,80}$"
+    },
+    "graph_id": {
+      "type": "string"
+    },
+    "project": {
+      "type": "string"
+    },
     "status": {
       "type": "string",
-      "enum": ["running", "awaiting_confirm", "succeeded", "failed", "canceled"]
+      "enum": [
+        "running",
+        "awaiting_confirm",
+        "succeeded",
+        "failed",
+        "canceled"
+      ]
     },
-    "mode": { "type": "string", "enum": ["full", "to_node", "single"] },
-    "dry_run": { "type": "boolean" },
-    "target_node": { "type": "string" },
-    "started_at": { "type": "string" },
-    "finished_at": { "type": "string" },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "full",
+        "to_node",
+        "single"
+      ]
+    },
+    "dry_run": {
+      "type": "boolean"
+    },
+    "target_node": {
+      "type": "string"
+    },
+    "started_at": {
+      "type": "string"
+    },
+    "finished_at": {
+      "type": "string"
+    },
     "steps": {
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["node_id", "status"],
+        "required": [
+          "node_id",
+          "status"
+        ],
         "additionalProperties": false,
         "properties": {
-          "node_id": { "type": "string" },
+          "node_id": {
+            "type": "string"
+          },
           "status": {
             "type": "string",
-            "enum": ["pending", "running", "succeeded", "failed", "skipped", "waiting_confirmation", "planned"]
+            "enum": [
+              "pending",
+              "running",
+              "succeeded",
+              "failed",
+              "skipped",
+              "waiting_confirmation",
+              "planned"
+            ]
           },
-          "started_at": { "type": "string" },
-          "ended_at": { "type": "string" },
-          "state_before": { "type": "object" },
-          "state_after": { "type": "object" },
-          "outputs": { "type": "array", "items": { "type": "string" } },
-          "logs": { "type": "array", "items": { "type": "string" } },
-          "error": { "type": "string" }
+          "started_at": {
+            "type": "string"
+          },
+          "ended_at": {
+            "type": "string"
+          },
+          "state_before": {
+            "type": "object"
+          },
+          "state_after": {
+            "type": "object"
+          },
+          "outputs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "logs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "error": {
+            "type": "string"
+          }
         }
       }
     },
@@ -44,17 +117,39 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["node_id", "approved", "at"],
+        "required": [
+          "node_id",
+          "approved",
+          "at"
+        ],
         "additionalProperties": false,
         "properties": {
-          "node_id": { "type": "string" },
-          "approved": { "type": "boolean" },
-          "at": { "type": "string" },
-          "note": { "type": "string" }
+          "node_id": {
+            "type": "string"
+          },
+          "approved": {
+            "type": "boolean"
+          },
+          "at": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
         }
       }
     },
-    "state_snapshot_before": { "type": "object" },
-    "summary": { "type": "object" }
+    "state_snapshot_before": {
+      "type": "object"
+    },
+    "summary": {
+      "type": "object"
+    },
+    "recovered_from": {
+      "type": "string"
+    },
+    "state_restored": {
+      "type": "boolean"
+    }
   }
 }

@@ -1,5 +1,28 @@
 # 变更日志
 
+## [1.2.0] - 2026-11-15 — 可视化节点工作台（M2 + M3）
+
+### 新增
+
+- 节点类型从 4 类扩展到 10 类：`knowledge_search`（只读知识检索 + 知识卡落盘）、`style_apply`、`style_inject`（批量注入 + 逐镜记录）、`artifact_register`、`check_content`、`export`，保留 `start` / `stage` / `confirm` / `end`。
+- 端口兼容表扩展（project / state / artifact / log / text / card / confirmed / knowledge_card / style_card / injection / any），知识卡与风格卡可直接进入确认节点或阶段节点。
+- 模板库 `content/flow-templates.json` 4 套：从零到成片、B 入口接力、知识增强、风格注入；新增契约 `flow-templates.schema.json` 与 `packages/flow/templates.py`（加载/校验/实例化）。
+- 运行历史与失败恢复：`store.list_runs`、`runner.recover_run`（可选恢复 `state_snapshot_before` 快照并备份到 `history/`），CLI `flow runs` / `flow recover`，Web API `GET /api/runs`、`POST /api/runs/<id>/recover`。
+- 批量运行：CLI `flow batch`、Web API `POST /api/runs/batch`（默认 dry-run）。
+- 任意 DAG 与跳阶段：`settings.allow_skip_stages` 把前跳校验降为警告；图校验仍保证恰好一个 start、至少一个 end、无环、端口兼容。
+- 前端增强：模板选择新建、撤销/重做（Ctrl+Z / Ctrl+Y，快照栈上限 60）、array/object 参数 JSON 编辑、运行历史面板、失败恢复按钮、批量预演；节点库与端口配色、运行状态可视化。
+- 统一内容检查：`core_router/check.py` 抽出 `content_checks()`，CLI `check --content` 与 flow `check_content` 节点共用同一实现，删除 CLI 中的重复逻辑。
+
+### CLI / Web API
+
+- `flow new --template`、`flow templates`、`flow runs`、`flow recover`、`flow batch`；`doctor` 增加 flow 模板检查（10 个节点类型、4 个模板、4 份契约）。
+- Web API 新增 `/api/templates`、`/api/runs`（历史列表）、`POST /api/runs/batch`、`POST /api/runs/<id>/recover`。
+
+### 测试与验证
+
+- 新增 18 项测试（templates 6 / nodes 6 / runner 2 / Web API 4），全量 222 项通过；CLI 冒烟（模板实例化、dry-run、运行历史、批量预演、失败恢复 live 推进 01→02）通过；CI 全绿、品牌守卫 0 命中。
+- 版本进入 `1.2.0`（契约仍为 v1.0，拓扑执行与 dry-run 语义不变）。
+
 ## [1.1.0] - 2026-11-15 — 可视化节点工作台（M1）
 
 ### 新增

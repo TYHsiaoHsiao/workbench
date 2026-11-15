@@ -1,15 +1,24 @@
-"""节点执行器（M1：start / stage / confirm / end）。
+"""节点执行器（M2：start / stage / knowledge_search / style_apply / style_inject /
+artifact_register / check_content / confirm / export / end）。
 
 每个执行器只调用既有内核服务，不重复实现业务逻辑；执行结果由 runner 统一写回运行记录。
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+from core_router.check import content_checks
 from core_router.gates import advance, ensure_stage_gates, pass_gate, pending_gates
-from core_router.project import load_state, refresh_status_card, save_state
+from core_router.project import (
+    export_project,
+    load_state,
+    refresh_status_card,
+    register_artifacts,
+    save_state,
+)
 from core_router.registry import load_registry
 
 from .graph import Graph, Node
@@ -96,6 +105,179 @@ def _exec_stage(node: Node, ctx: NodeContext) -> NodeResult:
     return NodeResult(outputs=[f"阶段 {stage} 完成 → {next_stage}"], logs=logs)
 
 
+def _exec_knowledge_search(node: Node, ctx: NodeContext) -> NodeResult:
+    params = node.params
+    stage = str(params.get("stage") or "")
+    problem = str(params.get("problem") or "")
+    queries = params.get("queries") or []
+    if not stage or not problem or not queries:
+        raise NodeError("知识检索节点缺少 stage / problem / queries 参数")
+    if ctx.dry_run:
+        return NodeResult(
+            status="planned",
+            outputs=[f"[dry-run] 阶段 {stage} 知识检索：{len(queries)} 个查询（不会写知识卡）"],
+            logs=["dry-run 不调用知识服务，不写卡片"],
+        )
+    from knowledge_service import KnowledgeService, KnowledgeServiceError
+
+    kb_root = params.get("kb_root") or None
+    try:
+        service = KnowledgeService(kb_root=kb_root) if kb_root else KnowledgeService()
+        result = service.search(
+            project=str(load_state(ctx.project_root).get("project") or ctx.project_root.name),
+            stage=stage,
+            problem=problem,
+            queries=[str(item) for item in queries],
+            candidates_limit=int(params.get("candidates_limit", 40)),
+            evidence_limit=int(params.get("evidence_limit", 8)),
+            fallback=bool(params.get("fallback", True)),
+        )
+    except KnowledgeServiceError as exc:
+        raise NodeError(f"知识检索失败: {exc}") from exc
+
+    card = result.get("card") if isinstance(result, dict) else None
+    if card is None and isinstance(result, dict) and "card_id" in result:
+        card = result
+    if card is None:
+        raise NodeError("知识服务未返回知识卡")
+    card_dir = ctx.project_root / "00_project" / "knowledge-cards"
+    card_dir.mkdir(parents=True, exist_ok=True)
+    card_path = card_dir / f"{stage}-candidates.json"
+    card_path.write_text(json.dumps(card, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    rel = card_path.relative_to(ctx.project_root).as_posix()
+
+    state = load_state(ctx.project_root)
+    bridge = dict(state.get("knowledge_bridge") or {})
+    if bridge.get("status", "off") == "off":
+        bridge["status"] = "requested"
+    bridge["last_card"] = rel
+    state["knowledge_bridge"] = bridge
+    save_state(ctx.project_root, state)
+    refresh_status_card(ctx.project_root)
+
+    candidates = card.get("candidates") or []
+    evidence = card.get("evidence") or []
+    status = card.get("status") or (result.get("status") if isinstance(result, dict) else "") or "unknown"
+    return NodeResult(
+        outputs=[f"知识卡: {rel}（状态 {status}，候选 {len(candidates)}，证据 {len(evidence)}）"],
+        logs=[f"知识桥状态 → {bridge.get('status')}"],
+    )
+
+
+def _exec_style_apply(node: Node, ctx: NodeContext) -> NodeResult:
+    style = str(node.params.get("style") or "")
+    if not style:
+        raise NodeError("风格卡节点缺少 style 参数")
+    tool = node.params.get("tool") or None
+    if ctx.dry_run:
+        return NodeResult(
+            status="planned",
+            outputs=[f"[dry-run] 将应用风格 {style}" + (f"（工具 {tool}）" if tool else "")],
+            logs=["dry-run 不写风格卡"],
+        )
+    from style_service import StyleService, StyleServiceError
+
+    try:
+        result = StyleService().apply(ctx.project_root, style, tool)
+    except StyleServiceError as exc:
+        raise NodeError(f"风格应用失败: {exc}") from exc
+    path = result.get("profile") or result.get("profile_path") or result.get("path")
+    return NodeResult(
+        outputs=[f"风格卡已应用：{path or '00_project/style-cards/'}"],
+        logs=[f"风格 {style}" + (f" · 工具 {tool}" if tool else "")],
+    )
+
+
+def _exec_style_inject(node: Node, ctx: NodeContext) -> NodeResult:
+    stage = str(node.params.get("stage") or "")
+    tool = str(node.params.get("tool") or "")
+    items = node.params.get("items") or []
+    if not stage or not tool or not items:
+        raise NodeError("风格注入节点缺少 stage / tool / items 参数")
+    if ctx.dry_run:
+        return NodeResult(
+            status="planned",
+            outputs=[f"[dry-run] 将向 {stage}/{tool} 注入 {len(items)} 条提示词"],
+            logs=["dry-run 不写注入记录"],
+        )
+    from style_service import StyleService, StyleServiceError
+
+    try:
+        result = StyleService().inject_batch(
+            ctx.project_root,
+            stage,
+            tool,
+            list(items),
+            per_shot_records=bool(node.params.get("per_shot", True)),
+        )
+    except StyleServiceError as exc:
+        raise NodeError(f"风格注入失败: {exc}") from exc
+    return NodeResult(
+        outputs=[f"已注入 {result.get('count', len(items))} 条 → {result.get('record')}"],
+        logs=[f"风格 {result.get('style_id')} · {stage}/{tool}"],
+    )
+
+
+def _exec_artifact_register(node: Node, ctx: NodeContext) -> NodeResult:
+    stage = str(node.params.get("stage") or "")
+    kind = str(node.params.get("kind") or "")
+    paths = [str(item) for item in (node.params.get("paths") or [])]
+    if not stage or not kind or not paths:
+        raise NodeError("产物登记节点缺少 stage / kind / paths 参数")
+    if ctx.dry_run:
+        return NodeResult(
+            status="planned",
+            outputs=[f"[dry-run] 将登记阶段 {stage} 的 {len(paths)} 个产物（kind={kind}）"],
+            logs=["dry-run 不写 stage_artifacts"],
+        )
+    try:
+        result = register_artifacts(
+            ctx.project_root,
+            stage,
+            kind,
+            paths,
+            note=str(node.params.get("note") or "流程节点登记"),
+        )
+    except Exception as exc:  # ProjectError 等
+        raise NodeError(f"产物登记失败: {exc}") from exc
+    return NodeResult(
+        outputs=[f"已登记：{result.get('summary') or str(result.get('files') and len(result['files']))}"],
+        logs=[f"阶段 {stage} · {kind}"],
+    )
+
+
+def _exec_check_content(node: Node, ctx: NodeContext) -> NodeResult:
+    state = load_state(ctx.project_root)
+    errors, warnings = content_checks(ctx.project_root, state)
+    logs = [f"[提示] {item}" for item in warnings]
+    fail_on_error = bool(node.params.get("fail_on_error", True))
+    if errors and fail_on_error:
+        raise NodeError("内容检查失败: " + "；".join(errors))
+    status = "succeeded" if not errors else "succeeded"
+    outputs = [f"内容检查完成：{len(errors)} 个错误，{len(warnings)} 条提示"]
+    if errors:
+        outputs.append("（已忽略错误：fail_on_error=false）")
+        logs.extend(f"[错误] {item}" for item in errors)
+    return NodeResult(status=status, outputs=outputs, logs=logs)
+
+
+def _exec_export(node: Node, ctx: NodeContext) -> NodeResult:
+    if ctx.dry_run:
+        return NodeResult(
+            status="planned",
+            outputs=["[dry-run] 将导出项目 zip"],
+            logs=["dry-run 不生成导出文件"],
+        )
+    try:
+        result = export_project(ctx.project_root, node.params.get("out") or None)
+    except Exception as exc:
+        raise NodeError(f"导出失败: {exc}") from exc
+    return NodeResult(
+        outputs=[f"已导出：{result.get('archive')}（{result.get('files')} 个文件）"],
+        logs=[f"大小 {result.get('bytes')} 字节"],
+    )
+
+
 def _exec_confirm(node: Node, ctx: NodeContext) -> NodeResult:
     prompt = str(node.params.get("prompt") or "请确认后继续")
     detail_path = str(node.params.get("detail_path") or "")
@@ -118,7 +300,13 @@ def _exec_end(node: Node, ctx: NodeContext) -> NodeResult:
 EXECUTORS: dict[str, Executor] = {
     "start": _exec_start,
     "stage": _exec_stage,
+    "knowledge_search": _exec_knowledge_search,
+    "style_apply": _exec_style_apply,
+    "style_inject": _exec_style_inject,
+    "artifact_register": _exec_artifact_register,
+    "check_content": _exec_check_content,
     "confirm": _exec_confirm,
+    "export": _exec_export,
     "end": _exec_end,
 }
 
@@ -126,5 +314,5 @@ EXECUTORS: dict[str, Executor] = {
 def get_executor(node_type: str) -> Executor:
     executor = EXECUTORS.get(node_type)
     if executor is None:
-        raise NodeError(f"节点类型 {node_type} 的 M1 执行器未实现")
+        raise NodeError(f"节点类型 {node_type} 的执行器未实现")
     return executor

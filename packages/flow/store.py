@@ -142,3 +142,35 @@ def graph_id_from_name(name: str) -> str:
     if not slug:
         slug = datetime.now().strftime("flow-%Y%m%d-%H%M%S")
     return slug
+
+
+def list_runs(project_root: Path, limit: int = 50) -> list[dict[str, Any]]:
+    """列出项目的运行记录（按开始时间倒序，读文件聚合摘要）。"""
+    directory = runs_dir(project_root)
+    if not directory.is_dir():
+        return []
+    runs: list[dict[str, Any]] = []
+    for path in directory.glob("*.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        steps = data.get("steps") or []
+        failed = [step for step in steps if step.get("status") == "failed"]
+        runs.append(
+            {
+                "run_id": data.get("run_id") or path.stem,
+                "graph_id": data.get("graph_id"),
+                "status": data.get("status"),
+                "mode": data.get("mode"),
+                "dry_run": bool(data.get("dry_run")),
+                "started_at": data.get("started_at"),
+                "finished_at": data.get("finished_at"),
+                "steps": len(steps),
+                "failed": len(failed),
+                "error": failed[0].get("error") if failed else None,
+                "recovered_from": data.get("recovered_from"),
+            }
+        )
+    runs.sort(key=lambda item: item.get("started_at") or "", reverse=True)
+    return runs[: max(1, int(limit))]
