@@ -139,6 +139,8 @@
 - 旧脚本解析 `flow batch --json` 报错：2.0.0 起输出由 `{count,results}` 改为 `{ok,project,batch}`，请改读 `batch.graphs`（Web 兼容别名 `/api/runs/batch` 仍返回旧字段）。
 - 修改前端文件后页面不自动刷新：确认 `workbench version` ≥ 2.0.1，浏览器可访问 `/api/dev/version`；仅跟踪 3 个内置静态资源，后端 Python 改动需重启 `serve`。
 - 「● 实时预览」不显示或轮询 401：URL 缺 token 或 token 失效，重新复制 `flow serve` 打印的带 token 地址。
+- `flow batch --parallel` 报「并行批次仅支持 dry-run 预演」：live 运行共享项目状态，需去掉 `--parallel`（或改用 `--dry-run`）；`--parallel` 与 `--fail-fast` 也互斥。
+- `flow batch-recover` 后仍失败：恢复只重跑原批次中失败图，修复图/参数后再次恢复；`flow batch-show` 可查看每次尝试的 `error`。
 
 
 

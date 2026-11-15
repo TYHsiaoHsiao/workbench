@@ -18,6 +18,7 @@ from flow import (  # noqa: E402
     list_batches,
     list_runs,
     read_batch,
+    recover_batch,
     run_batch,
     write_graph_data,
 )
@@ -148,6 +149,52 @@ class FlowBatchTest(unittest.TestCase):
         self.assertTrue(entry["ok"])
         self.assertEqual(1, len(sessions))
         self.assertIn(entry["run_id"], sessions)
+
+    def test_batch_parallel_dry_run(self) -> None:
+        self._write("flow-a")
+        self._write("flow-b")
+        result = run_batch(self.project, all_graphs=True, dry_run=True, parallel=True, workers=2)
+        batch = result["batch"]
+        self.assertTrue(batch["parallel"])
+        self.assertEqual(2, batch["workers"])
+        self.assertEqual("succeeded", batch["status"])
+        self.assertEqual(2, batch["summary"]["succeeded"])
+        entries = list_batches(self.project)
+        self.assertTrue(entries[0]["parallel"])
+        self.assertEqual(2, entries[0]["workers"])
+
+    def test_batch_parallel_rejects_live_and_fail_fast(self) -> None:
+        self._write("flow-a")
+        with self.assertRaises(FlowError):
+            run_batch(self.project, all_graphs=True, dry_run=False, parallel=True)
+        with self.assertRaises(FlowError):
+            run_batch(self.project, all_graphs=True, dry_run=True, parallel=True, fail_fast=True)
+
+    def test_recover_batch_merges_attempts(self) -> None:
+        self._write("flow-test")
+        self._write_broken("flow-bad")
+        result = run_batch(self.project, ["flow-bad", "flow-test"], dry_run=True)
+        batch = result["batch"]
+        self.assertFalse(result["ok"], result)
+        self._write("flow-bad")  # 修复后再恢复
+        recovered = recover_batch(self.project, batch["batch_id"])
+        self.assertTrue(recovered["ok"], recovered)
+        self.assertEqual(1, recovered["recovered"])
+        saved = read_batch(self.project, batch["batch_id"])
+        self.assertEqual("succeeded", saved["status"])
+        by_id = {item["graph_id"]: item for item in saved["graphs"]}
+        self.assertTrue(by_id["flow-bad"]["ok"])
+        self.assertEqual(2, len(by_id["flow-bad"]["attempts"]))
+        self.assertEqual([1, 2], [attempt["attempt"] for attempt in by_id["flow-bad"]["attempts"]])
+        self.assertEqual(0, saved["summary"]["failed"])
+        self.assertEqual(3, saved["summary"]["attempts"])
+
+    def test_recover_batch_without_failures(self) -> None:
+        self._write("flow-test")
+        batch = run_batch(self.project, dry_run=True)["batch"]
+        recovered = recover_batch(self.project, batch["batch_id"])
+        self.assertTrue(recovered["ok"])
+        self.assertEqual(0, recovered["recovered"])
 
     def test_read_batch_rejects_bad_id(self) -> None:
         self._write("flow-test")

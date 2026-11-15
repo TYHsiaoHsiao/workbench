@@ -1466,9 +1466,32 @@ async function runBatch() {
     setStatus(
       "批量预演完成：" + (summary.total || 0) + " 个流程图（批次 " + (batch.batch_id || "-") + "）"
     );
+    state.lastBatchId = batch.batch_id || null;
+    const recoverBtn = $("#btn-batch-recover");
+    if (recoverBtn) recoverBtn.classList.toggle("hidden", !((summary.failed || 0) > 0));
     loadRunHistory();
   } catch (err) {
     logLine("批量运行失败：" + err.message, "err");
+  }
+}
+
+async function recoverBatch() {
+  if (!state.project || !state.lastBatchId) return;
+  if (!window.confirm("重跑批次 " + state.lastBatchId + " 中的失败图？")) return;
+  try {
+    const data = await api("/api/batches/" + encodeURIComponent(state.lastBatchId) + "/recover", {
+      method: "POST",
+      body: JSON.stringify({ project: state.project }),
+    });
+    const batch = data.batch || {};
+    const summary = batch.summary || {};
+    const ok = data.ok;
+    logLine("恢复失败图：" + (data.recovered || 0) + " 个 → 批次状态 " + (batch.status || "-"), ok ? "ok" : "err");
+    setStatus("批次恢复完成：成功 " + (summary.succeeded || 0) + " / 失败 " + (summary.failed || 0));
+    $("#btn-batch-recover").classList.add("hidden");
+    loadRunHistory();
+  } catch (err) {
+    logLine("恢复失败图失败：" + err.message, "err");
   }
 }
 
@@ -1973,6 +1996,7 @@ function bindUi() {
   $("#btn-baseline-save").addEventListener("click", () => saveBaseline());
   $("#btn-baseline-diff").addEventListener("click", () => diffBaseline());
   $("#btn-run-batch").addEventListener("click", () => runBatch());
+  $("#btn-batch-recover").addEventListener("click", () => recoverBatch());
   $("#btn-undo").addEventListener("click", () => undo());
   $("#btn-redo").addEventListener("click", () => redo());
   $("#btn-projects").addEventListener("click", () => openProjects());

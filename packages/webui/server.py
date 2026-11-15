@@ -45,6 +45,7 @@ from flow import (
     read_batch,
     read_graph_data,
     read_run,
+    recover_batch,
     recover_run,
     resolve_project,
     run_batch,
@@ -774,6 +775,28 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             self.server.sessions[result["run"]["run_id"]] = runner
             self._json(result)
             return
+        if path.startswith("/api/batches/") and path.endswith("/recover"):
+            batch_id = unquote(path[len("/api/batches/"): -len("/recover")]).strip("/")
+            project = resolve_project(body.get("project") or str(self.server.project_root))
+            result = recover_batch(
+                project,
+                batch_id,
+                dry_run=body.get("dry_run"),
+                auto_confirm=bool(body.get("auto_confirm", True)),
+                auto_retry=int(body.get("auto_retry") or 0),
+                parallel=bool(body.get("parallel")),
+                workers=int(body.get("workers") or 2),
+                sessions=self.server.sessions,
+            )
+            self._json(
+                {
+                    "ok": result["ok"],
+                    "project": result["project"],
+                    "batch": result["batch"],
+                    "recovered": result["recovered"],
+                }
+            )
+            return
         if path in {"/api/runs/batch", "/api/workflows/batch"}:
             project = resolve_project(body.get("project") or str(self.server.project_root))
             result = run_batch(
@@ -785,6 +808,8 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 auto_retry=int(body.get("auto_retry") or 0),
                 fail_fast=bool(body.get("fail_fast")),
                 limit=int(body.get("limit") or 20),
+                parallel=bool(body.get("parallel")),
+                workers=int(body.get("workers") or 2),
                 sessions=self.server.sessions,
             )
             payload: dict[str, Any] = {

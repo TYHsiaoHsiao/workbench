@@ -7,7 +7,7 @@
 - **契约先行**：阶段产物、参考记忆、知识卡、风格画像、项目状态全部有 JSON Schema；
 - **品牌守卫**：仓库与工作区零品牌残留，CI 阻断回归。
 
-当前版本 `2.0.1`：迭代 0（地基）、迭代 1a（B 知识服务 PoC）、迭代 2 方案 A（有限正文回退）、迭代 2.1（精度修订）、迭代 1b（A 编排硬化）、迭代 3（C 风格服务）、迭代 4（试点与固化）、1.0.1（真实项目补丁）、1.0.2（工作台体验补丁）、M1（可视化节点工作台骨架，1.1.0）、M2/M3（可视化节点工作台能力层，1.2.0）、M4（运行回放与图导入导出，1.3.0）与 M5（并行执行、节点级重试、项目管理面板，1.4.0）与 M6（状态锁与事务、运行对比、项目预览，1.5.0）以及 M7（条件分支与循环、运行基线与回归告警、产物快照差异，1.6.0）与 M8（复合节点与真实生成平台适配，1.7.0）以及 M9（生成任务状态轮询与 Web 生成面板，1.8.0）与 M10（生成结果回填、失败重试与任务详情抽屉，1.9.0）与 M11（批量回填、生成平台流程节点与生成面板筛选，1.10.0）与 M12（批次编排、批量自动重试与批次历史，2.0.0）已完成；2.0.1 为实时预览与界面迭代补丁（`/api/dev/version` 自动刷新、节点分类视觉与 17 类节点演示图，见 `docs/release-notes-2.0.1.md`）。三个试点：从零到 08（`试点A-雨夜回声`）、既有剧本到 05（`试点B-旧剧本接管`）、真实项目从零到 done（《死亡外科医生》，见 `docs/pilot-c-report.md`），指标与证据见 `docs/pilots/`。
+当前版本 `2.1.0`：迭代 0（地基）、迭代 1a（B 知识服务 PoC）、迭代 2 方案 A（有限正文回退）、迭代 2.1（精度修订）、迭代 1b（A 编排硬化）、迭代 3（C 风格服务）、迭代 4（试点与固化）、1.0.1（真实项目补丁）、1.0.2（工作台体验补丁）、M1（可视化节点工作台骨架，1.1.0）、M2/M3（可视化节点工作台能力层，1.2.0）、M4（运行回放与图导入导出，1.3.0）与 M5（并行执行、节点级重试、项目管理面板，1.4.0）与 M6（状态锁与事务、运行对比、项目预览，1.5.0）以及 M7（条件分支与循环、运行基线与回归告警、产物快照差异，1.6.0）与 M8（复合节点与真实生成平台适配，1.7.0）以及 M9（生成任务状态轮询与 Web 生成面板，1.8.0）与 M10（生成结果回填、失败重试与任务详情抽屉，1.9.0）与 M11（批量回填、生成平台流程节点与生成面板筛选，1.10.0）与 M12（批次编排、批量自动重试与批次历史，2.0.0）已完成；2.0.1 为实时预览与界面迭代补丁（`/api/dev/version` 自动刷新、节点分类视觉与 17 类节点演示图，见 `docs/release-notes-2.0.1.md`）；2.1.0 为 M13 批次增强（批次并行预演（仅 dry-run）、失败图一键恢复与批次恢复 API，见 `docs/release-notes-2.1.0.md`）。三个试点：从零到 08（`试点A-雨夜回声`）、既有剧本到 05（`试点B-旧剧本接管`）、真实项目从零到 done（《死亡外科医生》，见 `docs/pilot-c-report.md`），指标与证据见 `docs/pilots/`。
 
 ## 目录结构
 
@@ -35,7 +35,7 @@ workbench/
     flow/                    # 可视化节点工作流：图模型与校验、节点注册表、执行引擎、项目内存储
     webui/                   # 本地 Web 服务 + 原生前端（画布/拖拽/连线/检查器/运行面板）
     generate/                # 生成平台适配层：4 provider 登记、任务记录（job 契约）、dry-run 默认
-  tests/                     # 325 个 unittest 用例
+  tests/                     # 331 个 unittest 用例
   scripts/                   # run_ci.py / build_manifest.py / pilot_matrix.py / 平台包装
   docs/                      # 架构、品牌守卫、命令卡、故障排查、迁移说明、迭代报告、pilots/
   .github/workflows/ci.yml   # GitHub Actions
@@ -88,6 +88,8 @@ python workbench.py flow runs --project 我的短片                   # 运行�
 python workbench.py flow batch --project 我的短片 --all --dry-run --auto-retry 1  # 批量预演（失败图自动重试）
 python workbench.py flow batches --project 我的短片                     # 批次历史（最近批次摘要）
 python workbench.py flow batch-show --project 我的短片 --batch <batch_id>  # 批次详情（图/尝试/错误）
+python workbench.py flow batch --project 我的短片 --all --dry-run --parallel --workers 2  # 并行预演（仅 dry-run，1–8 线程）
+python workbench.py flow batch-recover --project 我的短片 --batch <batch_id>  # 重跑批次中的失败图并更新原批次
 python workbench.py flow recover --run <run_id> --project 我的短片 --yes   # 失败恢复（可加 --restore-state）
 python workbench.py flow replay --run <run_id> --project 我的短片           # 运行回放（每步耗时/失败定位）
 python workbench.py flow export --project 我的短片 --graph flow-main --out flow.json   # 导出流程图
@@ -114,7 +116,7 @@ python workbench.py project list --stats                            # 跨项目�
 
 - 项目默认创建在「文档目录/AI 影视工作台/projects/<名称>/」，可用 `--project-root` 或环境变量 `AI_FILM_PROJECTS_ROOT` 覆盖；包含 `00_project/`（状态、参考记忆、历史、知识卡、风格卡）、`00_inbox/`、`01_story/` … `06_prompts/`。
 - 项目状态以 `00_project/state.json` 为唯一事实来源，必须通过 `state.schema.json`（v2 字段）校验；门禁与修订日志同文件持久化。
-- 本地 CI：`python scripts/run_ci.py`（编译 → 325 项测试 → doctor → brand-guard）。
+- 本地 CI：`python scripts/run_ci.py`（编译 → 331 项测试 → doctor → brand-guard）。
 - 知识服务只读现有索引，不改知识库本体；先做元数据候选，召回不足时按预算做有限正文回退；只有路径/行号/命中词齐全才输出 `ok` 知识卡。回退可用 `--no-fallback` 关闭、用 `--fallback-files` / `--fallback-bytes` 调预算。证据按质量评分排序，并过滤「反转身」等动作误命中；高置信证据足够时会丢弃纯字面低置信证据（统计见 `report.evidence_quality`）。
 - 风格服务只读引用外部 200 位导演色卡包（`scripts/build_style_registry.py` 生成注册表）；风格默认不注入：先 `style apply` 写风格卡与 `state.style`，再 `style inject` 做结构校验并写注入记录。校验只针对用户正文，风格卡作为提示词前缀；06 用图像工具、08 用视频工具，其他阶段不挂载。
 - 生成发行清单：`python scripts/build_manifest.py`。
@@ -131,7 +133,7 @@ python workbench.py project list --stats                            # 跨项目�
 | 风格注册表 | `style-registry.schema.json` | 200 位导演色卡元数据、质量分级与问题清单 |
 | 阶段产物 | `stage-artifact.schema.json` | 产物版本、哈希、门禁、确认状态 |
 | 阶段注册表 | `stage-registry.schema.json` | 8 阶段输入输出、门禁、挂载点 |
-| 流程图 / 运行记录 / 节点类型 / 模板 | `flow-graph.schema.json`、`flow-run.schema.json`、`flow-node-types.schema.json`、`flow-templates.schema.json` | 可视化节点工作流（v0.1，见 `docs/flow-workbench.md`） |
+| 流程图 / 运行记录 / 节点类型 / 模板 | `flow-graph.schema.json`、`flow-run.schema.json`、`flow-node-types.schema.json`、`flow-templates.schema.json`、`flow-batch.schema.json` | 可视化节点工作流（v0.1，见 `docs/flow-workbench.md`） |
 | 生成平台 | `generate-providers.schema.json`、`generate-job.schema.json` | 平台注册表（4 provider）与生成任务记录（v0.1，dry-run 默认） |
 
 ## 迭代状态
@@ -159,6 +161,7 @@ python workbench.py project list --stats                            # 跨项目�
 | M11（14） | 生成平台扩展：批量回填（`generate adopt --all`/Web API/面板一键）、`generate_refresh`/`generate_adopt` 流程节点（节点 15→17 类）、生成面板按状态筛选 | 已完成（1.10.0） |
 | 2.0.1（补丁） | 实时预览与界面迭代：`/api/dev/version` 静态签名 + 1.2s 轮询自动刷新、预览徽标、节点分类视觉（分类圆点/同色徽标/端口圆点/箭头连线）、17 类节点演示图（17 节点/26 连线）、2 项 dev 端点测试 | 已完成（2.0.1） |
 | M12（15） | 批量运行编排：`flow batch` 批次记录（批次历史/详情）、失败图自动重试（`--auto-retry` 0–3）、失败即停（`--fail-fast`）、Web API `POST /api/workflows/batch` 与批次查询；`flow batch` JSON 输出改为批次信封（破坏性→2.0.0） | 已完成（2.0.0） |
+| M13（16） | 批次增强：并行预演（`--parallel` / `--workers` 1–8，仅 dry-run；live 强制串行）、`flow batch-recover` 重跑失败图并把新尝试合并进原批次、批次恢复 Web API `POST /api/batches/<batch_id>/recover`、前端「恢复失败图」按钮、`flow-batch` 契约 v0.1 增加可选 `parallel`/`workers` | 已完成（2.1.0） |
 
 ## 原则
 
@@ -172,7 +175,7 @@ python workbench.py project list --stats                            # 跨项目�
 ## 文档
 
 - `docs/quick-start.md`：第一次拿到发行包的 10 分钟上手（自检/建项目/阶段推进/知识/风格）。
-- `docs/flow-workbench.md`：可视化节点工作台（M1–M12，含条件/循环、基线、产物快照、复合节点、生成平台、任务状态轮询、结果回填与任务详情、批量批次编排与自动重试）：架构、17 类节点与端口、模板库、运行历史与恢复、批量运行、Web API、前端交互（撤销/重做/参数编辑/运行回放/JSON 导入导出/生成面板/任务详情与回填/实时预览自动刷新）、安全边界与限制。
+- `docs/flow-workbench.md`：可视化节点工作台（M1–M13，含条件/循环、基线、产物快照、复合节点、生成平台、任务状态轮询、结果回填与任务详情、批量批次编排与自动重试、批次并行预演与失败图恢复）：架构、17 类节点与端口、模板库、运行历史与恢复、批量运行、Web API、前端交互（撤销/重做/参数编辑/运行回放/JSON 导入导出/生成面板/任务详情与回填/实时预览自动刷新）、安全边界与限制。
 - `docs/release-notes-1.0.0.md`：1.0.0 发行说明（能力、验证、限制、升级与校验）。
 - `docs/release-notes-1.0.1.md`：1.0.1 补丁说明（P2 四项修复、接口、测试与升级方式）。
 - `docs/release-notes-1.0.2.md`：1.0.2 补丁说明（跨项目总览、风格质量提示、逐镜注入记录、init 引导）。
@@ -186,6 +189,7 @@ python workbench.py project list --stats                            # 跨项目�
 - `docs/release-notes-1.10.0.md`：1.10.0 发行说明（M11 批量回填、生成平台流程节点、生成面板筛选）。
 - `docs/release-notes-2.0.0.md`：2.0.0 发行说明（M12 批量批次编排、自动重试、批次历史、验证、升级与限制）。
 - `docs/release-notes-2.0.1.md`：2.0.1 发行说明（实时预览 `/api/dev/version`、自动刷新、界面视觉与 17 类节点演示、验证与限制）。
+- `docs/release-notes-2.1.0.md`：2.1.0 发行说明（批次并行预演、失败图一键恢复、验证与限制）。
 - `docs/pilot-c-report.md`：真实项目试点报告（《死亡外科医生》从零到 done、M1–M9、摩擦与 1.0.x 清单）。
 - `docs/architecture.md`：分层、数据流、阶段加载顺序、与现有 Skill 子系统的映射。
 - `docs/command-card.md`：全部命令速查（环境、项目、迁移、安装、知识、风格、可视化工作流、契约）。

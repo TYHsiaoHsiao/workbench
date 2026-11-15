@@ -1,7 +1,9 @@
-"""批量运行引擎（M12）：按图逐个运行、失败自动重试并保存批次记录。
+"""批量运行引擎（M12/M13）：按图运行、失败自动重试、可并行预演、保存批次记录并支持失败图恢复。
 
 批次记录写入项目内 ``00_project/workflows/batches/<batch_id>.json``，契约校验后落盘；
 每个图最多运行 ``1 + auto_retry`` 次，失败图会生成新的 run 记录（run_id 不同）。
+``parallel=True`` 使用线程池并行执行多个图，仅支持 dry-run 预演：live 运行共享项目状态，
+必须串行，避免并发写入与快照交错。
 """
 from __future__ import annotations
 
@@ -9,6 +11,7 @@ import json
 import re
 import secrets
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -24,6 +27,7 @@ CONTRACT_VERSION = "0.1"
 BATCH_SCHEMA = "flow-batch.schema.json"
 BATCH_ID_RE = re.compile(r"^batch-[a-z0-9-]{4,80}$")
 BATCHES_DIR_NAME = "batches"
+PARALLEL_WORKERS_MAX = 8
 
 
 def now_iso() -> str:
@@ -92,6 +96,8 @@ def list_batches(project_root: str | Path, limit: int = 20) -> list[dict[str, An
                 "status": data.get("status"),
                 "dry_run": bool(data.get("dry_run")),
                 "auto_retry": data.get("auto_retry", 0),
+                "parallel": bool(data.get("parallel")),
+                "workers": data.get("workers", 1),
                 "started_at": data.get("started_at"),
                 "finished_at": data.get("finished_at"),
                 "total": summary.get("total", 0),
@@ -156,6 +162,156 @@ def _run_once(
         }
 
 
+def _run_graph(
+    project: Path,
+    graph_id: str,
+    *,
+    dry_run: bool,
+    auto_confirm: bool,
+    retry: int,
+    node_types: NodeTypeRegistry | None,
+    sessions: dict[str, Runner] | None,
+) -> dict[str, Any]:
+    attempts: list[dict[str, Any]] = []
+    entry: dict[str, Any] = {}
+    for attempt in range(1, retry + 2):
+        outcome = _run_once(
+            project,
+            graph_id,
+            dry_run=dry_run,
+            auto_confirm=auto_confirm,
+            node_types=node_types,
+            sessions=sessions,
+        )
+        attempts.append(
+            {
+                "attempt": attempt,
+                "run_id": outcome["run_id"],
+                "status": outcome["attempt_status"],
+                "duration_ms": outcome["duration_ms"],
+                "error": outcome["error"],
+            }
+        )
+        entry = {
+            "graph_id": graph_id,
+            "ok": outcome["attempt_status"] in {"succeeded", "awaiting_confirm"},
+            "status": outcome["attempt_status"],
+            "run_id": outcome["run_id"],
+            "steps": outcome["steps"],
+            "duration_ms": outcome["duration_ms"],
+            "error": outcome["error"],
+            "attempts": attempts,
+        }
+        if entry["ok"]:
+            break
+    return entry
+
+
+def _require_project(project_root: str | Path) -> Path:
+    project = Path(project_root)
+    if not (project / "00_project" / "state.json").is_file():
+        raise FlowError(f"项目不存在或缺少 00_project/state.json: {project_root}")
+    return project
+
+
+def _select_graphs(
+    project: Path,
+    graph_ids: list[str] | None,
+    *,
+    all_graphs: bool,
+    limit: int,
+) -> list[str]:
+    if all_graphs or not graph_ids:
+        graph_ids = [item["graph_id"] for item in store.list_graphs(project)]
+    selected: list[str] = []
+    for graph_id in graph_ids or []:
+        graph_id = str(graph_id or "").strip()
+        if graph_id and graph_id not in selected:
+            selected.append(graph_id)
+    if not selected:
+        raise FlowError("没有可运行的流程图")
+    return selected[:limit]
+
+
+def _normalize_workers(workers: int | None) -> int:
+    return max(1, min(PARALLEL_WORKERS_MAX, int(workers or 2)))
+
+
+def _check_parallel(parallel: bool, dry_run: bool, fail_fast: bool) -> None:
+    if not parallel:
+        return
+    if not dry_run:
+        raise FlowError("并行批次仅支持 dry-run 预演；live 运行会共享项目状态，请串行执行")
+    if fail_fast:
+        raise FlowError("并行批次不支持 fail_fast（请改用串行批次）")
+
+
+def _execute(
+    project: Path,
+    selected: list[str],
+    *,
+    dry_run: bool,
+    auto_confirm: bool,
+    retry: int,
+    fail_fast: bool,
+    node_types: NodeTypeRegistry | None,
+    sessions: dict[str, Runner] | None,
+    parallel: bool,
+    workers: int,
+) -> list[dict[str, Any]]:
+    if parallel:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = [
+                pool.submit(
+                    _run_graph,
+                    project,
+                    graph_id,
+                    dry_run=dry_run,
+                    auto_confirm=auto_confirm,
+                    retry=retry,
+                    node_types=node_types,
+                    sessions=sessions,
+                )
+                for graph_id in selected
+            ]
+            return [future.result() for future in futures]
+    entries: list[dict[str, Any]] = []
+    for graph_id in selected:
+        entry = _run_graph(
+            project,
+            graph_id,
+            dry_run=dry_run,
+            auto_confirm=auto_confirm,
+            retry=retry,
+            node_types=node_types,
+            sessions=sessions,
+        )
+        entries.append(entry)
+        if fail_fast and not entry["ok"]:
+            break
+    return entries
+
+
+def _summarize(
+    graphs: list[dict[str, Any]],
+    *,
+    selected_total: int,
+    duration_ms: int,
+) -> dict[str, Any]:
+    succeeded = sum(1 for item in graphs if item["status"] in {"succeeded", "awaiting_confirm"})
+    failed = len(graphs) - succeeded
+    awaiting = sum(1 for item in graphs if item["status"] == "awaiting_confirm")
+    return {
+        "total": len(graphs),
+        "succeeded": succeeded,
+        "failed": failed,
+        "awaiting_confirm": awaiting,
+        "skipped": max(0, selected_total - len(graphs)),
+        "attempts": sum(len(item.get("attempts") or []) for item in graphs),
+        "duration_ms": duration_ms,
+    }
+
+
 def run_batch(
     project_root: str | Path,
     graph_ids: list[str] | None = None,
@@ -166,27 +322,20 @@ def run_batch(
     auto_retry: int = 0,
     fail_fast: bool = False,
     limit: int = 20,
+    parallel: bool = False,
+    workers: int = 2,
     node_types: NodeTypeRegistry | None = None,
     sessions: dict[str, Runner] | None = None,
 ) -> dict[str, Any]:
-    """批量运行流程图：逐图执行、失败自动重试，返回并保存批次记录。"""
-    project = Path(project_root)
-    if not (project / "00_project" / "state.json").is_file():
-        raise FlowError(f"项目不存在或缺少 00_project/state.json: {project_root}")
+    """批量运行流程图：按图执行（可并行预演）、失败自动重试，返回并保存批次记录。"""
+    project = _require_project(project_root)
     registry = node_types or load_node_types()
     effective_dry = True if dry_run is None else bool(dry_run)
     retry = max(0, min(3, int(auto_retry or 0)))
     limit = max(1, min(200, int(limit)))
-    if all_graphs or not graph_ids:
-        graph_ids = [item["graph_id"] for item in store.list_graphs(project)]
-    selected: list[str] = []
-    for graph_id in graph_ids or []:
-        graph_id = str(graph_id or "").strip()
-        if graph_id and graph_id not in selected:
-            selected.append(graph_id)
-    if not selected:
-        raise FlowError("没有可运行的流程图")
-    selected = selected[:limit]
+    worker_count = _normalize_workers(workers)
+    _check_parallel(bool(parallel), effective_dry, bool(fail_fast))
+    selected = _select_graphs(project, graph_ids, all_graphs=all_graphs, limit=limit)
 
     record: dict[str, Any] = {
         "contract_version": CONTRACT_VERSION,
@@ -195,54 +344,89 @@ def run_batch(
         "dry_run": effective_dry,
         "auto_retry": retry,
         "fail_fast": bool(fail_fast),
+        "parallel": bool(parallel),
+        "workers": worker_count,
         "status": "running",
         "started_at": now_iso(),
         "graphs": [],
         "summary": {},
     }
     batch_started = time.perf_counter()
-    for graph_id in selected:
-        attempts: list[dict[str, Any]] = []
-        entry: dict[str, Any] = {}
-        for attempt in range(1, retry + 2):
-            outcome = _run_once(
-                project,
-                graph_id,
-                dry_run=effective_dry,
-                auto_confirm=auto_confirm,
-                node_types=registry,
-                sessions=sessions,
-            )
-            attempts.append(
-                {
-                    "attempt": attempt,
-                    "run_id": outcome["run_id"],
-                    "status": outcome["attempt_status"],
-                    "duration_ms": outcome["duration_ms"],
-                    "error": outcome["error"],
-                }
-            )
-            entry = {
-                "graph_id": graph_id,
-                "ok": outcome["attempt_status"] in {"succeeded", "awaiting_confirm"},
-                "status": outcome["attempt_status"],
-                "run_id": outcome["run_id"],
-                "steps": outcome["steps"],
-                "duration_ms": outcome["duration_ms"],
-                "error": outcome["error"],
-                "attempts": attempts,
-            }
-            if entry["ok"]:
-                break
-        record["graphs"].append(entry)
-        if fail_fast and not entry["ok"]:
-            break
-
+    record["graphs"] = _execute(
+        project,
+        selected,
+        dry_run=effective_dry,
+        auto_confirm=auto_confirm,
+        retry=retry,
+        fail_fast=bool(fail_fast),
+        node_types=registry,
+        sessions=sessions,
+        parallel=bool(parallel),
+        workers=worker_count,
+    )
     total_duration = int((time.perf_counter() - batch_started) * 1000)
-    graphs = record["graphs"]
-    succeeded = sum(1 for item in graphs if item["status"] in {"succeeded", "awaiting_confirm"})
+    summary = _summarize(record["graphs"], selected_total=len(selected), duration_ms=total_duration)
+    record["summary"] = summary
+    record["status"] = "succeeded" if summary["failed"] == 0 else "failed"
+    record["finished_at"] = now_iso()
+    write_batch(project, record)
+    return {"ok": record["status"] == "succeeded", "project": str(project), "batch": record}
+
+
+def recover_batch(
+    project_root: str | Path,
+    batch_id: str,
+    *,
+    dry_run: bool | None = None,
+    auto_confirm: bool = True,
+    auto_retry: int = 0,
+    parallel: bool = False,
+    workers: int = 2,
+    node_types: NodeTypeRegistry | None = None,
+    sessions: dict[str, Runner] | None = None,
+) -> dict[str, Any]:
+    """重跑批次中的失败图，把新的尝试追加到原批次记录并更新汇总。"""
+    project = _require_project(project_root)
+    record = read_batch(project, batch_id)
+    failed_graphs = [str(item.get("graph_id")) for item in record.get("graphs") or [] if not item.get("ok")]
+    if not failed_graphs:
+        return {"ok": True, "project": str(project), "batch": record, "recovered": 0}
+
+    registry = node_types or load_node_types()
+    effective_dry = bool(record.get("dry_run", True)) if dry_run is None else bool(dry_run)
+    retry = max(0, min(3, int(auto_retry or 0)))
+    worker_count = _normalize_workers(workers)
+    _check_parallel(bool(parallel), effective_dry, False)
+
+    recovered_entries = _execute(
+        project,
+        failed_graphs,
+        dry_run=effective_dry,
+        auto_confirm=auto_confirm,
+        retry=retry,
+        fail_fast=False,
+        node_types=registry,
+        sessions=sessions,
+        parallel=bool(parallel),
+        workers=worker_count,
+    )
+    recovered_by_id = {entry["graph_id"]: entry for entry in recovered_entries}
+    for original in record.get("graphs") or []:
+        new_entry = recovered_by_id.get(str(original.get("graph_id")))
+        if new_entry is None:
+            continue
+        base_attempt = len(original.get("attempts") or [])
+        merged_attempts = list(original.get("attempts") or [])
+        for offset, attempt in enumerate(new_entry.get("attempts") or []):
+            merged_attempts.append({**attempt, "attempt": base_attempt + offset + 1})
+        for key in ("ok", "status", "run_id", "steps", "duration_ms", "error"):
+            original[key] = new_entry.get(key)
+        original["attempts"] = merged_attempts
+
+    graphs = record.get("graphs") or []
+    succeeded = sum(1 for item in graphs if item.get("status") in {"succeeded", "awaiting_confirm"})
     failed = len(graphs) - succeeded
-    awaiting = sum(1 for item in graphs if item["status"] == "awaiting_confirm")
+    awaiting = sum(1 for item in graphs if item.get("status") == "awaiting_confirm")
     record["status"] = "succeeded" if failed == 0 else "failed"
     record["finished_at"] = now_iso()
     record["summary"] = {
@@ -250,21 +434,28 @@ def run_batch(
         "succeeded": succeeded,
         "failed": failed,
         "awaiting_confirm": awaiting,
-        "skipped": max(0, len(selected) - len(graphs)),
+        "skipped": int((record.get("summary") or {}).get("skipped", 0)),
         "attempts": sum(len(item.get("attempts") or []) for item in graphs),
-        "duration_ms": total_duration,
+        "duration_ms": sum(int(item.get("duration_ms") or 0) for item in graphs),
     }
     write_batch(project, record)
-    return {"ok": record["status"] == "succeeded", "project": str(project), "batch": record}
+    return {
+        "ok": record["status"] == "succeeded",
+        "project": str(project),
+        "batch": record,
+        "recovered": len(recovered_entries),
+    }
 
 
 __all__ = [
     "BATCH_SCHEMA",
+    "PARALLEL_WORKERS_MAX",
     "batch_path",
     "batches_dir",
     "list_batches",
     "new_batch_id",
     "read_batch",
+    "recover_batch",
     "run_batch",
     "validate_batch",
     "write_batch",

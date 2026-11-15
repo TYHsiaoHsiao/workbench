@@ -68,6 +68,7 @@ from flow import (
     list_snapshots,
     read_batch,
     read_snapshot,
+    recover_batch,
     run_batch,
     set_baseline,
     default_graph,
@@ -1343,6 +1344,8 @@ def cmd_flow_batch(args: argparse.Namespace) -> int:
             auto_retry=args.auto_retry,
             fail_fast=bool(args.fail_fast),
             limit=args.limit,
+            parallel=bool(args.parallel),
+            workers=args.workers,
         )
     except FlowError as exc:
         _print(f"错误: {exc}")
@@ -1353,7 +1356,10 @@ def cmd_flow_batch(args: argparse.Namespace) -> int:
     else:
         summary = batch["summary"]
         mode = "预演" if batch["dry_run"] else "运行"
-        _print(f"批量{mode}: {summary['total']} 个流程图（批次 {batch['batch_id']}）")
+        parallel = ""
+        if batch.get("parallel"):
+            parallel = f"，并行 {batch.get('workers', 2)} 线程"
+        _print(f"批量{mode}: {summary['total']} 个流程图（批次 {batch['batch_id']}{parallel}）")
         for item in batch["graphs"]:
             line = f"- {item['graph_id']}  {item['status']}"
             if item.get("run_id"):
@@ -1419,6 +1425,49 @@ def cmd_flow_batch_show(args: argparse.Namespace) -> int:
                 line += f"  错误: {attempt['error']}"
             _print(line)
     return EXIT_OK
+
+
+def cmd_flow_batch_recover(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        result = recover_batch(
+            project,
+            args.batch_id,
+            dry_run=args.dry_run,
+            auto_confirm=True,
+            auto_retry=args.auto_retry,
+            parallel=bool(args.parallel),
+            workers=args.workers,
+        )
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    batch = result["batch"]
+    summary = batch.get("summary") or {}
+    if args.json:
+        _emit(
+            {
+                "ok": result["ok"],
+                "project": result["project"],
+                "batch": batch,
+                "recovered": result["recovered"],
+            },
+            True,
+        )
+    else:
+        _print(
+            f"批次 {batch['batch_id']} 恢复 {result['recovered']} 个失败图 → 状态 {batch.get('status')}"
+        )
+        _print(
+            f"成功 {summary.get('succeeded', 0)} / 失败 {summary.get('failed', 0)} / "
+            f"尝试 {summary.get('attempts', 0)} 次"
+        )
+        for item in batch.get("graphs") or []:
+            attempts = item.get("attempts") or []
+            if len(attempts) <= 1:
+                continue
+            _print(f"- {item['graph_id']}  {item.get('status')}  尝试 {len(attempts)} 次")
+    return EXIT_OK if result["ok"] else EXIT_FAIL
 
 
 def cmd_flow_replay(args: argparse.Namespace) -> int:
@@ -2349,6 +2398,8 @@ def build_parser() -> argparse.ArgumentParser:
     flow_batch.add_argument("--yes", action="store_true", help="自动确认 confirm 节点")
     flow_batch.add_argument("--auto-retry", type=int, default=0, help="失败图自动重试次数（0–3）")
     flow_batch.add_argument("--fail-fast", action="store_true", help="首个失败后停止后续图")
+    flow_batch.add_argument("--parallel", action="store_true", help="并行预演多个图（仅 dry-run）")
+    flow_batch.add_argument("--workers", type=int, default=2, help="并行线程数（1–8，默认 2）")
     flow_batch.add_argument("--limit", type=int, default=20, help="最多运行流程图数量（默认 20）")
     flow_batch.add_argument("--json", action="store_true", help="以 JSON 输出")
     flow_batch.set_defaults(func=cmd_flow_batch)
@@ -2364,6 +2415,22 @@ def build_parser() -> argparse.ArgumentParser:
     flow_batch_show.add_argument("--batch", dest="batch_id", required=True, help="batch_id")
     flow_batch_show.add_argument("--json", action="store_true", help="以 JSON 输出")
     flow_batch_show.set_defaults(func=cmd_flow_batch_show)
+
+    flow_batch_recover = flow_sub.add_parser("batch-recover", help="重跑批次中的失败图并更新原批次记录")
+    flow_batch_recover.add_argument("--project", required=True, help="项目名或项目路径")
+    flow_batch_recover.add_argument("--batch", dest="batch_id", required=True, help="batch_id")
+    flow_batch_recover_dry = flow_batch_recover.add_mutually_exclusive_group()
+    flow_batch_recover_dry.add_argument(
+        "--dry-run", dest="dry_run", action="store_true", default=None, help="覆盖为预演不写盘"
+    )
+    flow_batch_recover_dry.add_argument(
+        "--live", dest="dry_run", action="store_false", default=None, help="覆盖为真实执行"
+    )
+    flow_batch_recover.add_argument("--auto-retry", type=int, default=0, help="失败图自动重试次数（0–3）")
+    flow_batch_recover.add_argument("--parallel", action="store_true", help="并行预演失败图（仅 dry-run）")
+    flow_batch_recover.add_argument("--workers", type=int, default=2, help="并行线程数（1–8，默认 2）")
+    flow_batch_recover.add_argument("--json", action="store_true", help="以 JSON 输出")
+    flow_batch_recover.set_defaults(func=cmd_flow_batch_recover)
 
     flow_replay = flow_sub.add_parser("replay", help="查看运行回放（每步耗时与失败定位）")
     flow_replay.add_argument("--project", required=True, help="项目名或项目路径")

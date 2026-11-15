@@ -306,6 +306,50 @@ class WebUIApiTest(unittest.TestCase):
         self.assertEqual(batch_id, data["batch"]["batch_id"])
         self.assertEqual(1, len(data["batch"]["graphs"]))
 
+    def test_workflows_batch_parallel_endpoint(self) -> None:
+        status, data = self.client.json(
+            "POST",
+            "/api/workflows/batch",
+            {
+                "project": str(self.project),
+                "dry_run": True,
+                "parallel": True,
+                "workers": 2,
+            },
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertTrue(data["ok"], msg=data)
+        batch = data["batch"]
+        self.assertTrue(batch["parallel"])
+        self.assertEqual(2, batch["workers"])
+
+    def test_batch_recover_endpoint(self) -> None:
+        broken = json.loads(json.dumps(self.graph))
+        broken["graph_id"] = "flow-broken"
+        broken["edges"] = []
+        write_graph_data(self.project, broken)
+        status, data = self.client.json(
+            "POST",
+            "/api/workflows/batch",
+            {"project": str(self.project), "dry_run": True, "graph_ids": ["flow-broken"]},
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertFalse(data["ok"], msg=data)
+        batch_id = data["batch"]["batch_id"]
+        self.assertEqual(1, data["batch"]["summary"]["failed"])
+        broken["edges"] = json.loads(json.dumps(self.graph))["edges"]
+        write_graph_data(self.project, broken)
+        status, data = self.client.json(
+            "POST",
+            f"/api/batches/{batch_id}/recover",
+            {"project": str(self.project)},
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertTrue(data["ok"], msg=data)
+        self.assertEqual(1, data["recovered"])
+        self.assertEqual("succeeded", data["batch"]["status"])
+        self.assertEqual(0, data["batch"]["summary"]["failed"])
+
     def test_replay_endpoint(self) -> None:
         status, data = self.client.json(
             "POST",

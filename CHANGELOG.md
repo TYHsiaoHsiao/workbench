@@ -1,5 +1,14 @@
 # 变更日志
 
+## [2.1.0] - 2026-11-15 — 批次增强（M13：并行预演与失败图恢复）
+
+- 批次并行：`run_batch()` 新增 `parallel`/`workers`（1–8）；并行使用线程池，仅允许 dry-run 预演（live 运行共享项目状态，强制串行并报错），`parallel` 与 `fail_fast` 互斥；批次记录与 `flow-batch` 契约 v0.1 增加可选 `parallel`/`workers` 字段。
+- 失败图恢复：新增 `recover_batch()` 重跑批次中的失败图，把新尝试追加到原批次 `attempts`（编号连续）并重算 status/summary；无失败图返回 recovered=0。
+- CLI：`flow batch` 新增 `--parallel`/`--workers`；新增 `flow batch-recover --project … --batch <id> [--dry-run/--live] [--auto-retry] [--parallel] [--workers]`。
+- Web：新增 `POST /api/batches/<batch_id>/recover`；前端批量预演后失败时显示「恢复失败图」按钮，恢复后刷新状态。
+- 测试：新增 6 项（批次并行 dry-run、并行拒绝 live/fail-fast、恢复合并尝试链、无失败恢复、Web 并行端点、Web 恢复端点），全量 331 项通过。
+- 兼容性：MINOR 版本；新增可选参数与可选契约字段，默认行为不变（串行批次）。
+
 ## [2.0.1] - 2026-11-15 — 实时预览与界面迭代（PATCH）
 
 - 实时预览：新增 `GET /api/dev/version`（静态资源签名 = 文件:大小:mtime_ns + latest_mtime_ns），前端 `startLivePreview()` 每 1.2s 轮询，签名变化时提示并整页刷新；状态栏「● 实时预览」标识。
