@@ -1,5 +1,15 @@
 # 变更日志
 
+## [2.0.0] - 2026-11-15 — 可视化节点工作台（M12：批量批次编排、批量自动重试与批次历史）
+
+- 批次引擎：新增 `packages/flow/batch.py` 与 `flow-batch` 契约（v0.1）；`run_batch()` 逐图运行并把批次记录写入 `00_project/workflows/batches/<batch_id>.json`；失败图按 `auto_retry`（0–3）自动重试（每次新 run_id），`fail_fast` 首败即停、`limit` 限制图数量；summary 统计成功/失败/等待确认/跳过/尝试次数/总耗时。
+- CLI：`flow batch` 改用批次引擎，JSON 输出由 `{count,results}` 改为 `{ok,project,batch}`（破坏性变更）；新增 `--auto-retry`/`--fail-fast`/`--limit`；新增 `flow batches` 与 `flow batch-show`。
+- Web API：新增 `POST /api/workflows/batch`、`GET /api/batches`、`GET /api/batches/<batch_id>`；`POST /api/runs/batch` 保留为兼容别名（返回旧 `count`/`results` 字段）。
+- 前端：批量预演改调新端点，逐图显示尝试次数/耗时/错误，完成状态含批次 ID。
+- doctor：flow 契约检查补 `flow-batch.schema.json`（5 份）；contracts 共 14 份。
+- 测试：新增 7 项（批次引擎 6、Web API 1），全量 323 项通过。
+- 兼容性：`flow batch --json` 的输出结构变化为破坏性变更，故主版本升 2.0.0；流程图、state、其他 CLI/Web 接口不变。
+
 ## [1.10.0] - 2026-11-15 — 可视化节点工作台（M11：批量回填、生成平台流程节点与生成面板筛选）
 
 - 批量回填：`adopt_all()` 扫描 succeeded 且未回填任务逐条回填，最后组合登记 `state.stage_artifacts`（逐条 adopt 会覆盖摘要）；CLI `generate adopt --all [--limit]`，Web API `POST /api/generate/jobs/adopt`，生成面板「回填全部已成功」。

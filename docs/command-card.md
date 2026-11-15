@@ -1,4 +1,4 @@
-# 命令卡（v1.10.0）
+# 命令卡（v2.0.0）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -91,7 +91,9 @@
 | `python workbench.py flow baseline show|clear --project <名称> [--graph <流程id>]` | 查看/清除运行基线 |
 | `python workbench.py flow export --project 项目名 --graph 流程id --out flow.json` | 导出流程图 JSON（也可 `--file flow.json` 原样输出） |
 | `python workbench.py flow import --project 项目名 --file flow.json [--graph 新id] [--force]` | 导入流程图（先校验，非法不落盘） |
-| `python workbench.py flow batch --project 项目名 --all [--dry-run/--live] [--yes]` | 批量运行项目内全部流程图 |
+| `python workbench.py flow batch --project 项目名 --all [--dry-run/--live] [--yes] [--auto-retry N] [--fail-fast] [--limit N]` | 批量运行项目内全部流程图（批次记录；失败图可自动重试 0–3 次；JSON 输出为 `{ok,project,batch}`） |
+| `python workbench.py flow batches --project 项目名 [--limit 20] [--json]` | 批次历史（最近批次摘要） |
+| `python workbench.py flow batch-show --project 项目名 --batch batch-id [--json]` | 批次详情（每图状态/尝试/耗时/错误） |
 
 ## 7.5 生成平台（generate，M8/M9/M10/M11）
 

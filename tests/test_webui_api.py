@@ -280,6 +280,32 @@ class WebUIApiTest(unittest.TestCase):
         self.assertTrue(data["ok"], msg=data)
         self.assertGreaterEqual(data["count"], 1)
 
+    def test_workflows_batch_endpoint_and_history(self) -> None:
+        status, data = self.client.json(
+            "POST",
+            "/api/workflows/batch",
+            {
+                "project": str(self.project),
+                "dry_run": True,
+                "auto_confirm": True,
+                "auto_retry": 1,
+            },
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertTrue(data["ok"], msg=data)
+        batch = data["batch"]
+        self.assertTrue(batch["batch_id"].startswith("batch-"), msg=batch)
+        self.assertGreaterEqual(batch["summary"]["total"], 1)
+        self.assertEqual(1, batch["auto_retry"])
+        batch_id = batch["batch_id"]
+        status, data = self.client.json("GET", self._q("/api/batches?limit=5"))
+        self.assertEqual(200, status)
+        self.assertIn(batch_id, [item["batch_id"] for item in data["batches"]])
+        status, data = self.client.json("GET", self._q(f"/api/batches/{batch_id}"))
+        self.assertEqual(200, status, msg=data)
+        self.assertEqual(batch_id, data["batch"]["batch_id"])
+        self.assertEqual(1, len(data["batch"]["graphs"]))
+
     def test_replay_endpoint(self) -> None:
         status, data = self.client.json(
             "POST",

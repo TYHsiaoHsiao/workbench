@@ -36,15 +36,18 @@ from flow import (
     get_baseline,
     instantiate_template,
     list_baselines,
+    list_batches,
     list_graphs,
     list_runs,
     list_snapshots,
     load_node_types,
     load_templates,
+    read_batch,
     read_graph_data,
     read_run,
     recover_run,
     resolve_project,
+    run_batch,
     validate_graph,
     write_graph_data,
 )
@@ -472,6 +475,22 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     pass
             self._json({"ok": True, "project": str(project), "runs": list_runs(project, limit=limit)})
             return
+        if path == "/api/batches":
+            project = self._project_from(query)
+            limit = 20
+            values = query.get("limit") or []
+            if values:
+                try:
+                    limit = max(1, min(200, int(values[0])))
+                except ValueError:
+                    pass
+            self._json({"ok": True, "project": str(project), "batches": list_batches(project, limit=limit)})
+            return
+        if path.startswith("/api/batches/"):
+            project = self._project_from(query)
+            batch_id = unquote(path[len("/api/batches/"):]).strip("/")
+            self._json({"ok": True, "project": str(project), "batch": read_batch(project, batch_id)})
+            return
         if path.startswith("/api/workflows/") and path.endswith("/baseline"):
             project = self._project_from(query)
             graph_id = unquote(path[len("/api/workflows/"): -len("/baseline")]).strip("/")
@@ -735,40 +754,39 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             self.server.sessions[result["run"]["run_id"]] = runner
             self._json(result)
             return
-        if path == "/api/runs/batch":
+        if path in {"/api/runs/batch", "/api/workflows/batch"}:
             project = resolve_project(body.get("project") or str(self.server.project_root))
-            graph_ids = body.get("graph_ids") or []
-            if not graph_ids:
-                graph_ids = [item["graph_id"] for item in list_graphs(project)]
-            dry_run = body.get("dry_run")
-            auto_confirm = bool(body.get("auto_confirm", True))
-            results = []
-            for graph_id in graph_ids:
-                try:
-                    graph = read_graph_data(project, str(graph_id))
-                    runner = Runner(project, graph, dry_run=dry_run, auto_confirm=auto_confirm)
-                    run_result = runner.run(mode="full")
-                    run = run_result["run"]
-                    self.server.sessions[run["run_id"]] = runner
-                    results.append(
-                        {
-                            "graph_id": graph_id,
-                            "ok": run.get("status") in {"succeeded", "awaiting_confirm"},
-                            "status": run.get("status"),
-                            "run_id": run.get("run_id"),
-                            "steps": len(run.get("steps") or []),
-                        }
-                    )
-                except FlowError as exc:
-                    results.append({"graph_id": graph_id, "ok": False, "status": "error", "error": str(exc)})
-            self._json(
-                {
-                    "ok": all(item.get("ok") for item in results),
-                    "project": str(project),
-                    "count": len(results),
-                    "results": results,
-                }
+            result = run_batch(
+                project,
+                body.get("graph_ids") or None,
+                all_graphs=bool(body.get("all")),
+                dry_run=body.get("dry_run"),
+                auto_confirm=bool(body.get("auto_confirm", True)),
+                auto_retry=int(body.get("auto_retry") or 0),
+                fail_fast=bool(body.get("fail_fast")),
+                limit=int(body.get("limit") or 20),
+                sessions=self.server.sessions,
             )
+            payload: dict[str, Any] = {
+                "ok": result["ok"],
+                "project": result["project"],
+                "batch": result["batch"],
+            }
+            if path == "/api/runs/batch":
+                batch = result["batch"]
+                payload["count"] = batch["summary"]["total"]
+                payload["results"] = [
+                    {
+                        "graph_id": item["graph_id"],
+                        "ok": item["ok"],
+                        "status": item["status"],
+                        "run_id": item.get("run_id"),
+                        "steps": item.get("steps", 0),
+                        "error": item.get("error") or None,
+                    }
+                    for item in batch["graphs"]
+                ]
+            self._json(payload)
             return
         if path.startswith("/api/runs/") and path.endswith("/recover"):
             run_id = unquote(path[len("/api/runs/"): -len("/recover")]).strip("/")

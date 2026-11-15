@@ -134,6 +134,9 @@
 - `generate_refresh` / `generate_adopt` 节点报「需要 job_id 或 all=true」：节点参数必须显式指定任务或批量开关，节点不会自动轮询/回填。
 - `generate adopt --all` 没有回填任何任务：只处理 succeeded 且未回填的任务；先 `generate refresh --all` 刷新状态，并确认任务响应里有结果 URL。
 - 回填报「没有可回填的结果 URL」：平台成功响应里未带 video_url/output_url 等结果字段；用 `generate show <job_id>` 检查 response 结构，必要时从平台手动获取结果后登记产物。
+- `flow batch-show` 报「非法批次 ID」：`--batch` 需传批次列表中的 `batch-...` ID（不是 run_id）；先 `flow batches` 查看。
+- 批次里某图始终失败：查看批次详情 `attempts`/`error`；`--auto-retry` 只重试失败图（每次新 run_id），图校验失败的尝试不会生成运行记录；修复图后重跑。
+- 旧脚本解析 `flow batch --json` 报错：2.0.0 起输出由 `{count,results}` 改为 `{ok,project,batch}`，请改读 `batch.graphs`（Web 兼容别名 `/api/runs/batch` 仍返回旧字段）。
 
 
 

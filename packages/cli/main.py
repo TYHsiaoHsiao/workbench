@@ -64,8 +64,11 @@ from flow import (
     get_baseline,
     clear_baseline,
     list_baselines,
+    list_batches,
     list_snapshots,
+    read_batch,
     read_snapshot,
+    run_batch,
     set_baseline,
     default_graph,
     format_replay_text,
@@ -215,6 +218,7 @@ def _check_flow() -> tuple[bool, str]:
         "flow-graph.schema.json",
         "flow-node-types.schema.json",
         "flow-run.schema.json",
+        "flow-batch.schema.json",
         "flow-templates.schema.json",
     ]
     schemas = set(list_schemas())
@@ -1324,53 +1328,97 @@ def cmd_flow_recover(args: argparse.Namespace) -> int:
 def cmd_flow_batch(args: argparse.Namespace) -> int:
     try:
         project = resolve_project(args.project)
-        if args.all:
-            graph_ids = [item["graph_id"] for item in list_graphs(project)]
-        else:
+        graph_ids = None
+        if not args.all:
             graph_ids = [item.strip() for item in (args.graphs or "").split(",") if item.strip()]
-        if not graph_ids:
-            _print("错误: 请用 --graphs a,b 指定流程图，或使用 --all")
-            return EXIT_USAGE
-        results: list[dict[str, Any]] = []
-        for graph_id in graph_ids:
-            try:
-                data = read_graph_data(project, graph_id)
-                runner = Runner(project, data, dry_run=args.dry_run, auto_confirm=args.yes)
-                result = runner.run(mode="full")
-                run = result["run"]
-                results.append(
-                    {
-                        "graph_id": graph_id,
-                        "ok": run.get("status") in {"succeeded", "awaiting_confirm"},
-                        "status": run.get("status"),
-                        "run_id": run.get("run_id"),
-                        "steps": len(run.get("steps") or []),
-                        "error": next(
-                            (step.get("error") for step in run.get("steps") or [] if step.get("error")),
-                            None,
-                        ),
-                    }
-                )
-            except FlowError as exc:
-                results.append({"graph_id": graph_id, "ok": False, "status": "error", "error": str(exc)})
+            if not graph_ids:
+                _print("错误: 请用 --graphs a,b 指定流程图，或使用 --all")
+                return EXIT_USAGE
+        result = run_batch(
+            project,
+            graph_ids,
+            all_graphs=bool(args.all),
+            dry_run=args.dry_run,
+            auto_confirm=bool(args.yes),
+            auto_retry=args.auto_retry,
+            fail_fast=bool(args.fail_fast),
+            limit=args.limit,
+        )
     except FlowError as exc:
         _print(f"错误: {exc}")
         return EXIT_FAIL
-    ok = all(item.get("ok") for item in results)
-    payload = {"ok": ok, "project": str(project), "count": len(results), "results": results}
+    batch = result["batch"]
     if args.json:
-        _emit(payload, True)
+        _emit({"ok": result["ok"], "project": result["project"], "batch": batch}, True)
     else:
-        _print(f"批量运行: {len(results)} 个流程图")
-        for item in results:
-            line = f"- {item['graph_id']}  {item.get('status')}"
+        summary = batch["summary"]
+        mode = "预演" if batch["dry_run"] else "运行"
+        _print(f"批量{mode}: {summary['total']} 个流程图（批次 {batch['batch_id']}）")
+        for item in batch["graphs"]:
+            line = f"- {item['graph_id']}  {item['status']}"
             if item.get("run_id"):
                 line += f"  运行 {item['run_id']}"
+            if len(item.get("attempts") or []) > 1:
+                line += f"  尝试 {len(item['attempts'])} 次"
             if item.get("error"):
                 line += f"  错误: {item['error']}"
             _print(line)
-        _print("全部成功" if ok else "存在失败，请查看运行记录")
-    return EXIT_OK if ok else EXIT_FAIL
+        _print(
+            f"成功 {summary['succeeded']} / 失败 {summary['failed']} / "
+            f"尝试 {summary['attempts']} 次 / 总耗时 {summary['duration_ms']}ms"
+        )
+    return EXIT_OK if result["ok"] else EXIT_FAIL
+
+
+def cmd_flow_batches(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        batches = list_batches(project, limit=args.limit)
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    if args.json:
+        _emit({"ok": True, "project": str(project), "count": len(batches), "batches": batches}, True)
+        return EXIT_OK
+    if not batches:
+        _print("暂无批次记录")
+        return EXIT_OK
+    for item in batches:
+        _print(
+            f"- {item['batch_id']}  {item['status']}  "
+            f"成功 {item['succeeded']}/{item['total']}  开始 {item.get('started_at') or ''}"
+        )
+    return EXIT_OK
+
+
+def cmd_flow_batch_show(args: argparse.Namespace) -> int:
+    try:
+        project = resolve_project(args.project)
+        batch = read_batch(project, args.batch_id)
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    if args.json:
+        _emit({"ok": True, "project": str(project), "batch": batch}, True)
+        return EXIT_OK
+    summary = batch.get("summary") or {}
+    _print(f"批次: {batch['batch_id']}  项目: {batch.get('project')}  状态: {batch.get('status')}")
+    _print(
+        f"预演: {'是' if batch.get('dry_run') else '否'}  "
+        f"自动重试: {batch.get('auto_retry', 0)}  失败即停: {'是' if batch.get('fail_fast') else '否'}"
+    )
+    _print(
+        f"成功 {summary.get('succeeded', 0)} / 失败 {summary.get('failed', 0)} / "
+        f"尝试 {summary.get('attempts', 0)} 次 / 总耗时 {summary.get('duration_ms', 0)}ms"
+    )
+    for item in batch.get("graphs") or []:
+        _print(f"- {item['graph_id']}  {item['status']}  运行 {item.get('run_id') or '-'}")
+        for attempt in item.get("attempts") or []:
+            line = f"  · 第 {attempt['attempt']} 次 {attempt['status']}"
+            if attempt.get("error"):
+                line += f"  错误: {attempt['error']}"
+            _print(line)
+    return EXIT_OK
 
 
 def cmd_flow_replay(args: argparse.Namespace) -> int:
@@ -2291,7 +2339,7 @@ def build_parser() -> argparse.ArgumentParser:
     flow_recover.add_argument("--json", action="store_true", help="以 JSON 输出")
     flow_recover.set_defaults(func=cmd_flow_recover)
 
-    flow_batch = flow_sub.add_parser("batch", help="批量运行多个流程图")
+    flow_batch = flow_sub.add_parser("batch", help="批量运行多个流程图（失败可自动重试）")
     flow_batch.add_argument("--project", required=True, help="项目名或项目路径")
     flow_batch.add_argument("--graphs", help="逗号分隔的 graph_id 列表")
     flow_batch.add_argument("--all", action="store_true", help="运行项目内全部流程图")
@@ -2299,8 +2347,23 @@ def build_parser() -> argparse.ArgumentParser:
     flow_batch_dry.add_argument("--dry-run", dest="dry_run", action="store_true", default=None, help="只预演不写盘")
     flow_batch_dry.add_argument("--live", dest="dry_run", action="store_false", default=None, help="真实执行并写盘")
     flow_batch.add_argument("--yes", action="store_true", help="自动确认 confirm 节点")
+    flow_batch.add_argument("--auto-retry", type=int, default=0, help="失败图自动重试次数（0–3）")
+    flow_batch.add_argument("--fail-fast", action="store_true", help="首个失败后停止后续图")
+    flow_batch.add_argument("--limit", type=int, default=20, help="最多运行流程图数量（默认 20）")
     flow_batch.add_argument("--json", action="store_true", help="以 JSON 输出")
     flow_batch.set_defaults(func=cmd_flow_batch)
+
+    flow_batches = flow_sub.add_parser("batches", help="列出批次运行记录")
+    flow_batches.add_argument("--project", required=True, help="项目名或项目路径")
+    flow_batches.add_argument("--limit", type=int, default=20, help="最多显示条数")
+    flow_batches.add_argument("--json", action="store_true", help="以 JSON 输出")
+    flow_batches.set_defaults(func=cmd_flow_batches)
+
+    flow_batch_show = flow_sub.add_parser("batch-show", help="查看批次运行记录详情")
+    flow_batch_show.add_argument("--project", required=True, help="项目名或项目路径")
+    flow_batch_show.add_argument("--batch", dest="batch_id", required=True, help="batch_id")
+    flow_batch_show.add_argument("--json", action="store_true", help="以 JSON 输出")
+    flow_batch_show.set_defaults(func=cmd_flow_batch_show)
 
     flow_replay = flow_sub.add_parser("replay", help="查看运行回放（每步耗时与失败定位）")
     flow_replay.add_argument("--project", required=True, help="项目名或项目路径")

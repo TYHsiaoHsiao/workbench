@@ -1382,14 +1382,28 @@ async function runBatch() {
   if (!state.project) return;
   if (!window.confirm("批量预演项目内全部流程图？（dry-run，不写盘）")) return;
   try {
-    const data = await api("/api/runs/batch", {
+    const data = await api("/api/workflows/batch", {
       method: "POST",
-      body: JSON.stringify({ project: state.project, dry_run: true, auto_confirm: true }),
+      body: JSON.stringify({
+        project: state.project,
+        dry_run: true,
+        auto_confirm: true,
+        auto_retry: 0,
+      }),
     });
-    for (const item of data.results || []) {
-      logLine("[" + (item.ok ? "OK" : "FAIL") + "] " + item.graph_id + " · " + item.status, item.ok ? "ok" : "err");
+    const batch = data.batch || {};
+    for (const item of batch.graphs || []) {
+      const tries = (item.attempts || []).length;
+      let line = "[" + (item.ok ? "OK" : "FAIL") + "] " + item.graph_id + " · " + item.status;
+      if (tries > 1) line += " · 尝试 " + tries + " 次";
+      if (item.duration_ms != null) line += " · " + item.duration_ms + "ms";
+      if (item.error) line += " · " + item.error;
+      logLine(line, item.ok ? "ok" : "err");
     }
-    setStatus("批量预演完成：" + data.count + " 个流程图");
+    const summary = batch.summary || {};
+    setStatus(
+      "批量预演完成：" + (summary.total || 0) + " 个流程图（批次 " + (batch.batch_id || "-") + "）"
+    );
     loadRunHistory();
   } catch (err) {
     logLine("批量运行失败：" + err.message, "err");

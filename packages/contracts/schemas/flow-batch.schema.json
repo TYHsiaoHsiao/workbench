@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Flow Batch v0.1",
+  "type": "object",
+  "required": [
+    "contract_version",
+    "batch_id",
+    "project",
+    "dry_run",
+    "auto_retry",
+    "fail_fast",
+    "status",
+    "started_at",
+    "graphs",
+    "summary"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.1"
+    },
+    "batch_id": {
+      "type": "string",
+      "pattern": "^batch-[a-z0-9-]{4,80}$"
+    },
+    "project": {
+      "type": "string"
+    },
+    "dry_run": {
+      "type": "boolean"
+    },
+    "auto_retry": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 3
+    },
+    "fail_fast": {
+      "type": "boolean"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "succeeded",
+        "failed"
+      ]
+    },
+    "started_at": {
+      "type": "string"
+    },
+    "finished_at": {
+      "type": "string"
+    },
+    "graphs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "graph_id",
+          "ok",
+          "status",
+          "attempts"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "graph_id": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "succeeded",
+              "failed",
+              "awaiting_confirm",
+              "error"
+            ]
+          },
+          "run_id": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "duration_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "error": {
+            "type": "string"
+          },
+          "attempts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "attempt",
+                "status"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "attempt": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "run_id": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "duration_ms": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "error": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "total",
+        "succeeded",
+        "failed",
+        "skipped",
+        "attempts",
+        "duration_ms"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "succeeded": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "awaiting_confirm": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "attempts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

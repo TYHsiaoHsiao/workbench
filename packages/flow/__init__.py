@@ -61,6 +61,16 @@ from .artifacts import (
     list_snapshots,
     read_snapshot,
 )
+from .batch import (
+    batch_path,
+    batches_dir,
+    list_batches,
+    new_batch_id,
+    read_batch,
+    run_batch,
+    validate_batch,
+    write_batch,
+)
 
 __all__ = [
     "PORT_COMPAT",
@@ -117,6 +127,14 @@ __all__ = [
     "latest_snapshot",
     "list_snapshots",
     "read_snapshot",
+    "batch_path",
+    "batches_dir",
+    "list_batches",
+    "new_batch_id",
+    "read_batch",
+    "run_batch",
+    "validate_batch",
+    "write_batch",
     "TemplateError",
     "get_template",
     "instantiate",

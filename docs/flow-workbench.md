@@ -1,6 +1,6 @@
-# 可视化节点工作台（M1 / M2 / M3 / M4 / M5 / M6 / M7 / M8 / M9 / M11）
+# 可视化节点工作台（M1–M12）
 
-> 版本：1.10.0 · 状态：M1–M11 已完成 · 适用范围：本地单用户
+> 版本：2.0.0 · 状态：M1–M12 已完成 · 适用范围：本地单用户
 
 ## 1. 定位
 
@@ -195,6 +195,10 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 | POST | `/api/generate/jobs/<job_id>/retry` | 重试 failed/canceled 任务（body: project / live） |
 | POST | `/api/generate/jobs/<job_id>/adopt` | 回填 succeeded 结果为项目产物（body: project / stage / kind / note） |
 | POST | `/api/generate/jobs/adopt` | 批量回填全部 succeeded 任务（body: project / stage / kind / note / limit） |
+| POST | `/api/workflows/batch` | 批量运行（批次记录；body: project / graph_ids / all / dry_run / auto_confirm / auto_retry / fail_fast / limit） |
+| GET | `/api/batches?project=&limit=` | 批次列表（最近批次摘要） |
+| GET | `/api/batches/<batch_id>?project=` | 批次详情（每图状态/尝试/耗时/错误） |
+- 兼容别名：`POST /api/runs/batch` 与 `POST /api/workflows/batch` 等价（旧字段 `count`/`results`），前端已迁移到新端点。
 
 鉴权：默认启用令牌，通过 `?token=` 或请求头 `X-Workbench-Token` 传递；静态页面不拦截（仅本机监听）。
 
@@ -277,6 +281,14 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 
 - 批量回填：`adopt_all()` 只处理 succeeded 且未回填任务；逐条 adopt 会互相覆盖 `state.stage_artifacts[stage]` 摘要，因此最后统一 `register_artifacts` 组合登记；CLI `generate adopt --all [--limit]`，Web API `POST /api/generate/jobs/adopt`，生成面板「回填全部已成功」。
 - 流程节点：`generate_refresh`（查询状态）与 `generate_adopt`（回填结果）可在流程图里编排，节点类型 15→17；参数 `job_id` 或 `all=true`，dry-run 只计划。
+### M12：批次编排、批量自动重试与批次历史（2.0.0）
+
+- 批次引擎：`packages/flow/batch.py` 的 `run_batch()` 逐图运行（默认 dry-run、auto_confirm），批次记录落 `00_project/workflows/batches/<batch_id>.json`（契约 `flow-batch` v0.1：图级 `attempts`/`run_id`/`duration_ms`/`error` 与 summary 统计）。
+- 自动重试：失败图按 `--auto-retry 0–3` 重跑（每次新 run_id，成功或进入 awaiting_confirm 即视为该图完成）；`--fail-fast` 首个失败即停，`--limit` 限制图数量。
+- CLI：`flow batch`（JSON 改为 `{ok,project,batch}`，破坏性）与新增 `flow batches`、`flow batch-show`。
+- Web：`POST /api/workflows/batch`、`GET /api/batches`、`GET /api/batches/<batch_id>`；`POST /api/runs/batch` 保留兼容别名；前端批量预演展示尝试与耗时。
+
+
 ## 16. 已知限制
 
 1. 图与 state 仍为单向（图 → state）；不支持从现有 state 自动反推流程图。
@@ -296,6 +308,8 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 
 15. 批量回填只处理最近 `limit` 条已成功且未回填任务，失败任务不进入结果；回填仍只登记凭证 JSON，不下载平台视频。
 16. 生成节点需要显式给出 `job_id` 或 `all=true`，不会自动轮询、自动重试或自动回填。
+17. 批次记录只保存图级汇总与尝试记录，不保存每次重试的完整运行详情；图校验失败的尝试不会生成运行记录。
+18. 自动重试是有限次数（0–3）的同步重跑，不含退避/排队等待；生成长任务请配合 generate 节点与显式状态刷新。
 
 ## 17. 验证
 
@@ -309,12 +323,12 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - M10（1.9.0）新增 12 项测试（重试/回填 10：retry 状态校验与 retried_from、live 覆盖、缺提示词、adopt 状态校验/凭证与 state 登记/重复拒绝/无结果 URL、result_url 提取、未知阶段；Web API 2：重试端点、回填端点），全量 `Ran 316 tests ... OK`；CLI 冒烟：retry / adopt；Web 冒烟：任务详情抽屉、重试与回填按钮。
 - M11（1.10.0）新增 10 项测试（批量回填 3、生成节点 6、批量回填 Web API 1），全量 `Ran 316 tests ... OK`；CLI 冒烟：`generate adopt --all`、`flow validate`（17 类）；Web 冒烟：生成面板状态筛选与「回填全部已成功」。
 - 本地 CI `scripts/run_ci.py`：compile / tests / doctor / brand-guard 全 PASS；品牌守卫 0 命中。
+- M12（2.0.0）新增 7 项测试（批次引擎 6：dry-run 批次记录/自动重试/fail_fast/limit/awaiting_confirm/非法批次；Web API 1：批次运行与历史查询），全量 `Ran 323 tests ... OK`；CLI 冒烟：`flow batch --all --dry-run`、`flow batches`、`flow batch --live --auto-retry 1`、`flow batch-show`；doctor 9 项含 5 份 flow 契约。
 
-## 18. 后续（M12 候选）
+## 18. 后续（M13 候选）
 
+- 批次并行执行与队列化（当前逐图串行）、批次失败图一键恢复。
 - 生成面板内选择回填阶段与逐镜批量操作（05/06/07 混合）。
-- 生成任务的等待/轮询/失败分支与自动重试（在流程图中编排）。
-- 任务详情抽屉的媒体预览（图片/视频缩略）与提交历史过滤。
-- 运行基线定时巡检与趋势图、缩略图文件缓存落盘。
-- macOS / GitHub Actions 远端矩阵与迁移用例扩充。
+- 生成任务的等待/轮询/失败分支在流程图中编排；任务详情抽屉的媒体预览与提交历史过滤。
+- 运行基线定时巡检与趋势图、缩略图文件缓存落盘；macOS / GitHub Actions 远端矩阵与迁移用例扩充。
 
