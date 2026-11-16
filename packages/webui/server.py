@@ -122,8 +122,8 @@ def _dev_signature() -> dict[str, Any]:
     return {"signature": signature, "latest_mtime_ns": latest, "files": files}
 
 
-def _list_projects() -> list[dict[str, Any]]:
-    """扫描默认项目根与仓库同级 projects 目录。"""
+def _list_projects(extra_roots: list[Path] | None = None) -> list[dict[str, Any]]:
+    """扫描默认项目根、仓库同级 projects 目录与调用方指定的额外根。"""
     roots: list[Path] = []
     try:
         from core_router.project import default_projects_root
@@ -132,10 +132,20 @@ def _list_projects() -> list[dict[str, Any]]:
     except Exception:  # pragma: no cover - 环境异常时降级
         pass
     roots.append(WORKBENCH_ROOT.parent / "projects")
+    for extra in extra_roots or []:
+        roots.append(Path(extra))
     found: dict[str, dict[str, Any]] = {}
+    seen: set[str] = set()
     for root in roots:
         if not root.is_dir():
             continue
+        try:
+            resolved = str(root.resolve())
+        except OSError:  # pragma: no cover - 极端环境
+            resolved = str(root)
+        if resolved in seen:
+            continue
+        seen.add(resolved)
         for child in sorted(root.iterdir(), key=lambda item: item.name):
             if not child.is_dir() or not (child / "00_project" / "state.json").is_file():
                 continue
@@ -362,15 +372,17 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             )
             return
         if path == "/api/projects":
-            self._json({"ok": True, "projects": _list_projects()})
+            self._json(
+                {"ok": True, "projects": _list_projects([self.server.project_root.parent])}
+            )
             return
         if path.startswith("/api/projects/") and path.endswith("/artifacts/snapshots"):
-            name = unquote(path[len("/api/projects/"): -len("/artifacts/snapshots")]).strip("/")
+            name = unquote(path[len("/api/projects/"): -len("/artifacts/snapshots")])
             project = resolve_project(name)
             self._json({"ok": True, "project": project.name, "snapshots": list_snapshots(project)})
             return
         if path.startswith("/api/projects/") and path.endswith("/artifacts/diff"):
-            name = unquote(path[len("/api/projects/"): -len("/artifacts/diff")]).strip("/")
+            name = unquote(path[len("/api/projects/"): -len("/artifacts/diff")])
             project = resolve_project(name)
             base = (query.get("base") or [None])[0]
             target = (query.get("target") or [None])[0]
@@ -381,7 +393,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             self._json({"ok": True, "project": project.name, "diff": diff, "text": format_diff_text(diff)})
             return
         if path.startswith("/api/projects/") and path.endswith("/summary"):
-            name = unquote(path[len("/api/projects/"): -len("/summary")]).strip("/")
+            name = unquote(path[len("/api/projects/"): -len("/summary")])
             project = resolve_project(name)
             refresh = "refresh" in query
             # 先确保 workflows/runs 目录存在，再取签名，避免首次请求建目录导致签名漂移。
@@ -687,7 +699,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             self._json({"ok": True, "expression": expression, "next": next_times})
             return
         if path.startswith("/api/projects/") and path.endswith("/artifacts/snapshot"):
-            name = unquote(path[len("/api/projects/"): -len("/artifacts/snapshot")]).strip("/")
+            name = unquote(path[len("/api/projects/"): -len("/artifacts/snapshot")])
             project = resolve_project(name)
             record = create_snapshot(project, label=str(body.get("label") or "") or None)
             self._json({"ok": True, "project": project.name, "snapshot": record})

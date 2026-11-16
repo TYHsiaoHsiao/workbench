@@ -114,7 +114,7 @@ class KnowledgeIndexServiceTest(unittest.TestCase):
         self.assertEqual(ready["meta"]["index_id"], report["index_id"])
         self.assertEqual("full", report["build_mode"])
         self.assertEqual(2, report["documents"])
-        self.assertEqual(str(self.source), report["source_root"])
+        self.assertEqual(str(self.source.resolve()), report["source_root"])
 
     def test_default_index_dir_points_into_repo(self) -> None:
         path = default_index_dir()

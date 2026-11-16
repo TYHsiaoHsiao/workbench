@@ -20,12 +20,26 @@ def run_step(name: str, command: list[str]) -> bool:
 
 
 def main() -> int:
+    has_monitoring = hasattr(sys, "monitoring") and sys.version_info >= (3, 12)
+    coverage_command = [
+        sys.executable,
+        "scripts/coverage_check.py",
+        "--min",
+        "80",
+    ]
+    if has_monitoring:
+        coverage_command += ["--branches", "--min-branches", "50"]
+    else:
+        print(
+            "提示：Python < 3.12 无 sys.monitoring BRANCH 事件，跳过分支覆盖率门禁（仅校验行覆盖率 ≥80%）。",
+            flush=True,
+        )
     steps = [
         ("compile", [sys.executable, "-m", "compileall", "-q", "packages", "workbench.py"]),
         ("doc-links", [sys.executable, "scripts/check_doc_links.py"]),
         ("fr-mapping", [sys.executable, "scripts/check_fr_mapping.py"]),
         ("tests", [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"]),
-        ("coverage", [sys.executable, "scripts/coverage_check.py", "--min", "80", "--branches", "--min-branches", "50"]),
+        ("coverage", coverage_command),
         ("doctor", [sys.executable, "workbench.py", "doctor"]),
         ("bench", [sys.executable, "scripts/bench.py", "--enforce", "--max-cold-start", "1.0"]),
         ("brand-guard", [sys.executable, "workbench.py", "brand-guard"]),
