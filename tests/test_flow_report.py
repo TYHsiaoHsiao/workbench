@@ -1,10 +1,12 @@
 """M33/M35：批次趋势报表（Markdown/CSV/HTML）。"""
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "packages"))
@@ -12,7 +14,8 @@ sys.path.insert(0, str(REPO_ROOT / "packages"))
 from core_router.project import create_project  # noqa: E402
 from flow import default_graph, write_graph_data  # noqa: E402
 from flow.batch import run_batch  # noqa: E402
-from flow.report import REPORT_FORMATS, batch_report  # noqa: E402
+from flow.graph import FlowError  # noqa: E402
+from flow.report import REPORT_FORMATS, batch_report, push_batch_report  # noqa: E402
 
 
 def make_graph(graph_id: str) -> dict:
@@ -90,6 +93,64 @@ class BatchReportTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             batch_report(self.project, fmt="xlsx")
         self.assertEqual(["md", "csv", "html"], list(REPORT_FORMATS))
+
+
+class BatchReportPushTest(unittest.TestCase):
+    """M36：把批次报表摘要推送到 webhook（event=batch.report）。"""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        base = Path(self._tmp.name)
+        report = create_project("报表推送", base=base / "projects")
+        self.project = Path(report["path"])
+        write_graph_data(self.project, make_graph("flow-a"))
+        run_batch(self.project, ["flow-a"], dry_run=True)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_push_posts_report_event(self) -> None:
+        captured: dict = {}
+
+        class _FakeResponse:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def read(self):
+                return b'{"ok":true}'
+
+        def fake_urlopen(request, timeout=10):
+            captured["url"] = request.full_url
+            captured["body"] = json.loads(request.data.decode("utf-8"))
+            captured["timeout"] = timeout
+            return _FakeResponse()
+
+        with mock.patch("urllib.request.urlopen", fake_urlopen):
+            result = push_batch_report(self.project, webhook_url="https://example.test/hook", retries=0)
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["webhook"]["ok"])
+        self.assertEqual(200, result["webhook"]["status_code"])
+        body = captured["body"]
+        self.assertEqual("batch.report", body["event"])
+        self.assertIn("summary", body)
+        self.assertEqual("md", body["format"])
+        self.assertIn("批次报表", body["message"])
+        self.assertIn("批次趋势报表", body["text"])
+
+    def test_push_requires_webhook_url(self) -> None:
+        with self.assertRaises(FlowError) as ctx:
+            push_batch_report(self.project, webhook_url="  ")
+        self.assertIn("缺少 webhook 地址", str(ctx.exception))
+
+    def test_push_unknown_format(self) -> None:
+        with self.assertRaises(ValueError) as ctx:
+            push_batch_report(self.project, webhook_url="https://example.test/hook", fmt="xlsx")
+        self.assertIn("未知报表格式", str(ctx.exception))
 
 
 if __name__ == "__main__":

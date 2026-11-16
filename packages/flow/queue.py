@@ -20,7 +20,7 @@ import json
 import re
 import secrets
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -186,6 +186,32 @@ def summarize_notifications(project_root: str | Path, *, limit: int = 50) -> dic
         "last_message": str(latest.get("message") or "") if latest else "",
         "failed_graphs": [{"graph_id": graph_id, "count": count} for graph_id, count in top],
         "records": records,
+        "state": _alerts_state_info(Path(project_root)),
+    }
+
+
+def _alerts_state_info(project: Path, dedupe_minutes: int = ALERTS_DEDUPE_MINUTES) -> dict[str, Any]:
+    """M36：返回告警静默窗口状态（供 CLI/Web 面板展示，只读）。"""
+    state = _read_alerts_state(project)
+    dedupe = max(0, int(dedupe_minutes or 0))
+    last_at = str(state.get("at") or "")
+    silence_until = ""
+    suppressed = False
+    if dedupe and last_at:
+        try:
+            previous = datetime.fromisoformat(last_at)
+            if previous.tzinfo is None:
+                previous = previous.astimezone()
+            until = previous + timedelta(minutes=dedupe)
+            silence_until = until.isoformat(timespec="seconds")
+            suppressed = datetime.now().astimezone() < until
+        except ValueError:
+            pass
+    return {
+        "dedupe_minutes": dedupe,
+        "last_pushed_at": last_at,
+        "silence_until": silence_until,
+        "suppressed": suppressed,
     }
 
 

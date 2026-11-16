@@ -168,4 +168,49 @@ def batch_report(
     }
 
 
-__all__ = ["COLS", "REPORT_FORMATS", "batch_report"]
+def push_batch_report(
+    project_root: str | Path,
+    *,
+    webhook_url: str,
+    limit: int = 20,
+    fmt: str = "md",
+    webhook_format: str = "generic",
+    retries: int = 0,
+) -> dict[str, Any]:
+    """M36：把批次报表摘要（含报表文本）外送到 webhook（支持飞书格式与重试）。"""
+    from datetime import datetime
+
+    from .graph import FlowError
+    from .notify import WEBHOOK_FORMATS, notify_webhook
+
+    url = str(webhook_url or "").strip()
+    if not url:
+        raise FlowError("缺少 webhook 地址")
+    if webhook_format not in WEBHOOK_FORMATS:
+        raise FlowError(f"未知 webhook 格式: {webhook_format}（可选 {'/'.join(WEBHOOK_FORMATS)}）")
+    report = batch_report(project_root, limit=limit, fmt=fmt)
+    summary = report["summary"]
+    message = (
+        f"批次报表（最近 {summary['batches']} 次）：图运行 {summary['total']}，"
+        f"成功 {summary['succeeded']} / 失败 {summary['failed']}（成功率 {summary['success_rate']}），"
+        f"平均批次耗时 {summary['avg_duration_ms']} ms"
+    )
+    payload = {
+        "at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "event": "batch.report",
+        "project": report["project"],
+        "format": report["format"],
+        "summary": summary,
+        "message": message,
+        "text": report["text"],
+    }
+    webhook = notify_webhook(url, payload, format=webhook_format, retries=retries)
+    return {
+        "ok": bool(webhook.get("ok")),
+        "webhook": webhook,
+        "format": report["format"],
+        "summary": summary,
+    }
+
+
+__all__ = ["COLS", "REPORT_FORMATS", "batch_report", "push_batch_report"]

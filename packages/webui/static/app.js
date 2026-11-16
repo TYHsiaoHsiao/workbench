@@ -1554,11 +1554,25 @@ function renderQueueAlerts() {
   const top = (alerts.failed_graphs || [])
     .map((item) => item.graph_id + "(" + item.count + ")")
     .join("、");
+  const st = alerts.state || {};
+  let stateHtml = "";
+  if (st.dedupe_minutes !== undefined) {
+    if (st.dedupe_minutes > 0 && st.silence_until) {
+      stateHtml =
+        '<div class="queue-meta">静默窗口：' + st.dedupe_minutes + " 分钟 · 上次外送 " + escapeHtml(st.last_pushed_at || "-") +
+        " · 截止 " + escapeHtml(st.silence_until) + (st.suppressed ? "（静默中）" : "（可外送）") + "</div>";
+    } else if (st.dedupe_minutes > 0) {
+      stateHtml = '<div class="queue-meta">静默窗口：' + st.dedupe_minutes + " 分钟 · 尚未外送过告警</div>";
+    } else {
+      stateHtml = '<div class="queue-meta">静默窗口：已关闭（每次失败都会外送）</div>';
+    }
+  }
   box.innerHTML =
     '<div class="queue-head"><span>失败告警：' + alerts.count + " 条 · 最近 " + escapeHtml(alerts.latest_at || "-") + "</span>" +
     '<button id="btn-alerts-refresh" title="刷新失败告警聚合">刷新</button></div>' +
     (alerts.last_message ? '<div class="queue-notice">' + escapeHtml(alerts.last_message) + "</div>" : "") +
-    (top ? '<div class="queue-meta">失败图 Top：' + escapeHtml(top) + "</div>" : "");
+    (top ? '<div class="queue-meta">失败图 Top：' + escapeHtml(top) + "</div>" : "") +
+    stateHtml;
   box.classList.remove("hidden");
   const btn = $("#btn-alerts-refresh");
   if (btn) btn.addEventListener("click", () => loadQueueAlerts());
@@ -1870,6 +1884,7 @@ function renderBatches() {
     '<button data-batch-report="md" title="下载批次趋势报表（Markdown，M34）">报表 MD</button>' +
     '<button data-batch-report="csv" title="下载批次趋势报表（CSV，M34）">报表 CSV</button>' +
     '<button data-batch-report="html" title="下载自包含批次趋势报表（HTML 单文件，M35）">报表 HTML</button>' +
+    '<button id="btn-batch-report-push" title="把批次报表摘要推送到 webhook（M36；支持飞书格式）">推送报表</button>' +
     '<button id="btn-batch-report-preview" title="在面板内预览 Markdown 报表（M34）">报表预览</button>';
   box.classList.remove("hidden");
   box.innerHTML =
@@ -1890,6 +1905,9 @@ function renderBatches() {
   );
   if ($("#btn-batch-report-preview")) {
     $("#btn-batch-report-preview").addEventListener("click", () => previewBatchReport());
+  }
+  if ($("#btn-batch-report-push")) {
+    $("#btn-batch-report-push").addEventListener("click", () => pushBatchReport());
   }
   box.querySelectorAll("[data-batch-recover]").forEach((btn) =>
     btn.addEventListener("click", () => recoverBatchById(btn.dataset.batchRecover))
@@ -1974,6 +1992,27 @@ async function downloadBatchReport(format) {
     setStatus("批次报表已导出：" + format.toUpperCase());
   } catch (err) {
     logLine("导出批次报表失败：" + err.message, "err");
+  }
+}
+
+async function pushBatchReport() {
+  // M36：把批次报表摘要推送到 webhook（支持飞书格式与重试）
+  if (!state.project) return;
+  const url = (window.prompt("推送目标 webhook URL（飞书机器人地址留空可先取消）") || "").trim();
+  if (!url) return;
+  try {
+    const data = await api("/api/batches/report/push", {
+      method: "POST",
+      body: JSON.stringify({ project: state.project, webhook_url: url, limit: 20, format: "md", webhook_format: "generic", retries: 0 }),
+    });
+    const summary = data.summary || {};
+    logLine(
+      "批次报表已推送：共 " + (summary.batches || 0) + " 个批次（状态码 " + ((data.webhook || {}).status_code || "-") + "）",
+      data.ok ? "ok" : "err"
+    );
+    setStatus(data.ok ? "批次报表已推送" : "批次报表推送失败");
+  } catch (err) {
+    logLine("推送批次报表失败：" + err.message, "err");
   }
 }
 

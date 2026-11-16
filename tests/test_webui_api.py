@@ -350,6 +350,42 @@ class WebUIApiTest(unittest.TestCase):
         self.assertIn("批次趋势报表", data["text"])
         self.assertIn("<style>", data["text"])
 
+    def test_batches_report_push_endpoint(self) -> None:
+        # M36：批次报表推送端点（webhook 由 mock 捕获）
+        from unittest import mock as _mock
+
+        status, data = self.client.json(
+            "POST",
+            "/api/workflows/batch",
+            {"project": str(self.project), "dry_run": True, "auto_confirm": True},
+        )
+        self.assertEqual(200, status, msg=data)
+        captured: dict = {}
+
+        def fake_notify(url, payload, *, format="generic", retries=0):
+            captured["url"] = url
+            captured["payload"] = payload
+            return {"configured": True, "ok": True, "format": format, "attempts": 1, "status_code": 200, "error": ""}
+
+        with _mock.patch("flow.notify.notify_webhook", fake_notify):
+            status, data = self.client.json(
+                "POST",
+                "/api/batches/report/push",
+                {"project": str(self.project), "webhook_url": "https://example.test/hook", "limit": 5, "format": "md"},
+            )
+        self.assertEqual(200, status, msg=data)
+        self.assertTrue(data["ok"], msg=data)
+        self.assertEqual("batch.report", captured["payload"]["event"])
+        self.assertEqual(200, data["webhook"]["status_code"])
+        self.assertGreaterEqual(data["summary"]["batches"], 1)
+        # 缺少 webhook_url → 400
+        status, data = self.client.json(
+            "POST",
+            "/api/batches/report/push",
+            {"project": str(self.project)},
+        )
+        self.assertEqual(400, status, msg=data)
+
     def test_batch_recover_endpoint(self) -> None:
         broken = json.loads(json.dumps(self.graph))
         broken["graph_id"] = "flow-broken"

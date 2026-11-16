@@ -42,6 +42,7 @@ from flow import (
     list_baselines,
     list_batches,
     batch_report,
+    push_batch_report,
     list_graphs,
     list_notifications,
     list_queue,
@@ -963,6 +964,26 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 sessions=self.server.sessions,
             )
             self._json(result)
+            return
+        if path == "/api/batches/report/push":
+            project = resolve_project(body.get("project") or str(self.server.project_root))
+            result = push_batch_report(
+                project,
+                webhook_url=str(body.get("webhook_url") or ""),
+                limit=int(body.get("limit") or 20),
+                fmt=str(body.get("format") or "md"),
+                webhook_format=str(body.get("webhook_format") or "generic"),
+                retries=int(body.get("retries") or 0),
+            )
+            self._json(
+                {
+                    "ok": bool(result.get("ok")),
+                    "project": str(project),
+                    "format": result.get("format"),
+                    "summary": result.get("summary"),
+                    "webhook": result.get("webhook"),
+                }
+            )
             return
         if path.startswith("/api/batches/") and path.endswith("/recover"):
             batch_id = unquote(path[len("/api/batches/"): -len("/recover")]).strip("/")

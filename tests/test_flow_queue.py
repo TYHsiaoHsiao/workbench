@@ -436,6 +436,38 @@ class NotificationSummaryTest(unittest.TestCase):
         self.assertEqual(0, summary["count"])
         self.assertEqual([], summary["failed_graphs"])
         self.assertEqual("", summary["latest_at"])
+        state = summary["state"]
+        self.assertEqual(ALERTS_DEDUPE_MINUTES, state["dedupe_minutes"])
+        self.assertEqual("", state["last_pushed_at"])
+        self.assertEqual("", state["silence_until"])
+        self.assertFalse(state["suppressed"])
+
+    def test_state_after_successful_push(self) -> None:
+        # M36：成功外送后状态文件记录上次外送时间与静默截止，并在静默窗口内标记 suppressed
+        self._seed([{"at": "2026-11-16T09:00:00", "status": "failed", "message": "队列运行失败 1 条",
+                     "failed_graphs": ["g1"]}])
+
+        class _FakeResponse:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def read(self):
+                return b'{"ok":true}'
+
+        with mock.patch("urllib.request.urlopen", lambda request, timeout=10: _FakeResponse()):
+            result = push_queue_alerts(
+                self.project, webhook_url="https://example.test/hook", webhook_format="generic", webhook_retries=0
+            )
+        self.assertTrue(result["ok"])
+        state = summarize_notifications(self.project)["state"]
+        self.assertTrue(state["last_pushed_at"])
+        self.assertTrue(state["silence_until"])
+        self.assertTrue(state["suppressed"])
 
 
 class AlertsDigestTest(unittest.TestCase):

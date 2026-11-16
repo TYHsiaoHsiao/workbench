@@ -105,6 +105,7 @@ from flow import (
     summarize_notifications,
     push_queue_alerts,
     batch_report,
+    push_batch_report,
     default_graph,
     format_replay_text,
     instantiate_template,
@@ -1771,7 +1772,43 @@ def cmd_flow_batch_show(args: argparse.Namespace) -> int:
 
 
 def cmd_flow_batch_report(args: argparse.Namespace) -> int:
-    """M33：导出最近批次的趋势报表（Markdown/CSV）。"""
+    """M33：导出最近批次的趋势报表（Markdown/CSV/HTML）；M36：可推送到 webhook。"""
+    push = bool(getattr(args, "push", False))
+    webhook_url = str(getattr(args, "webhook_url", "") or "").strip()
+    webhook_format = str(getattr(args, "webhook_format", "generic") or "generic")
+    webhook_retries = int(getattr(args, "webhook_retries", 0) or 0)
+    if push:
+        try:
+            pushed = push_batch_report(
+                args.project,
+                webhook_url=webhook_url,
+                limit=args.limit,
+                fmt=args.format,
+                webhook_format=webhook_format,
+                retries=webhook_retries,
+            )
+        except (FlowError, ValueError) as exc:
+            _print(f"错误: {exc}")
+            return EXIT_FAIL
+        if args.json:
+            _emit(
+                {
+                    "ok": bool(pushed.get("ok")),
+                    "project": args.project,
+                    "format": pushed.get("format"),
+                    "summary": pushed.get("summary"),
+                    "webhook": pushed.get("webhook"),
+                    "pushed": True,
+                },
+                True,
+            )
+            return EXIT_OK if pushed.get("ok") else EXIT_FAIL
+        webhook = pushed.get("webhook") or {}
+        if pushed.get("ok"):
+            _print(f"批次报表已推送: 状态码 {webhook.get('status_code')}")
+        else:
+            _print(f"批次报表推送失败: {webhook.get('error') or '未知错误'}")
+        return EXIT_OK if pushed.get("ok") else EXIT_FAIL
     try:
         report = batch_report(args.project, limit=args.limit, fmt=args.format)
     except (FlowError, ValueError) as exc:
@@ -3271,6 +3308,10 @@ def build_parser() -> argparse.ArgumentParser:
     flow_batch_report.add_argument("--limit", type=int, default=20, help="最近批次数（默认 20）")
     flow_batch_report.add_argument("--format", choices=["md", "csv", "html"], default="md", help="报表格式（默认 md；html 为自包含单文件，M35）")
     flow_batch_report.add_argument("--out", default="", help="写入文件路径（缺省打印到标准输出）")
+    flow_batch_report.add_argument("--push", action="store_true", help="把报表摘要推送到 webhook（M36）")
+    flow_batch_report.add_argument("--webhook-url", help="推送目标 webhook URL（--push 时必填）")
+    flow_batch_report.add_argument("--webhook-format", choices=["generic", "feishu"], default="generic", help="推送消息格式（M36；feishu=飞书文本消息）")
+    flow_batch_report.add_argument("--webhook-retries", type=int, default=0, help="推送失败额外重试次数（0–3，M36）")
     flow_batch_report.add_argument("--json", action="store_true", help="以 JSON 输出统计摘要")
     flow_batch_report.set_defaults(func=cmd_flow_batch_report)
 

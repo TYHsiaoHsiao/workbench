@@ -204,7 +204,7 @@
 - **片段被截断**：默认 `snippet_chars=120`，超出加 `…`；调大需改配置文件（40–400）。
 - **邻近度加权效果不明显**：默认 `proximity_weight=0.5`，只对同片段内多个查询词生效；可临时 `--weights` 对比或改配置（0–2）。
 
-## 19. 队列运维与批次趋势（M31/M32/M33/M34/M35）
+## 19. 队列运维与批次趋势（M31/M32/M33/M34/M35/M36）
 
 - **`flow cron-preview` 报错**：表达式必须是 5 段（分 时 日 月 周），支持 `*`、`*/n`、`a-b`、`a-b/n` 与逗号列表；含空格时需加引号；解析失败退出码 1。
 - **`flow queue alerts` 显示 0 条**：只统计失败通知 JSONL（`00_project/workflows/queue-notifications.jsonl`，M16 起）；从未产生失败通知或未跑过队列时为空；webhook 未配置不影响聚合。
@@ -217,3 +217,9 @@
 - Web 报表导出/预览 404 或为空：需先有批次记录（`flow batch`/队列运行）；确认服务已重启加载 2.22.0；接口为 `GET /api/batches/report?project=<项目>&limit=20&format=md|csv|html`。
 - HTML 报表打不开或样式丢失：`--format html` / Web「报表 HTML」生成的是自包含单文件（内联 CSS、无外链资源），用浏览器直接打开；若页面空白，检查文件是否被下载为 `.html`、终端/编辑器是否把它当纯文本保存。
 - HTML 与 Markdown/CSV 报表数字不一致：三者都从同一批次快照生成，差异通常来自两次调用之间又跑了新批次；用 `--limit` 固定范围或先看面板「刷新」后再导出。
+
+## 20. 批次报表推送与告警静默窗口（M36）
+
+- **`flow batch-report --push` 无输出/失败**：必须显式提供 `--webhook-url`（Web 面板会弹窗询问）；`--webhook-format feishu` 仅改变请求体格式，URL 仍填飞书机器人 hook 地址；返回 `webhook.error` 为底层连接错误。
+- **Web 告警面板显示「静默中」**：`ALERTS_DEDUPE_MINUTES=30` 内相同失败集合不会重复外送；需要演练可临时用 `flow queue alerts --dedupe-minutes 0 --webhook-url <url>`。
+- **推送接口返回 200 但 `ok=false`**：说明 webhook 已配置但实际发送失败，查看 `webhook.error/status_code`，并检查 URL、网络与目标机器人是否可用。

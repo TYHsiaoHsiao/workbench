@@ -1,3 +1,9 @@
+## [2.23.0] - 2026-11-16 — 批次报表推送与告警静默窗口状态（M36）
+
+- 批次报表推送：`flow batch-report --push --webhook-url <url>`（`event=batch.report`，复用飞书格式 `--webhook-format feishu` 与 `--webhook-retries 0–3`）；Web `POST /api/batches/report/push`；批次面板「推送报表」按钮。
+- 告警静默窗口状态：`summarize_notifications`/`GET /api/queue/alerts` 新增 `state`（`dedupe_minutes`/`last_pushed_at`/`silence_until`/`suppressed`），CLI 与 Web 告警面板展示。
+- 新增 5 项测试，全量 518 项通过；契约无变化，向后兼容（MINOR）。
+
 ## [2.22.0] - 2026-11-16 — 批次报表 HTML 化（M35）
 
 - `packages/flow/report.py`：`REPORT_FORMATS` 增 `html`，新增 `_html_report()` 生成自包含 HTML 报告（内联 CSS、汇总卡片、成功/失败趋势条、明细表；无外部资源与链接）。
