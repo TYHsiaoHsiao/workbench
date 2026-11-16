@@ -179,3 +179,6 @@
 
 - **索引 hybrid 排序与直觉不符**：hybrid 是启发式加权（标题 +2 / 路径 +1 / 短语 +1.5 / 覆盖率 +1），score 仅用于排序；短查询（<3 字）由 LIKE 候选兜底，强制 `--mode fts` 会报「FTS 查询至少需要 3 个字符」。
 - **队列 webhook 未送达**：webhook 只在批次有失败条目时外送；URL 不通/超时会记录在 `run_queue` 返回的 `webhook.error`，但不影响队列结果；未配置 `--webhook-url` 为 no-op；可先用 `flow queue notifications` 查看 JSONL 通知。
+
+- **分支覆盖率低于 50%**：`coverage_check.py --branches --json` 查看 `branch.files` 最低文件；常见于 `cli/main.py` 参数组合、异常分支、webui 错误路径，补测试即可。分支口径只统计可导入 `packages` 模块（模块顶层与动态代码不计入分母）。
+- **覆盖率步骤变慢**：`--branches` 会注册局部 `sys.monitoring` 分支事件，2.13.0 实测约 230s；纯行覆盖（不加 `--branches`）约 65s，日常可先用行覆盖快速反馈。

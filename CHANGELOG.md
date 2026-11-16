@@ -1,3 +1,10 @@
+## [2.13.0] - 2026-11-16 — 分支覆盖率门禁（M25）
+
+- `scripts/coverage_check.py` 新增分支覆盖：`branch_points`/`collect_branch_targets` 用 `dis` 收集条件跳转（if/while/for/短路 and/or），`--branches` 通过 `sys.monitoring` 局部 BRANCH 事件（测试前导入 `packages` 模块，仅登记其 code 对象，避免全解释器事件风暴）；JSON 追加 `branch` 字段，新增 `--min-branches`（默认 50）。
+- `scripts/run_ci.py` 覆盖率步骤改为 `--min 80 --branches --min-branches 50`；`tests/test_ci_scripts.py` 新增 5 项（分支点收集、双向记录、汇总数学、模块登记、外部路径显示）。
+- 2.13.0 实测：行覆盖 80.84%（6374/7885），分支覆盖 50.52%（2914/5768）；全量 434 项测试；CI 九步全绿。
+- 兼容性：行覆盖率口径与门禁不变；分支统计覆盖可导入 `packages` 模块的代码对象（模块顶层/运行期动态代码不计入分母）；覆盖率步骤耗时约 65s→230s。
+
 ## [2.12.0] - 2026-11-15 — 索引混合排序与队列 webhook 通知（M24）
 
 - `index search` 新增 `--mode auto|fts|like|hybrid`（默认 hybrid）：合并 FTS 与 LIKE 候选，按 (path, heading) 去重后按加权分降序（基础分 + 标题命中 2 / 路径命中 1 / 短语命中 1.5 / 词项覆盖率 1）；非法模式与强制 fts 短查询返回可读错误

@@ -218,6 +218,76 @@ class CoverageTest(unittest.TestCase):
         self.assertEqual(100.0, summary["files"][1]["percent"])
 
 
+class BranchCoverageTest(unittest.TestCase):
+    SOURCE = (
+        "def f(x):\n"
+        "    if x > 0:\n"
+        "        return 1\n"
+        "    for i in range(2):\n"
+        "        if i:\n"
+        "            x += 1\n"
+        "    return x\n"
+    )
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.mkdtemp(prefix="wb_branch_")
+        self.root = Path(self._tmp)
+        self.path = self.root / "sample.py"
+        self.path.write_text(self.SOURCE, encoding="utf-8")
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self._tmp, ignore_errors=True)
+
+    def _module(self):
+        return compile(self.SOURCE, str(self.path.resolve()), "exec")
+
+    def test_branch_points_collects_conditions(self) -> None:
+        points = coverage_check.branch_points(self.path)
+        total = sum(len(offsets) for offsets in points.values())
+        self.assertEqual(3, total, points)
+        self.assertTrue(all(offsets for offsets in points.values()))
+
+    def test_mark_branch_outcome_both_sides(self) -> None:
+        static = {str(self.path.resolve()): coverage_check.branch_points(self.path)}
+        module = self._module()
+        code = next(c for c in coverage_check._code_objects(module) if c.co_name == "f")
+        key = coverage_check._match_key(code)
+        offset = next(iter(static[str(self.path.resolve())][key]))
+        point = static[str(self.path.resolve())][key][offset]
+        covered: set = set()
+        coverage_check.mark_branch_outcome(static[str(self.path.resolve())], covered, code, offset, point["target"])
+        coverage_check.mark_branch_outcome(static[str(self.path.resolve())], covered, code, offset, point["fall"])
+        self.assertEqual(2, len(covered))
+        summary = coverage_check.summarize_branches(static, {str(self.path.resolve()): covered})
+        self.assertGreater(summary["percent"], 0.0)
+
+    def test_summarize_branches_math(self) -> None:
+        key = ("f", 1, 10)
+        static = {
+            str(coverage_check.REPO_ROOT / "packages" / "a.py"): {
+                key: {
+                    0: {"line": 2, "target": 6, "fall": 2},
+                    4: {"line": 3, "target": 8, "fall": 6},
+                }
+            }
+        }
+        covered = {str(coverage_check.REPO_ROOT / "packages" / "a.py"): {(key, 0, "taken")}}
+        summary = coverage_check.summarize_branches(static, covered)
+        self.assertEqual(4, summary["total"])
+        self.assertEqual(1, summary["covered"])
+        self.assertEqual(25.0, summary["percent"])
+
+    def test_import_target_code_registers_packages(self) -> None:
+        registry = coverage_check.import_target_code()
+        names = {Path(path).name for path in registry}
+        self.assertIn("queue.py", names)
+        self.assertTrue(any(codes for codes in registry.values()))
+
+    def test_display_name_outside_repo_falls_back(self) -> None:
+        outside = str(Path(tempfile.gettempdir()) / "wb_outside_sample.py")
+        self.assertEqual(Path(outside).as_posix(), coverage_check._display_name(outside))
+
+
 class ReproCheckTest(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.mkdtemp(prefix="wb_repro_")
