@@ -104,6 +104,7 @@ from flow import (
     set_baseline,
     summarize_notifications,
     push_queue_alerts,
+    batch_report,
     default_graph,
     format_replay_text,
     instantiate_template,
@@ -1672,6 +1673,8 @@ def cmd_flow_batch(args: argparse.Namespace) -> int:
             parallel=bool(args.parallel),
             workers=args.workers,
             webhook_url=getattr(args, "webhook_url", None),
+            webhook_format=getattr(args, "webhook_format", "generic"),
+            webhook_retries=getattr(args, "webhook_retries", 0),
         )
     except FlowError as exc:
         _print(f"错误: {exc}")
@@ -1764,6 +1767,37 @@ def cmd_flow_batch_show(args: argparse.Namespace) -> int:
             if attempt.get("error"):
                 line += f"  错误: {attempt['error']}"
             _print(line)
+    return EXIT_OK
+
+
+def cmd_flow_batch_report(args: argparse.Namespace) -> int:
+    """M33：导出最近批次的趋势报表（Markdown/CSV）。"""
+    try:
+        report = batch_report(args.project, limit=args.limit, fmt=args.format)
+    except (FlowError, ValueError) as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    out = str(getattr(args, "out", "") or "").strip()
+    if out:
+        target = Path(out).expanduser()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(report["text"], encoding="utf-8", newline="\n")
+    if args.json:
+        _emit(
+            {
+                "ok": True,
+                "project": report["project"],
+                "format": report["format"],
+                "summary": report["summary"],
+                "out": out or None,
+            },
+            True,
+        )
+        return EXIT_OK
+    if out:
+        _print(f"批次报表已写入: {out}")
+        return EXIT_OK
+    _print(report["text"], end="")
     return EXIT_OK
 
 
@@ -1890,6 +1924,8 @@ def cmd_flow_queue_run(args: argparse.Namespace) -> int:
             projects = [resolve_project(args.project)]
         notify_cmd = shlex.split(args.notify_cmd) if getattr(args, "notify_cmd", None) else None
         webhook_url = getattr(args, "webhook_url", None)
+        webhook_format = getattr(args, "webhook_format", "generic")
+        webhook_retries = getattr(args, "webhook_retries", 0)
         results = [
             run_queue(
                 project,
@@ -1897,6 +1933,8 @@ def cmd_flow_queue_run(args: argparse.Namespace) -> int:
                 retry_failed=max(0, int(getattr(args, "retry_failed", 0) or 0)),
                 notify_cmd=notify_cmd,
                 webhook_url=webhook_url,
+                webhook_format=webhook_format,
+                webhook_retries=webhook_retries,
             )
             for project in projects
         ]
@@ -2016,7 +2054,13 @@ def cmd_flow_queue_alerts(args: argparse.Namespace) -> int:
     pushed: dict | None = None
     if webhook_url:
         try:
-            pushed = push_queue_alerts(project, webhook_url=webhook_url, limit=args.limit)
+            pushed = push_queue_alerts(
+                project,
+                webhook_url=webhook_url,
+                limit=args.limit,
+                webhook_format=getattr(args, "webhook_format", "generic"),
+                webhook_retries=getattr(args, "webhook_retries", 0),
+            )
         except FlowError as exc:
             if args.json:
                 _emit({"ok": False, "error": str(exc)}, True)
@@ -2116,6 +2160,8 @@ def cmd_flow_queue_daemon(args: argparse.Namespace) -> int:
     log_file = getattr(args, "log_file", None)
     notify_cmd = shlex.split(args.notify_cmd) if getattr(args, "notify_cmd", None) else None
     webhook_url = getattr(args, "webhook_url", None)
+    webhook_format = getattr(args, "webhook_format", "generic")
+    webhook_retries = getattr(args, "webhook_retries", 0)
     cron_expression = getattr(args, "cron", None)
     cron_spec = None
     if cron_expression:
@@ -2153,6 +2199,8 @@ def cmd_flow_queue_daemon(args: argparse.Namespace) -> int:
                     retry_failed=retry_failed,
                     notify_cmd=notify_cmd,
                     webhook_url=webhook_url,
+                    webhook_format=webhook_format,
+                    webhook_retries=webhook_retries,
                 )
                 for project in projects
             ]
@@ -3212,8 +3260,18 @@ def build_parser() -> argparse.ArgumentParser:
     flow_batch.add_argument("--workers", type=int, default=2, help="并行线程数（1–8，默认 2）")
     flow_batch.add_argument("--limit", type=int, default=20, help="最多运行流程图数量（默认 20）")
     flow_batch.add_argument("--webhook-url", help="批次失败时外送 webhook（JSON POST，M28）")
+    flow_batch.add_argument("--webhook-format", choices=["generic", "feishu"], default="generic", help="webhook 消息格式（M33；feishu=飞书文本消息）")
+    flow_batch.add_argument("--webhook-retries", type=int, default=0, help="webhook 失败额外重试次数（0–3，M33）")
     flow_batch.add_argument("--json", action="store_true", help="以 JSON 输出")
     flow_batch.set_defaults(func=cmd_flow_batch)
+
+    flow_batch_report = flow_sub.add_parser("batch-report", help="导出最近批次趋势报表（Markdown/CSV，M33）")
+    flow_batch_report.add_argument("--project", required=True, help="项目名或项目路径")
+    flow_batch_report.add_argument("--limit", type=int, default=20, help="最近批次数（默认 20）")
+    flow_batch_report.add_argument("--format", choices=["md", "csv"], default="md", help="报表格式（默认 md）")
+    flow_batch_report.add_argument("--out", default="", help="写入文件路径（缺省打印到标准输出）")
+    flow_batch_report.add_argument("--json", action="store_true", help="以 JSON 输出统计摘要")
+    flow_batch_report.set_defaults(func=cmd_flow_batch_report)
 
     flow_batches = flow_sub.add_parser("batches", help="列出批次运行记录")
     flow_batches.add_argument("--project", required=True, help="项目名或项目路径")
@@ -3282,6 +3340,8 @@ def build_parser() -> argparse.ArgumentParser:
     queue_alerts.add_argument("--project", required=True, help="项目名或项目路径")
     queue_alerts.add_argument("--limit", type=int, default=50, help="聚合最近条数（默认 50）")
     queue_alerts.add_argument("--webhook-url", default=None, help="把告警摘要 JSON POST 到该地址（M32，event=queue.alerts.digest）")
+    queue_alerts.add_argument("--webhook-format", choices=["generic", "feishu"], default="generic", help="webhook 格式（M33；feishu=飞书文本消息）")
+    queue_alerts.add_argument("--webhook-retries", type=int, default=0, help="webhook 失败额外重试次数（0–3，M33）")
     queue_alerts.add_argument("--fail-if-failures", action="store_true", help="存在失败通知时退出码 2（便于 cron/巡检判断）")
     queue_alerts.add_argument("--json", action="store_true", help="以 JSON 输出")
     queue_alerts.set_defaults(func=cmd_flow_queue_alerts)
@@ -3293,6 +3353,8 @@ def build_parser() -> argparse.ArgumentParser:
     queue_run.add_argument("--retry-failed", type=int, default=0, help="先把失败条目重置重试（上限 0–10，默认 0 关闭）")
     queue_run.add_argument("--notify-cmd", help="失败通知外送命令（末尾追加通知文本，如 powershell -c ...）")
     queue_run.add_argument("--webhook-url", help="失败通知 webhook（JSON POST，如钉钉/自建接口）")
+    queue_run.add_argument("--webhook-format", choices=["generic", "feishu"], default="generic", help="webhook 格式（M33；feishu=飞书文本消息）")
+    queue_run.add_argument("--webhook-retries", type=int, default=0, help="webhook 失败额外重试次数（0–3，M33）")
     queue_run.add_argument("--json", action="store_true", help="以 JSON 输出")
     queue_run.set_defaults(func=cmd_flow_queue_run)
 
@@ -3331,6 +3393,8 @@ def build_parser() -> argparse.ArgumentParser:
     queue_daemon.add_argument("--retry-failed", type=int, default=0, help="失败条目自动重置重试上限（0–10，默认 0 关闭）")
     queue_daemon.add_argument("--notify-cmd", help="失败通知外送命令（末尾追加通知文本）")
     queue_daemon.add_argument("--webhook-url", help="失败通知 webhook（JSON POST）")
+    queue_daemon.add_argument("--webhook-format", choices=["generic", "feishu"], default="generic", help="webhook 格式（M33；feishu=飞书文本消息）")
+    queue_daemon.add_argument("--webhook-retries", type=int, default=0, help="webhook 失败额外重试次数（0–3，M33）")
     queue_daemon.add_argument("--log-file", help="守护日志文件（默认 00_project/workflows/daemon.log）")
     queue_daemon.add_argument("--rotate-bytes", type=int, default=1048576, help="日志轮转阈值字节（超限重命名为 .1，默认 1MB）")
     queue_daemon.set_defaults(func=cmd_flow_queue_daemon)

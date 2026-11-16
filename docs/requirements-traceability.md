@@ -1,6 +1,6 @@
 # 需求追溯表（FR ↔ 实现 ↔ 里程碑 ↔ 证据）
 
-> 版本：2.19.0 · 状态：M32（迭代 35）落盘 · 维护规则见文末
+> 版本：2.20.0 · 状态：M33（迭代 36）落盘 · 维护规则见文末
 
 本文件把 PRD §6 的 22 条功能需求（FR-01–FR-22）映射到工作台实现、里程碑与验证证据，作为需求—实现—验收之间的可审计链路。检查工具：`python scripts/check_fr_mapping.py`（CI 门禁，要求 22 条全覆盖、无重复）。
 
@@ -48,6 +48,7 @@
 | 检索结果精细化 | M30（2.17.0） | `knowledge-search` 可选 `min_score`/`max_per_file`/`snippet_chars`/`proximity_weight`、`index_builder._proximity_score`/`_apply_result_limits`、CLI `index search --min-score/--max-per-file`、`tests/test_knowledge_search_config.py`（SearchLimitsTest 9 项） | FR-10、FR-12 |
 | 批次/队列运维收尾（cron 预览/批次趋势/失败告警聚合） | M31（2.18.0） | `flow/queue.py::summarize_notifications`、CLI `flow cron-preview`/`flow queue alerts`、Web `POST /api/cron/preview`/`GET /api/queue/alerts`、`tests/test_flow_queue.py::NotificationSummaryTest`、`tests/test_webui_api.py`（M31 两项） | FR-17、FR-19 |
 | 队列告警运维闭环（告警摘要外送/巡检退出码/一键恢复） | M32（2.19.0） | `packages/flow/queue.py::push_queue_alerts`；CLI `flow queue alerts --webhook-url/--fail-if-failures`；`app.js::recoverAllFailedBatches`；`tests/test_flow_queue.py::AlertsDigestTest`、`tests/test_cli_coverage.py::test_m32_alerts_push_and_exit` |
+| 告警外送增强与批次趋势报表（webhook 重试/飞书格式/报表导出） | M33（2.20.0） | `packages/flow/notify.py`（`build_webhook_body`、`notify_webhook` retries）、`packages/flow/report.py::batch_report`；CLI `flow batch-report`、`--webhook-format/--webhook-retries`；`tests/test_flow_notify.py`、`tests/test_flow_report.py` |
 | 远端 CI 工作流硬化与就绪检查 | M26（2.13.1） | `.github/workflows/ci.yml`（permissions/concurrency/timeout/UTF-8）、`scripts/ci_ready.py`、`docs/github-actions.md`、`tests/test_ci_ready.py` | FR-21、FR-22 |
 | 分支覆盖率门禁 | M25（2.13.0） | `scripts/coverage_check.py --branches`（`dis` 静态分支点 + 局部 `sys.monitoring` BRANCH 事件）、`scripts/run_ci.py` 覆盖率步骤、`tests/test_ci_scripts.py::BranchCoverageTest` | FR-22（NFR） |
 | 索引混合排序与队列 webhook 通知 | M24（2.12.0） | `packages/knowledge_service/index_builder.py::search_index(mode)`、`knowledge_service/index_service.py`（hybrid 排序）、`packages/flow/queue.py::_notify_webhook`、CLI `index search --mode`/`queue run --webhook-url`、`tests/test_knowledge_index.py::HybridSearchTest`、`tests/test_flow_queue.py::FlowQueueWebhookTest` | FR-10、FR-17、FR-19 |

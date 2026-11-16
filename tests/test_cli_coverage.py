@@ -182,6 +182,55 @@ class CliCoverageTest(unittest.TestCase):
         self.assertEqual("queue.alerts.digest", body["event"])
         self.assertEqual(["g1"], body["failed_graphs"])
 
+    def test_m33_batch_report_and_webhook_format(self) -> None:
+        from unittest import mock
+
+        _json_any(run_cli(["flow", "batch", "--project", str(self.project), "--all", "--dry-run", "--json"]))
+        report = _json(run_cli(["flow", "batch-report", "--project", str(self.project),
+                                "--limit", "5", "--json"]))
+        self.assertIn("summary", report)
+        out = self.root / "report.md"
+        code, _ = run_cli(["flow", "batch-report", "--project", str(self.project),
+                           "--format", "md", "--out", str(out)])
+        self.assertEqual(0, code)
+        self.assertTrue(out.is_file())
+        self.assertIn("批次趋势报表", out.read_text(encoding="utf-8"))
+        code, _ = run_cli(["flow", "batch-report", "--project", str(self.project),
+                           "--format", "csv", "--out", str(self.root / "report.csv")])
+        self.assertEqual(0, code)
+
+        class FakeResponse:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        captured: dict = {}
+
+        def fake_urlopen(request, timeout=10):
+            captured["body"] = request.data
+            return FakeResponse()
+
+        notif = self.project / "00_project" / "workflows" / "queue-notifications.jsonl"
+        notif.parent.mkdir(parents=True, exist_ok=True)
+        notif.write_text(
+            '{"at": "2026-11-16T09:00:00", "status": "failed", "message": "x", "failed_graphs": ["g1", "g2"]}\n',
+            encoding="utf-8",
+        )
+        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            code, output = run_cli(
+                ["flow", "queue", "alerts", "--project", str(self.project),
+                 "--webhook-url", "http://example.test/hook", "--webhook-format", "feishu",
+                 "--webhook-retries", "1", "--json"]
+            )
+        self.assertEqual(0, code, msg=output)
+        body = json.loads(captured["body"].decode("utf-8"))
+        self.assertEqual("text", body["msg_type"])
+        self.assertIn("g1、g2", body["content"]["text"])
+
     def test_index_and_knowledge_cli(self) -> None:
         source = self.root / "kb"
         source.mkdir()

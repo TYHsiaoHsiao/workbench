@@ -328,6 +328,8 @@ def run_batch(
     node_types: NodeTypeRegistry | None = None,
     sessions: dict[str, Runner] | None = None,
     webhook_url: str | None = None,
+    webhook_format: str = "generic",
+    webhook_retries: int = 0,
 ) -> dict[str, Any]:
     """批量运行流程图：按图执行（可并行预演）、失败自动重试，返回并保存批次记录。
 
@@ -389,7 +391,9 @@ def run_batch(
             "failed_graphs": failed_graphs,
             "summary": summary,
         }
-        webhook = notify_webhook(webhook_url, payload)
+        webhook = notify_webhook(
+            webhook_url, payload, format=webhook_format, retries=webhook_retries
+        )
     return {
         "ok": record["status"] == "succeeded",
         "project": str(project),

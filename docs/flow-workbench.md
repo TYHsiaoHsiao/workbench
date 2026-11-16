@@ -1,6 +1,6 @@
 # 可视化节点工作台（M1–M16 + 2.0.1 实时预览 + M20 快照回滚 + M28 队列运维）
 
-> 版本：2.19.0 · 状态：M1–M16 + 2.0.1 实时预览 + M20 Web 快照回滚面板 + M22 索引证据卡接入 + M28 队列运维增强 + M31/M32 队列告警运维已完成 · 适用范围：本地单用户
+> 版本：2.20.0 · 状态：M1–M16 + 2.0.1 实时预览 + M20 Web 快照回滚面板 + M22 索引证据卡接入 + M28 队列运维增强 + M31/M32/M33 队列告警与运维报表已完成 · 适用范围：本地单用户
 
 ## 1. 定位
 
@@ -373,8 +373,11 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 25. 通知外送为尽力而为：JSONL 写入失败或外部命令超时/不存在时静默跳过，不阻断队列执行。
 26. daemon 日志轮转只保留一份 `.1` 备份；日志文件在项目 `00_project/workflows/` 内。
 27. 快照回滚为整文件覆盖（state/参考记忆/状态卡/流程图），不做内容级合并；回滚前自动创建安全快照，Web 面板需手动刷新。
+28. webhook 重试为固定退避（1s/2s/3s），不含熔断/去重；飞书格式为纯文本消息（不含富文本/卡片/签名校验）。
+29. 批次趋势报表为只读汇总（最近 N 批），不含图表渲染、跨项目聚合或定时生成。
 
 ## 17. 验证
+- M33（2.20.0）新增 12 项测试（通知格式/重试 7、报表 4、CLI 集成 1），全量 `Ran 509 tests ... OK`；CLI 冒烟：`flow batch-report --format md --out`、`flow queue alerts --webhook-format feishu --webhook-retries 1`。
 
 - 新增 22 项 flow 测试（图校验 12、执行引擎 10）+ 12 项 Web API 测试（M1）；M2/M3 新增 18 项（模板 6、能力节点 6、runner 2、Web API 4）。
 - 全量 `Ran 222 tests ... OK`；CLI 冒烟：模板实例化、dry-run、运行历史、批量预演、失败恢复（live 恢复后 01→02）；`doctor` 8 项含 flow 模板检查。
@@ -396,9 +399,9 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - M20（2.8.0）新增 5 项测试（覆盖率 2、可复现构建 2、Web 回滚 1），全量 `Ran 387 tests ... OK`；CI 九步全 PASS（覆盖率 76.37%、repro PASS、品牌守卫 0 命中）；Web 冒烟：快照创建 → 列表 → dry-run → 回滚。
 - M22（2.10.0）新增 12 项测试（索引证据卡服务 8、CLI 2、flow 节点 2），全量 `Ran 413 tests ... OK`；CLI 冒烟：`knowledge search --index` 生成同契约知识卡；flow `knowledge_search` 节点 `index` 参数运行后写 `00_project/knowledge-cards/<stage>-candidates.json`；索引缺失/无命中分别报可读错误与 `no_evidence`。
 
-## 18. 后续（M29 候选）
+## 18. 后续（M34 候选）
 
-- 索引维护增强：来源目录过滤/多来源合并、索引任务可视化与后台定时增量（FR-10 后续）。
-- 覆盖率从 77.37% 提升至 PRD 目标的 80%（补 webui/queue/batch 低覆盖分支）。
+- 批次报表图表化（趋势图/导出 HTML 报告）与跨项目聚合。
+- webhook 熔断/去重/告警静默窗口；飞书签名校验与消息卡片。
+- 分支覆盖率从 51.38% 提升至 55%（补 queue/batch/report 分支）。
 - GitHub Actions 远端矩阵真实跑通（需配置 remote）与 macOS E2E-02。
-- 快照清理/定时快照策略与 Web 快照 diff 视图。

@@ -1,3 +1,10 @@
+## [2.20.0] - 2026-11-16 — 可视化节点工作台（M33：告警外送增强与批次趋势报表）
+
+- 通知外送增强：`flow` 通知模块抽出 `build_webhook_body`，新增 `--webhook-format feishu`（飞书文本消息 `{"msg_type":"text","content":{"text":...}}`）与 `--webhook-retries 0–3`（固定退避 1s/2s/3s，结果记录 `attempts`）；适用于 `queue alerts`、`queue run`、`queue daemon`、`flow batch`。
+- 批次趋势报表：新增 `flow batch-report --project … [--format md|csv] [--out 路径] [--json]`，汇总最近 N 批次数、图运行数、成功/失败、成功率与平均耗时（`packages/flow/report.py`）。
+- 测试与质量：新增 12 项测试合计 509 项；行覆盖率 81.04%（6897/8511）、分支覆盖率 51.38%（3238/6302）；九步 CI、发行包冒烟、回滚演练 2.19.0→2.20.0→2.19.0 通过。
+- 兼容性：仅新增可选 CLI 参数与报表模块，无契约变更，向后兼容。
+
 ## [2.19.0] - 2026-11-16 — 可视化节点工作台（M32：队列告警运维闭环）
 
 - 告警摘要外送：`flow queue alerts --webhook-url <url>` 聚合失败通知并 POST `event=queue.alerts.digest`（payload：count/latest_at/last_message/failed_graphs/message）；外送失败不抛异常，CLI 以 EXIT_FAIL 报告。

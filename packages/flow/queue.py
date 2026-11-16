@@ -191,6 +191,8 @@ def push_queue_alerts(
     *,
     webhook_url: str,
     limit: int = 50,
+    webhook_format: str = "generic",
+    webhook_retries: int = 0,
 ) -> dict[str, Any]:
     """M32：把失败通知聚合摘要外送到 webhook（cron/告警巡检用，只读，不改队列）。"""
     url = (webhook_url or "").strip()
@@ -213,7 +215,7 @@ def push_queue_alerts(
         "failed_graphs": failed_ids,
         "message": message,
     }
-    webhook = _notify_webhook(url, payload)
+    webhook = _notify_webhook(url, payload, format=webhook_format, retries=webhook_retries)
     return {"ok": bool(webhook.get("ok")), "webhook": webhook, "summary": summary, "payload": payload}
 
 
@@ -356,6 +358,8 @@ def run_queue(
     retry_failed: int = 0,
     notify_cmd: list[str] | None = None,
     webhook_url: str | None = None,
+    webhook_format: str = "generic",
+    webhook_retries: int = 0,
     node_types: NodeTypeRegistry | None = None,
     sessions: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -476,7 +480,9 @@ def run_queue(
         }
         _append_notification(project, payload)
         notified = _notify_external(notify_cmd, message)
-        webhook = _notify_webhook(webhook_url, payload)
+        webhook = _notify_webhook(
+            webhook_url, payload, format=webhook_format, retries=webhook_retries
+        )
     return {
         "ok": all(item.get("status") != "failed" for item in ran),
         "project": str(project),
