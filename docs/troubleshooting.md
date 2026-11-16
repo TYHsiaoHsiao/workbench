@@ -204,7 +204,7 @@
 - **片段被截断**：默认 `snippet_chars=120`，超出加 `…`；调大需改配置文件（40–400）。
 - **邻近度加权效果不明显**：默认 `proximity_weight=0.5`，只对同片段内多个查询词生效；可临时 `--weights` 对比或改配置（0–2）。
 
-## 19. 队列运维与批次趋势（M31/M32/M33/M34）
+## 19. 队列运维与批次趋势（M31/M32/M33/M34/M35）
 
 - **`flow cron-preview` 报错**：表达式必须是 5 段（分 时 日 月 周），支持 `*`、`*/n`、`a-b`、`a-b/n` 与逗号列表；含空格时需加引号；解析失败退出码 1。
 - **`flow queue alerts` 显示 0 条**：只统计失败通知 JSONL（`00_project/workflows/queue-notifications.jsonl`，M16 起）；从未产生失败通知或未跑过队列时为空；webhook 未配置不影响聚合。
@@ -214,4 +214,6 @@
 - **飞书 webhook 收不到消息（M33）**：`--webhook-format feishu` 会发送 `{"msg_type":"text","content":{"text":…}}`；飞书自定义机器人若开启签名校验，需要 secret 计算签名（当前仅支持 webhook URL，不支持签名）；先用「测试」或 curl 验证 URL 可达。
 - **webhook 重试次数与退避（M33）**：`--webhook-retries 0–3` 失败按 1s/2s/3s 退避重试，结果 `attempts` 记录实际尝试次数；重试全部失败不阻断队列/批次执行，可检查结果中的 `error`。
 - 告警重复外送或想立即重推：`queue alerts` 默认 30 分钟静默窗口（`--dedupe-minutes`，`0` 关闭）；窗口内相同失败图集合不再推送，返回 `suppressed=true`；确需立即重推可设 `--dedupe-minutes 0`。
-- Web 报表导出/预览 404 或为空：需先有批次记录（`flow batch`/队列运行）；确认服务已重启加载 2.21.0；接口为 `GET /api/batches/report?project=<项目>&limit=20&format=md|csv`。
+- Web 报表导出/预览 404 或为空：需先有批次记录（`flow batch`/队列运行）；确认服务已重启加载 2.22.0；接口为 `GET /api/batches/report?project=<项目>&limit=20&format=md|csv|html`。
+- HTML 报表打不开或样式丢失：`--format html` / Web「报表 HTML」生成的是自包含单文件（内联 CSS、无外链资源），用浏览器直接打开；若页面空白，检查文件是否被下载为 `.html`、终端/编辑器是否把它当纯文本保存。
+- HTML 与 Markdown/CSV 报表数字不一致：三者都从同一批次快照生成，差异通常来自两次调用之间又跑了新批次；用 `--limit` 固定范围或先看面板「刷新」后再导出。

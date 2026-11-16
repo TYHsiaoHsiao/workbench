@@ -1,3 +1,9 @@
+## [2.22.0] - 2026-11-16 — 批次报表 HTML 化（M35）
+
+- `packages/flow/report.py`：`REPORT_FORMATS` 增 `html`，新增 `_html_report()` 生成自包含 HTML 报告（内联 CSS、汇总卡片、成功/失败趋势条、明细表；无外部资源与链接）。
+- CLI：`flow batch-report --format html --out <路径>`；Web API：`GET /api/batches/report?format=html`；前端批次历史面板新增「报表 HTML」按钮（Blob 下载 `batch-report.html`）。
+- 新增 1 项测试（HTML 报表结构/转义/无外链）合计 513 项；契约无变化，向后兼容。
+
 ## [2.21.0] - 2026-11-16 — 可视化节点工作台（M34：批次报表 Web 化与告警静默窗口）
 
 - 批次报表 Web 化：新增只读 `GET /api/batches/report?project=&limit=&format=md|csv`（返回汇总与报表文本）；Web 批次历史面板新增「报表 MD」「报表 CSV」「报表预览」按钮（下载/面板内预览）；复用 `flow.report.batch_report`，CLI 与 Web 输出一致。

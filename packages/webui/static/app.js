@@ -1869,6 +1869,7 @@ function renderBatches() {
   const reportBtns =
     '<button data-batch-report="md" title="下载批次趋势报表（Markdown，M34）">报表 MD</button>' +
     '<button data-batch-report="csv" title="下载批次趋势报表（CSV，M34）">报表 CSV</button>' +
+    '<button data-batch-report="html" title="下载自包含批次趋势报表（HTML 单文件，M35）">报表 HTML</button>' +
     '<button id="btn-batch-report-preview" title="在面板内预览 Markdown 报表（M34）">报表预览</button>';
   box.classList.remove("hidden");
   box.innerHTML =
@@ -1951,10 +1952,17 @@ async function downloadBatchReport(format) {
     const data = await api(
       "/api/batches/report?project=" + encodeURIComponent(state.project) + "&limit=20&format=" + encodeURIComponent(format)
     );
-    const blob = new Blob([data.text || ""], { type: format === "csv" ? "text/csv;charset=utf-8" : "text/markdown;charset=utf-8" });
+    const mime =
+      format === "csv"
+        ? "text/csv;charset=utf-8"
+        : format === "html"
+          ? "text/html;charset=utf-8"
+          : "text/markdown;charset=utf-8";
+    const ext = format === "csv" ? "csv" : format === "html" ? "html" : "md";
+    const blob = new Blob([data.text || ""], { type: mime });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = "batch-report." + (format === "csv" ? "csv" : "md");
+    link.download = "batch-report." + ext;
     document.body.appendChild(link);
     link.click();
     setTimeout(() => {

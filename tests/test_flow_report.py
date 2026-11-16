@@ -1,4 +1,4 @@
-"""M33：批次趋势报表（Markdown/CSV）。"""
+"""M33/M35：批次趋势报表（Markdown/CSV/HTML）。"""
 from __future__ import annotations
 
 import sys
@@ -69,10 +69,27 @@ class BatchReportTest(unittest.TestCase):
         self.assertEqual(0, report["summary"]["total"])
         self.assertIn("0.0%", report["text"])
 
+    def test_html_report(self) -> None:
+        # M35：自包含 HTML 报表（内联样式、汇总卡片、趋势条、明细表）
+        self._make_batches()
+        report = batch_report(self.project, limit=10, fmt="html")
+        self.assertTrue(report["ok"])
+        self.assertEqual("html", report["format"])
+        self.assertIn("<!DOCTYPE html>", report["text"])
+        self.assertIn("<style>", report["text"])
+        self.assertIn("批次趋势报表", report["text"])
+        self.assertIn("成功率", report["text"])
+        self.assertIn('class="bar-fill', report["text"])
+        self.assertIn("<table>", report["text"])
+        self.assertNotIn("http://", report["text"])
+        self.assertNotIn("https://", report["text"])
+        # HTML 转义：项目名不直接拼接标签
+        self.assertIn("报表测试", report["text"])
+
     def test_unknown_format(self) -> None:
         with self.assertRaises(ValueError):
             batch_report(self.project, fmt="xlsx")
-        self.assertEqual(["md", "csv"], list(REPORT_FORMATS))
+        self.assertEqual(["md", "csv", "html"], list(REPORT_FORMATS))
 
 
 if __name__ == "__main__":

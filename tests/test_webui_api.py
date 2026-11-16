@@ -342,6 +342,13 @@ class WebUIApiTest(unittest.TestCase):
         self.assertEqual(200, status, msg=data)
         self.assertEqual("csv", data["format"])
         self.assertTrue(data["text"].splitlines()[0].startswith("batch_id,"), msg=data["text"][:120])
+        # M35: HTML report endpoint
+        status, data = self.client.json("GET", self._q("/api/batches/report?limit=5&format=html"))
+        self.assertEqual(200, status, msg=data)
+        self.assertEqual("html", data["format"])
+        self.assertIn("<!DOCTYPE html>", data["text"])
+        self.assertIn("批次趋势报表", data["text"])
+        self.assertIn("<style>", data["text"])
 
     def test_batch_recover_endpoint(self) -> None:
         broken = json.loads(json.dumps(self.graph))

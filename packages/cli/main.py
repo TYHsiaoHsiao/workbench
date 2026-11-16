@@ -3266,10 +3266,10 @@ def build_parser() -> argparse.ArgumentParser:
     flow_batch.add_argument("--json", action="store_true", help="以 JSON 输出")
     flow_batch.set_defaults(func=cmd_flow_batch)
 
-    flow_batch_report = flow_sub.add_parser("batch-report", help="导出最近批次趋势报表（Markdown/CSV，M33）")
+    flow_batch_report = flow_sub.add_parser("batch-report", help="导出最近批次趋势报表（Markdown/CSV/HTML，M33/M35）")
     flow_batch_report.add_argument("--project", required=True, help="项目名或项目路径")
     flow_batch_report.add_argument("--limit", type=int, default=20, help="最近批次数（默认 20）")
-    flow_batch_report.add_argument("--format", choices=["md", "csv"], default="md", help="报表格式（默认 md）")
+    flow_batch_report.add_argument("--format", choices=["md", "csv", "html"], default="md", help="报表格式（默认 md；html 为自包含单文件，M35）")
     flow_batch_report.add_argument("--out", default="", help="写入文件路径（缺省打印到标准输出）")
     flow_batch_report.add_argument("--json", action="store_true", help="以 JSON 输出统计摘要")
     flow_batch_report.set_defaults(func=cmd_flow_batch_report)

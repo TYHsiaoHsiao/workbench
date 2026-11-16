@@ -199,6 +199,14 @@ class CliCoverageTest(unittest.TestCase):
                            "--format", "csv", "--out", str(self.root / "report.csv")])
         self.assertEqual(0, code)
 
+        out_html = self.root / "report.html"
+        code, _ = run_cli(["flow", "batch-report", "--project", str(self.project),
+                           "--format", "html", "--out", str(out_html)])
+        self.assertEqual(0, code)
+        html_text = out_html.read_text(encoding="utf-8")
+        self.assertIn("<!DOCTYPE html>", html_text)
+        self.assertIn('class="bar-fill', html_text)
+
         class FakeResponse:
             status = 200
 

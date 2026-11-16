@@ -1,6 +1,6 @@
 # 可视化节点工作台（M1–M16 + 2.0.1 实时预览 + M20 快照回滚 + M28 队列运维）
 
-> 版本：2.21.0 · 状态：M1–M16 + 2.0.1 实时预览 + M20 Web 快照回滚面板 + M22 索引证据卡接入 + M28 队列运维增强 + M31/M32/M33/M34 队列告警、运维报表与批次报表 Web 化已完成 · 适用范围：本地单用户
+> 版本：2.22.0 · 状态：M1–M16 + 2.0.1 实时预览 + M20 Web 快照回滚面板 + M22 索引证据卡接入 + M28 队列运维增强 + M31/M32/M33/M34 队列告警、运维报表与批次报表 Web 化 + M35 批次报表 HTML 化已完成 · 适用范围：本地单用户
 
 ## 1. 定位
 
@@ -379,6 +379,7 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 ## 17. 验证
 - M33（2.20.0）新增 12 项测试（通知格式/重试 7、报表 4、CLI 集成 1），全量 `Ran 509 tests ... OK`；CLI 冒烟：`flow batch-report --format md --out`、`flow queue alerts --webhook-format feishu --webhook-retries 1`。
 - M34（2.21.0）新增 3 项测试（告警去重 2：静默窗口抑制/不同失败图重发；Web API 1：`/api/batches/report` md/csv），全量 `Ran 512 tests ... OK`；Web 冒烟：批次面板「报表 MD/CSV/预览」；`flow queue alerts --dedupe-minutes` 二次推送返回 `suppressed=true`。
+- M35（2.22.0）新增 1 项测试（HTML 报表：doctype/style/汇总卡片/趋势条/明细表/转义/无外链），全量 `Ran 513 tests ... OK`；CLI 冒烟：`flow batch-report --format html --out report.html`；Web 冒烟：批次面板「报表 HTML」下载与 `GET /api/batches/report?format=html`。
 
 - 新增 22 项 flow 测试（图校验 12、执行引擎 10）+ 12 项 Web API 测试（M1）；M2/M3 新增 18 项（模板 6、能力节点 6、runner 2、Web API 4）。
 - 全量 `Ran 222 tests ... OK`；CLI 冒烟：模板实例化、dry-run、运行历史、批量预演、失败恢复（live 恢复后 01→02）；`doctor` 8 项含 flow 模板检查。

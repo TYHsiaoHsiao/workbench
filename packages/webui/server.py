@@ -580,7 +580,7 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 except ValueError:
                     pass
             formats = query.get("format") or []
-            if formats and formats[0] in {"md", "csv"}:
+            if formats and formats[0] in {"md", "csv", "html"}:
                 fmt = formats[0]
             report = batch_report(project, limit=limit, fmt=fmt)
             self._json(
