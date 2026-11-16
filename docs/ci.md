@@ -64,3 +64,10 @@ python scripts/package_smoke.py              # 发行包冒烟
 - **repro 不一致**：确认未修改 `build_release.py` 的时间戳/权限逻辑，且 `.sha256` 与 zip 同时重建；`repro_check.py` 会先覆盖 `.sha256` 再比对两次构建。
 - **文档链接误报**：`check_doc_links.py` 只认可仓库白名单目录（docs、packages、scripts、tests、content、config、contracts、tools、dist）与 `workbench.py` 入口开头的路径；运行时目录（`00_project/`）与 API 路径会被跳过。
 - **远端 CI 未触发**：检查 `git remote -v`、分支保护与 workflow 触发条件；本地用 `run_ci.py` 复现。
+
+## 8. 远端 CI 接入与就绪检查（M26）
+
+- 本地就绪自检：`python scripts/ci_ready.py`（工作流矩阵/步骤 + git remote；`--require-remote` 用于工作流内，缺少 remote 时退出 1）。
+- 工作流硬化：`permissions: contents: read`、`concurrency` 取消同分支旧运行、`timeout-minutes: 30`、`PYTHONIOENCODING=utf-8`、artifact 保留 7 天。
+- 真实远端执行前提：仓库配置 git remote 并在 Settings → Actions 启用；接入步骤与排障见 `docs/github-actions.md`。
+- 当前状态：本地 `git remote` 为空，远端矩阵属于「待配置」而非失败；本地九步 CI 不受影响。

@@ -182,3 +182,6 @@
 
 - **分支覆盖率低于 50%**：`coverage_check.py --branches --json` 查看 `branch.files` 最低文件；常见于 `cli/main.py` 参数组合、异常分支、webui 错误路径，补测试即可。分支口径只统计可导入 `packages` 模块（模块顶层与动态代码不计入分母）。
 - **覆盖率步骤变慢**：`--branches` 会注册局部 `sys.monitoring` 分支事件，2.13.0 实测约 230s；纯行覆盖（不加 `--branches`）约 65s，日常可先用行覆盖快速反馈。
+
+- **GitHub Actions 没有触发**：`python scripts/ci_ready.py --json` 查看工作流是否缺少矩阵/步骤短语与 `git remote` 是否为空；补 remote 后在仓库 Settings → Actions 启用工作流，详见 `docs/github-actions.md`。
+- **远端 Windows 作业中文乱码**：工作流已设 `PYTHONIOENCODING=utf-8`；本地复现时同样设置该环境变量。

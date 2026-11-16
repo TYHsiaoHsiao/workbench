@@ -1,4 +1,4 @@
-# 命令卡（v2.13.0）
+# 命令卡（v2.13.1）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -157,6 +157,7 @@ python workbench.py flow run --project 雨夜回声 --graph flow-main --dry-run
 | 命令 | 作用 |
 |---|---|
 | `python scripts/run_ci.py` | 本地 CI：编译 → 文档链接 → FR 映射 → 测试 → 覆盖率≥80%/分支≥50% → doctor → 冷启动基准 → 品牌守卫 → 可复现构建 |
+| `python scripts/ci_ready.py [--require-remote] [--json]` | 远端 CI 就绪检查：工作流矩阵/步骤 + `git remote`（M26，8 项测试） |
 | `python scripts/check_doc_links.py [--json]` | 文档链接检查：Markdown 链接与行内代码中的仓库内路径必须存在 |
 | `python scripts/check_fr_mapping.py [--json]` | FR 追溯映射检查：FR-01–FR-22 全覆盖、无重复/非预期 ID，并与 PRD 头衔交叉校验（M19） |
 | `python scripts/coverage_check.py [--min 80] [--json] [--out <文件>]` | 零依赖行覆盖率（`packages/`，跳过 docstring/import；2.11.0 实测 80.8%，CI `--min 80`） |
@@ -180,10 +181,11 @@ python workbench.py flow run --project 雨夜回声 --graph flow-main --dry-run
 
 | 命令/文件 | 作用 |
 |---|---|
-| `.github/workflows/ci.yml` | GitHub Actions：ubuntu/windows/macos × Python 3.11/3.12，跑 run_ci → build_release → package_smoke → 上传 artifact |
+| `.github/workflows/ci.yml` | GitHub Actions：ubuntu/windows/macos × Python 3.11/3.12；M26 硬化 permissions/concurrency/timeout/UTF-8 并加 ci_ready 就绪步骤 → run_ci → build_release → package_smoke → 上传 artifact |
 | `python scripts/coverage_check.py [--min 80] [--branches --min-branches 50] [--json]` | 行覆盖率 2.13.0 实测 80.84% + 分支覆盖率 50.52%（CI 门禁 80/50） |
 | `python scripts/repro_check.py [--json]` | 可复现构建：两次构建与 `.sha256` 三方一致 |
 | `docs/ci.md` | 门禁清单/矩阵/覆盖率策略/排障 |
+| `docs/github-actions.md` | 远端 CI 接入指南（M26：remote/Actions、矩阵耗时、artifact、排障） |
 
 ## 13. 知识库索引维护（M21/M22/M24）
 

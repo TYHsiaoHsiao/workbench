@@ -1,6 +1,6 @@
 # 需求追溯表（FR ↔ 实现 ↔ 里程碑 ↔ 证据）
 
-> 版本：2.13.0 · 状态：M25（迭代 28）落盘 · 维护规则见文末
+> 版本：2.13.1 · 状态：M26（迭代 29）落盘 · 维护规则见文末
 
 本文件把 PRD §6 的 22 条功能需求（FR-01–FR-22）映射到工作台实现、里程碑与验证证据，作为需求—实现—验收之间的可审计链路。检查工具：`python scripts/check_fr_mapping.py`（CI 门禁，要求 22 条全覆盖、无重复）。
 
@@ -43,7 +43,8 @@
 | PRD 验收工具链/NFR 基准 | M17（2.5.0） | `check_doc_links.py`、`package_smoke.py`、`bench.py` | FR-20、FR-22 |
 | 项目状态快照与回滚/发行包回滚演练 | M18（2.6.0） | `core_router/rollback.py`、`rollback_drill.py` | FR-21、FR-22 |
 | 索引混合排序与队列 webhook 通知 | M24（2.12.0）
-| 分支覆盖率门禁 | M25（2.13.0） | `scripts/coverage_check.py --branches`（`dis` 静态分支点 + 局部 `sys.monitoring` BRANCH 事件）、`scripts/run_ci.py` 覆盖率步骤、`tests/test_ci_scripts.py::BranchCoverageTest` | FR-22（NFR） | | `packages/knowledge_service/index_builder.py::search_index(mode)`、`knowledge_service/index_service.py`（hybrid 排序）、`packages/flow/queue.py::_notify_webhook`、CLI `index search --mode`/`queue run --webhook-url`、`tests/test_knowledge_index.py::HybridSearchTest`、`tests/test_flow_queue.py::FlowQueueWebhookTest` | FR-10、FR-17、FR-19 |
+| 分支覆盖率门禁 | M25（2.13.0）
+| 远端 CI 工作流硬化与就绪检查 | M26（2.13.1） | `.github/workflows/ci.yml`（permissions/concurrency/timeout/UTF-8）、`scripts/ci_ready.py`、`docs/github-actions.md`、`tests/test_ci_ready.py` | FR-21、FR-22 | | `scripts/coverage_check.py --branches`（`dis` 静态分支点 + 局部 `sys.monitoring` BRANCH 事件）、`scripts/run_ci.py` 覆盖率步骤、`tests/test_ci_scripts.py::BranchCoverageTest` | FR-22（NFR） | | `packages/knowledge_service/index_builder.py::search_index(mode)`、`knowledge_service/index_service.py`（hybrid 排序）、`packages/flow/queue.py::_notify_webhook`、CLI `index search --mode`/`queue run --webhook-url`、`tests/test_knowledge_index.py::HybridSearchTest`、`tests/test_flow_queue.py::FlowQueueWebhookTest` | FR-10、FR-17、FR-19 |
 | 覆盖率提升与 80% 门禁 | M23（2.11.0） | `tests/test_cli_coverage.py`、`tests/test_webui_api.py::test_http_error_paths`、`scripts/coverage_check.py --min 80`、`scripts/run_ci.py` | FR-22（NFR） |
 | 索引证据卡接入知识服务 | M22（2.10.0） | `packages/knowledge_service/index_service.py`、CLI `knowledge search --index`、flow `knowledge_search` 节点 `index` 参数、`tests/test_knowledge_index_service.py` | FR-10、FR-12、FR-13 |
 | 知识库索引维护（重建/增量/FTS5 检索） | M21（2.9.0） | `packages/knowledge_service/index_builder.py`、`knowledge-index` 契约、`index` CLI | FR-10、FR-17 |

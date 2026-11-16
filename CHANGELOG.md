@@ -1,3 +1,10 @@
+## [2.13.1] - 2026-11-16 — 远端 CI 工作流硬化与就绪检查（M26）
+
+- `.github/workflows/ci.yml` 硬化：`permissions: contents: read`、`concurrency`（取消同分支旧运行）、`timeout-minutes: 30`、`PYTHONIOENCODING=utf-8`、artifact 保留 7 天，并新增 readiness 步骤。
+- 新增 `scripts/ci_ready.py`：零依赖检查工作流矩阵/关键步骤与 `git remote` 配置；`--require-remote` 供工作流使用，`--json` 便于脚本消费；无 remote 时本地仅提示不失败。
+- 新增 `docs/github-actions.md`（接入步骤、就绪自检、每作业内容、耗时、排障）与 `tests/test_ci_ready.py` 8 项测试。
+- 兼容性：无运行时行为变化、无契约变化；真实远端执行仍需配置 git remote（当前本地无 remote，属待配置状态）。
+
 ## [2.13.0] - 2026-11-16 — 分支覆盖率门禁（M25）
 
 - `scripts/coverage_check.py` 新增分支覆盖：`branch_points`/`collect_branch_targets` 用 `dis` 收集条件跳转（if/while/for/短路 and/or），`--branches` 通过 `sys.monitoring` 局部 BRANCH 事件（测试前导入 `packages` 模块，仅登记其 code 对象，避免全解释器事件风暴）；JSON 追加 `branch` 字段，新增 `--min-branches`（默认 50）。
