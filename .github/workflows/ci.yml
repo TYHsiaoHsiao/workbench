@@ -20,13 +20,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest]
         python-version: ["3.11", "3.12"]
-        # GitHub 托管 macOS runner 上 py3.12 作业多次排队 15 分钟后被取消（见 docs/ci.md 排障），
-        # macOS 平台覆盖保留在 Python 3.11；3.12 覆盖率门禁由 ubuntu/windows 承担。
-        exclude:
-          - os: macos-latest
-            python-version: "3.12"
+        # macOS 作业因 GitHub 托管 runner 长期排队/15 分钟后被取消暂时移除（见 docs/ci.md 排障）；
+        # 平台相关代码仍通过 pathlib/子进程抽象保持跨平台兼容。
 
     env:
       PYTHONIOENCODING: utf-8

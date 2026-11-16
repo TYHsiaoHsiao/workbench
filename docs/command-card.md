@@ -182,7 +182,7 @@ python workbench.py flow run --project 雨夜回声 --graph flow-main --dry-run
 
 | 命令/文件 | 作用 |
 |---|---|
-| `.github/workflows/ci.yml` | GitHub Actions：ubuntu/windows × Python 3.11/3.12 + macOS × 3.11（共 5 作业；macOS 3.12 因 runner 排队不稳定暂排除）；M26 硬化 permissions/concurrency/timeout/UTF-8 并加 ci_ready 就绪步骤 → run_ci → build_release → package_smoke → 上传 artifact |
+| `.github/workflows/ci.yml` | GitHub Actions：ubuntu/windows × Python 3.11/3.12（共 4 作业；macOS 因托管 runner 长期排队被取消暂移除）；M26 硬化 permissions/concurrency/timeout/UTF-8 并加 ci_ready 就绪步骤 → run_ci → build_release → package_smoke → 上传 artifact |
 | `python scripts/coverage_check.py [--min 80] [--branches --min-branches 50] [--json]` | 行覆盖率 2.13.0 实测 80.84% + 分支覆盖率 50.52%（CI 门禁 80/50） |
 | `python scripts/repro_check.py [--json]` | 可复现构建：两次构建与 `.sha256` 三方一致 |
 | `docs/ci.md` | 门禁清单/矩阵/覆盖率策略/排障 |

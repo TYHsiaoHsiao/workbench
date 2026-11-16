@@ -115,6 +115,13 @@
 
 # 变更日志
 
+## [2.24.2] - 2026-11-16 — CI 矩阵修正（移除 macOS）
+
+- GitHub 托管 macOS runner 持续不可用：`macos-latest` 作业排队约 15 分钟后被取消（无步骤输出），与代码无关；2.24.1 中排除 `macos + 3.12` 后仍复现，故从矩阵移除 macOS。
+- `.github/workflows/ci.yml` 矩阵改为 `ubuntu-latest` / `windows-latest` × Python `3.11` / `3.12`，共 4 个作业；macOS 平台相关代码仍通过 `pathlib`/子进程抽象保持兼容。
+- 同步更新 `README.md`、`docs/ci.md`、`docs/github-actions.md`、`docs/command-card.md`、`docs/troubleshooting.md`。
+- 无代码/契约变更；本地九步 CI 与发行流程不变。
+
 ## [2.24.1] - 2026-11-16 — CI 矩阵补丁（macOS + Python 3.12 排除）
 
 - 远端 CI 中 `test (macos-latest, py3.12)` 作业反复排队 15 分钟后被 GitHub 取消（无步骤输出），与代码无关。

@@ -229,8 +229,9 @@
 
 ### macOS 作业排队被取消（远端 CI）
 
-现象：GitHub Actions 中 `test (macos-latest, py3.12)` 长时间 `queued`，约 15 分钟后变 `cancelled`，日志无步骤输出，其余作业成功。
+现象：GitHub Actions 中 `test (macos-latest, py3.11)` 长时间 `queued`，约 15 分钟后变 `cancelled`，日志无步骤输出，其余作业成功。
 
-原因：GitHub 托管 macOS runner 调度不稳定（排队期间未分配 runner），与工作台代码无关。
+原因：GitHub 托管 macOS runner 调度不可用/长期排队（同一时段仅偶尔能分配到 runner），与工作台代码无关。
 
-处理：工作流矩阵已排除 `macos-latest + 3.12`，macOS 平台覆盖保留在 Python 3.11；如需恢复，观察 `gh run list --json` 中 macOS 作业排队情况后移除 `docs/ci.md` 中对应 `exclude`。
+处理：工作流矩阵已改为 ubuntu/windows × Python 3.11/3.12（4 作业），不再默认包含 macOS；如需恢复 macOS 验证，
+观察 `gh run list --json` 中 macOS runner 可用性后，把 `macos-latest` 加回 `.github/workflows/ci.yml` 的 `os` 列表并观察 1–2 个 run。
