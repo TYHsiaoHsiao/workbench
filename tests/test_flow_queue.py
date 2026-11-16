@@ -14,7 +14,9 @@ sys.path.insert(0, str(REPO_ROOT / "packages"))
 from core_router.project import create_project  # noqa: E402
 from flow import FlowError, default_graph, write_graph_data  # noqa: E402
 from flow.queue import (  # noqa: E402
+    ALERTS_DEDUPE_MINUTES,
     QUEUE_FILE_NAME,
+    alerts_state_path,
     cancel_entry,
     enqueue,
     list_notifications,
@@ -489,3 +491,45 @@ class AlertsDigestTest(unittest.TestCase):
     def test_push_requires_webhook(self) -> None:
         with self.assertRaises(FlowError):
             push_queue_alerts(self.project, webhook_url="")
+
+    def test_push_dedupe_suppresses_repeat(self) -> None:
+        """M34：相同告警在静默窗口内只外送一次；dedupe_minutes=0 可关闭。"""
+        self._seed([{"at": "2026-11-16T09:00:00", "status": "failed", "message": "x", "failed_graphs": ["g1"]}])
+        calls = {"n": 0}
+
+        def fake_urlopen(request, timeout=10):
+            calls["n"] += 1
+            return _FakeResponse(200)
+
+        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            first = push_queue_alerts(self.project, webhook_url="http://example.test/a", dedupe_minutes=30)
+            second = push_queue_alerts(self.project, webhook_url="http://example.test/a", dedupe_minutes=30)
+        self.assertFalse(first.get("suppressed"))
+        self.assertTrue(second.get("suppressed"))
+        self.assertTrue(second["webhook"]["skipped"])
+        self.assertEqual(1, calls["n"])
+        self.assertTrue(alerts_state_path(self.project).is_file())
+        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            third = push_queue_alerts(self.project, webhook_url="http://example.test/a", dedupe_minutes=0)
+        self.assertFalse(third.get("suppressed"))
+        self.assertEqual(2, calls["n"])
+
+    def test_push_dedupe_different_failed_set_sends(self) -> None:
+        self._seed([{"at": "2026-11-16T09:00:00", "status": "failed", "message": "x", "failed_graphs": ["g1"]}])
+        calls = {"n": 0}
+
+        def fake_urlopen(request, timeout=10):
+            calls["n"] += 1
+            return _FakeResponse(200)
+
+        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            push_queue_alerts(self.project, webhook_url="http://example.test/a")
+            self._seed(
+                [
+                    {"at": "2026-11-16T09:00:00", "status": "failed", "message": "x", "failed_graphs": ["g1"]},
+                    {"at": "2026-11-16T10:00:00", "status": "failed", "message": "y", "failed_graphs": ["g2"]},
+                ]
+            )
+            changed = push_queue_alerts(self.project, webhook_url="http://example.test/a")
+        self.assertFalse(changed.get("suppressed"))
+        self.assertEqual(2, calls["n"])

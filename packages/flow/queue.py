@@ -15,6 +15,7 @@ pending（``attempts`` 累加），``list_notifications``/``notify_cmd`` 记录�
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import secrets
@@ -42,6 +43,8 @@ CONTRACT_VERSION = "0.1"
 QUEUE_SCHEMA = "flow-queue.schema.json"
 QUEUE_FILE_NAME = "queue.json"
 NOTIFY_LOG_NAME = "queue-notifications.jsonl"
+ALERTS_STATE_NAME = "queue-alerts-state.json"
+ALERTS_DEDUPE_MINUTES = 30
 QUEUE_ID_RE = re.compile(r"^q-[a-z0-9-]{4,80}$")
 QUEUE_STATUSES = ("pending", "running", "succeeded", "failed", "canceled")
 
@@ -186,6 +189,35 @@ def summarize_notifications(project_root: str | Path, *, limit: int = 50) -> dic
     }
 
 
+def alerts_state_path(project_root: str | Path) -> Path:
+    """M34：告警静默窗口状态文件（记录最近一次已发出的告警指纹与时间）。"""
+    return store.workflows_dir(Path(project_root)) / ALERTS_STATE_NAME
+
+
+def _alerts_signature(summary: dict[str, Any], event: str) -> str:
+    failed = sorted(str(item.get("graph_id") or "") for item in summary.get("failed_graphs") or [])
+    raw = json.dumps(
+        {"event": event, "count": int(summary.get("count") or 0), "failed": failed},
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _read_alerts_state(project: Path) -> dict[str, Any]:
+    path = alerts_state_path(project)
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write_alerts_state(project: Path, state: dict[str, Any]) -> None:
+    store.atomic_write_json(alerts_state_path(project), state)
+
+
 def push_queue_alerts(
     project_root: str | Path,
     *,
@@ -193,8 +225,13 @@ def push_queue_alerts(
     limit: int = 50,
     webhook_format: str = "generic",
     webhook_retries: int = 0,
+    dedupe_minutes: int = ALERTS_DEDUPE_MINUTES,
 ) -> dict[str, Any]:
-    """M32：把失败通知聚合摘要外送到 webhook（cron/告警巡检用，只读，不改队列）。"""
+    """M32：把失败通知聚合摘要外送到 webhook（cron/告警巡检用，只读，不改队列）。
+
+    M34：相同告警（失败通知条数与失败图集合一致）在 ``dedupe_minutes`` 静默窗口内
+    只外送一次；``dedupe_minutes=0`` 关闭去重。
+    """
     url = (webhook_url or "").strip()
     if not url:
         raise FlowError("缺少 webhook 地址")
@@ -215,8 +252,45 @@ def push_queue_alerts(
         "failed_graphs": failed_ids,
         "message": message,
     }
+    state = _read_alerts_state(project)
+    signature = _alerts_signature(summary, "queue.alerts.digest")
+    dedupe = max(0, int(dedupe_minutes or 0))
+    now = datetime.now().astimezone()
+    if dedupe and state.get("signature") == signature and state.get("at"):
+        try:
+            previous = datetime.fromisoformat(str(state["at"]))
+            if previous.tzinfo is None:
+                previous = previous.astimezone()
+            elapsed_minutes = (now - previous).total_seconds() / 60.0
+        except ValueError:
+            elapsed_minutes = None
+        if elapsed_minutes is not None and elapsed_minutes < dedupe:
+            webhook = {
+                "configured": True,
+                "ok": True,
+                "skipped": True,
+                "reason": f"相同告警在 {dedupe} 分钟静默窗口内，已跳过外送",
+            }
+            return {
+                "ok": True,
+                "suppressed": True,
+                "webhook": webhook,
+                "summary": summary,
+                "payload": payload,
+            }
     webhook = _notify_webhook(url, payload, format=webhook_format, retries=webhook_retries)
-    return {"ok": bool(webhook.get("ok")), "webhook": webhook, "summary": summary, "payload": payload}
+    if webhook.get("ok"):
+        _write_alerts_state(
+            project,
+            {"signature": signature, "at": now.isoformat(timespec="seconds"), "count": summary.get("count")},
+        )
+    return {
+        "ok": bool(webhook.get("ok")),
+        "suppressed": False,
+        "webhook": webhook,
+        "summary": summary,
+        "payload": payload,
+    }
 
 
 def _notify_external(notify_cmd: list[str] | None, message: str) -> bool:

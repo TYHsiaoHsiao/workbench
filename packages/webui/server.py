@@ -41,6 +41,7 @@ from flow import (
     instantiate_template,
     list_baselines,
     list_batches,
+    batch_report,
     list_graphs,
     list_notifications,
     list_queue,
@@ -567,6 +568,30 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 except ValueError:
                     pass
             self._json({"ok": True, "project": str(project), "batches": list_batches(project, limit=limit)})
+            return
+        if path == "/api/batches/report":
+            project = self._project_from(query)
+            limit = 20
+            fmt = "md"
+            values = query.get("limit") or []
+            if values:
+                try:
+                    limit = max(1, min(200, int(values[0])))
+                except ValueError:
+                    pass
+            formats = query.get("format") or []
+            if formats and formats[0] in {"md", "csv"}:
+                fmt = formats[0]
+            report = batch_report(project, limit=limit, fmt=fmt)
+            self._json(
+                {
+                    "ok": True,
+                    "project": report["project"],
+                    "format": report["format"],
+                    "summary": report["summary"],
+                    "text": report["text"],
+                }
+            )
             return
         if path.startswith("/api/batches/"):
             project = self._project_from(query)

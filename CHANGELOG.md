@@ -1,3 +1,9 @@
+## [2.21.0] - 2026-11-16 — 可视化节点工作台（M34：批次报表 Web 化与告警静默窗口）
+
+- 批次报表 Web 化：新增只读 `GET /api/batches/report?project=&limit=&format=md|csv`（返回汇总与报表文本）；Web 批次历史面板新增「报表 MD」「报表 CSV」「报表预览」按钮（下载/面板内预览）；复用 `flow.report.batch_report`，CLI 与 Web 输出一致。
+- 告警静默窗口：`flow queue alerts --dedupe-minutes N`（默认 30，0 关闭）——相同告警（失败通知条数与失败图集合一致）在窗口内只外送一次，状态记录在 `00_project/workflows/queue-alerts-state.json`，结果新增 `suppressed` 标记。
+- 测试：新增 3 项（告警去重 2、Web 报表端点 1），全量 512 项通过；契约无变化，向后兼容 MINOR。
+
 ## [2.20.0] - 2026-11-16 — 可视化节点工作台（M33：告警外送增强与批次趋势报表）
 
 - 通知外送增强：`flow` 通知模块抽出 `build_webhook_body`，新增 `--webhook-format feishu`（飞书文本消息 `{"msg_type":"text","content":{"text":...}}`）与 `--webhook-retries 0–3`（固定退避 1s/2s/3s，结果记录 `attempts`）；适用于 `queue alerts`、`queue run`、`queue daemon`、`flow batch`。

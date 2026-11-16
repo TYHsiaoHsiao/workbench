@@ -323,6 +323,26 @@ class WebUIApiTest(unittest.TestCase):
         self.assertTrue(batch["parallel"])
         self.assertEqual(2, batch["workers"])
 
+    def test_batches_report_endpoint(self) -> None:
+        status, data = self.client.json(
+            "POST",
+            "/api/workflows/batch",
+            {"project": str(self.project), "dry_run": True, "auto_confirm": True},
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertTrue(data["ok"], msg=data)
+        status, data = self.client.json("GET", self._q("/api/batches/report?limit=5&format=md"))
+        self.assertEqual(200, status, msg=data)
+        self.assertTrue(data["ok"], msg=data)
+        self.assertEqual("md", data["format"])
+        self.assertGreaterEqual(data["summary"]["batches"], 1)
+        self.assertIn("批次趋势报表", data["text"])
+        self.assertIn("success_rate", data["summary"])
+        status, data = self.client.json("GET", self._q("/api/batches/report?limit=5&format=csv"))
+        self.assertEqual(200, status, msg=data)
+        self.assertEqual("csv", data["format"])
+        self.assertTrue(data["text"].splitlines()[0].startswith("batch_id,"), msg=data["text"][:120])
+
     def test_batch_recover_endpoint(self) -> None:
         broken = json.loads(json.dumps(self.graph))
         broken["graph_id"] = "flow-broken"

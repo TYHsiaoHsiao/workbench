@@ -2060,6 +2060,7 @@ def cmd_flow_queue_alerts(args: argparse.Namespace) -> int:
                 limit=args.limit,
                 webhook_format=getattr(args, "webhook_format", "generic"),
                 webhook_retries=getattr(args, "webhook_retries", 0),
+                dedupe_minutes=getattr(args, "dedupe_minutes", None) if getattr(args, "dedupe_minutes", None) is not None else 30,
             )
         except FlowError as exc:
             if args.json:
@@ -3343,6 +3344,7 @@ def build_parser() -> argparse.ArgumentParser:
     queue_alerts.add_argument("--webhook-format", choices=["generic", "feishu"], default="generic", help="webhook 格式（M33；feishu=飞书文本消息）")
     queue_alerts.add_argument("--webhook-retries", type=int, default=0, help="webhook 失败额外重试次数（0–3，M33）")
     queue_alerts.add_argument("--fail-if-failures", action="store_true", help="存在失败通知时退出码 2（便于 cron/巡检判断）")
+    queue_alerts.add_argument("--dedupe-minutes", type=int, default=30, help="相同告警静默窗口分钟数（M34；0=关闭去重，默认 30）")
     queue_alerts.add_argument("--json", action="store_true", help="以 JSON 输出")
     queue_alerts.set_defaults(func=cmd_flow_queue_alerts)
 

@@ -1866,18 +1866,29 @@ function renderBatches() {
   const recoverAllBtn = failedBatches.length
     ? '<button id="btn-batch-recover-all" title="依次重跑最近失败批次的失败图（最多 5 个批次，M32）">恢复全部失败图</button>'
     : "";
+  const reportBtns =
+    '<button data-batch-report="md" title="下载批次趋势报表（Markdown，M34）">报表 MD</button>' +
+    '<button data-batch-report="csv" title="下载批次趋势报表（CSV，M34）">报表 CSV</button>' +
+    '<button id="btn-batch-report-preview" title="在面板内预览 Markdown 报表（M34）">报表预览</button>';
   box.classList.remove("hidden");
   box.innerHTML =
     '<div class="queue-head"><span>批次历史（最近 ' +
     batchCache.length +
     ' 次）</span><button id="btn-batch-refresh" title="刷新批次历史">刷新</button>' +
     recoverAllBtn +
+    reportBtns +
     "</div>" +
     renderBatchTrend() +
     rows;
   $("#btn-batch-refresh").addEventListener("click", () => loadBatches());
   if ($("#btn-batch-recover-all")) {
     $("#btn-batch-recover-all").addEventListener("click", () => recoverAllFailedBatches());
+  }
+  box.querySelectorAll("[data-batch-report]").forEach((btn) =>
+    btn.addEventListener("click", () => downloadBatchReport(btn.dataset.batchReport))
+  );
+  if ($("#btn-batch-report-preview")) {
+    $("#btn-batch-report-preview").addEventListener("click", () => previewBatchReport());
   }
   box.querySelectorAll("[data-batch-recover]").forEach((btn) =>
     btn.addEventListener("click", () => recoverBatchById(btn.dataset.batchRecover))
@@ -1930,6 +1941,56 @@ async function recoverBatchById(batchId) {
     loadBatches();
   } catch (err) {
     logLine("恢复失败图失败：" + err.message, "err");
+  }
+}
+
+async function downloadBatchReport(format) {
+  // M34：批次趋势报表 Web 化——从 /api/batches/report 取文本并触发下载
+  if (!state.project) return;
+  try {
+    const data = await api(
+      "/api/batches/report?project=" + encodeURIComponent(state.project) + "&limit=20&format=" + encodeURIComponent(format)
+    );
+    const blob = new Blob([data.text || ""], { type: format === "csv" ? "text/csv;charset=utf-8" : "text/markdown;charset=utf-8" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "batch-report." + (format === "csv" ? "csv" : "md");
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(link.href);
+      link.remove();
+    }, 0);
+    const summary = data.summary || {};
+    logLine("已导出批次报表（" + format + "）：共 " + (summary.batches || 0) + " 个批次", "ok");
+    setStatus("批次报表已导出：" + format.toUpperCase());
+  } catch (err) {
+    logLine("导出批次报表失败：" + err.message, "err");
+  }
+}
+
+async function previewBatchReport() {
+  // M34：在批次历史面板内直接预览 Markdown 报表（再点一次收起）
+  if (!state.project) return;
+  const existing = $("#batch-report-preview");
+  if (existing) {
+    existing.remove();
+    return;
+  }
+  try {
+    const data = await api(
+      "/api/batches/report?project=" + encodeURIComponent(state.project) + "&limit=20&format=md"
+    );
+    const box = $("#batch-box");
+    if (!box) return;
+    const pre = document.createElement("pre");
+    pre.id = "batch-report-preview";
+    pre.className = "batch-report-preview";
+    pre.textContent = data.text || "";
+    box.appendChild(pre);
+    logLine("已生成批次报表预览（Markdown，可再次点击收起）", "ok");
+  } catch (err) {
+    logLine("预览批次报表失败：" + err.message, "err");
   }
 }
 

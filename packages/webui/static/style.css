@@ -508,3 +508,18 @@ button.link:hover { text-decoration: underline; }
 .queue-head { gap: 6px; }
 .queue-head button + button { margin-left: 0; }
 
+/* M34：批次报表面板内预览 */
+.batch-report-preview {
+  margin: 8px 0 2px;
+  padding: 8px 10px;
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #0f1720;
+  color: #c7d2e0;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
