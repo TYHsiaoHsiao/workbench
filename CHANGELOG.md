@@ -1,3 +1,13 @@
+## [2.17.0] - 2026-11-16 — 可视化节点工作台（M30：检索结果精细化）
+
+- `knowledge-search` 契约新增可选配置：`min_score`（≥0，默认 0 不过滤）、`max_per_file`（1–10，默认 2）、`snippet_chars`（40–400，默认 120）、`proximity_weight`（0–2，默认 0.5）。
+- 混合检索（hybrid）排序新增查询词邻近度加权：同片段内多个查询词越接近得分越高（`_proximity_score`），由 `proximity_weight` 控制权重（0 关闭）。
+- 结果统一后处理 `_apply_result_limits`：分数阈值过滤（仅对带分数候选生效）、每文件条数上限、片段按 `snippet_chars` 截断加省略号。
+- CLI `index search` 新增 `--min-score` / `--max-per-file` 覆盖项；`index_service` 证据卡 report 的 `search_config` 同步暴露四项新配置。
+- 新增 9 项测试（配置默认/上限与截断/阈值过滤/邻近度打分与权重生效/CLI/非法配置拒绝/服务报告），合计 488 项。
+
+兼容性：契约新增可选字段；CLI 新增可选参数；默认行为变化仅在 hybrid 排序加入邻近度加权（默认 0.5）与每文件最多 2 条、片段 120 字截断，属 MINOR 语义增强。
+
 ## [2.16.0] - 2026-11-16 — 可视化节点工作台（M29：索引健康巡检与同义词权重）
 
 - 新增 `packages/knowledge_service/index_health.py`：`check_health()` 巡检元数据/文档/FTS 行一致性、无主分块、空分块、重复路径、FTS MATCH 探针；可选 `--source` 比对新/变更/删除文件（mtime_ns 口径，限量 20 条/类），输出 `status`（healthy/problems）、`checks`、`stale`、`suggestions`。

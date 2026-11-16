@@ -1,8 +1,8 @@
 {
-  "version": "2.16.0",
+  "version": "2.17.0",
   "contract_version": "1.0",
-  "generated_at": "2026-11-16T11:09:25",
-  "file_count": 200,
+  "generated_at": "2026-11-16T11:29:42",
+  "file_count": 201,
   "files": [
     {
       "path": ".github/workflows/ci.yml",
@@ -16,8 +16,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "size": 48452,
-      "sha256": "5dac4f822fc1e38e35cb692e9e496180d9f3a051123da313a0797306e40be8a6"
+      "size": 49661,
+      "sha256": "18d55af10bd549897b0d0ce51c13aed1f40d5af716f4e777184d51368d07562f"
     },
     {
       "path": "config/brand-allowlist.json",
@@ -51,8 +51,8 @@
     },
     {
       "path": "content/knowledge-search.json",
-      "size": 590,
-      "sha256": "af5e6fdc2b752c4a5b02f1d51a8628865d82ed2508a6c271090a57e8d35cf523"
+      "size": 882,
+      "sha256": "a9175cffcf931c86609cfab48e248013a13e4409d47bdd06ae19c00729e2e7e1"
     },
     {
       "path": "content/stage-registry.json",
@@ -66,8 +66,8 @@
     },
     {
       "path": "docs/architecture.md",
-      "size": 32467,
-      "sha256": "27097da5282ae6a88a2c49e01b09638dda535ce8afb44ba8669e63125a6b6490"
+      "size": 33198,
+      "sha256": "1aa14201d8dd6143731ad60222563a34e1f5b38d4f4b9bb93ab31ebb96ecbd5b"
     },
     {
       "path": "docs/brand-guard.md",
@@ -77,12 +77,12 @@
     {
       "path": "docs/ci.md",
       "size": 5325,
-      "sha256": "94fb2e88c06553b4d7517fa44d940fd9362dcbd378aaa9c0c7598436611559ca"
+      "sha256": "210a4eb3a68f5c3ef67cb036b94224d268d4f1ed9e8ca7c1e0a7dc91f416e48c"
     },
     {
       "path": "docs/command-card.md",
-      "size": 20613,
-      "sha256": "206aaedba9f448a44533d85384e853acf425cffdf055412b2ed574723ada67d9"
+      "size": 20687,
+      "sha256": "f8f86b34de16e87e3ccdb89fab30a5569d8621512603ce99c15a35c7154997e6"
     },
     {
       "path": "docs/flow-workbench.md",
@@ -121,8 +121,8 @@
     },
     {
       "path": "docs/knowledge-index.md",
-      "size": 6819,
-      "sha256": "5f5a06e1bca83881331f0e151acffe344b33e74259ccd9ce77ed11a449e638b7"
+      "size": 8116,
+      "sha256": "076a444db543ef36ff3adc5401cf0a0316cf2030fd937a17dd8838254d9b6174"
     },
     {
       "path": "docs/knowledge-poc-report.md",
@@ -285,6 +285,11 @@
       "sha256": "5e1765f36b0d21fdee65daa0b947801ba0b90ed12e08363fc4695e633ce49d2b"
     },
     {
+      "path": "docs/release-notes-2.17.0.md",
+      "size": 2118,
+      "sha256": "45523f21c02fe4906756d66ed89b8f1fd32337c1dc4a373118b52e7249af5f67"
+    },
+    {
       "path": "docs/release-notes-2.2.0.md",
       "size": 2290,
       "sha256": "cc877f4f638d4b8b97426ec45d630b66e5797edf27b94215d44e59e922826c8d"
@@ -326,8 +331,8 @@
     },
     {
       "path": "docs/requirements-traceability.md",
-      "size": 9841,
-      "sha256": "b2e310a2d9444bb5a08ca18a84b970dec8a9c5d5df5f15ddc479607db1d05008"
+      "size": 10167,
+      "sha256": "9011f6fd5114141df3869c647018ba517a81da134d175c1acf9e7e7c6fc55297"
     },
     {
       "path": "docs/style-registry-report.md",
@@ -341,8 +346,8 @@
     },
     {
       "path": "docs/troubleshooting.md",
-      "size": 21453,
-      "sha256": "748b935d2b9201ff4b7fcc18e92a61ef8dba8c5f8d69c2309b214e827215cdc5"
+      "size": 22289,
+      "sha256": "259e90e608cbd996a563bb701cce6e78a72f9ce0c017c08cc7f08f2371705238"
     },
     {
       "path": "packages/brand_guard/__init__.py",
@@ -366,8 +371,8 @@
     },
     {
       "path": "packages/cli/main.py",
-      "size": 147029,
-      "sha256": "baa56b4bab493ae69230e3961b3769fe316a7522da7ae60c4699a56872c77283"
+      "size": 147701,
+      "sha256": "4261b24c3ba571acbf3d0ca4e4f413e04c5d8e26c79fae86d89961eed32128a5"
     },
     {
       "path": "packages/contracts/__init__.py",
@@ -426,8 +431,8 @@
     },
     {
       "path": "packages/contracts/schemas/knowledge-search.schema.json",
-      "size": 1317,
-      "sha256": "01bd04934fb9ae28412c982ff0060a6fa710bf6f51c1210b07a88a0f8da95638"
+      "size": 2289,
+      "sha256": "57221642689c675fde065e1dc73ed460a891a08566b4c65cf2343a390009e8cc"
     },
     {
       "path": "packages/contracts/schemas/reference-memory.schema.json",
@@ -626,8 +631,8 @@
     },
     {
       "path": "packages/knowledge_service/index_builder.py",
-      "size": 28790,
-      "sha256": "1aeed92b6ff8edc36054de2306313f376ebeee658ee371087f107dd42feadc00"
+      "size": 33208,
+      "sha256": "bb7e519732f061a6237443b2389a7fff7abd7cdff4dc65d87470f2b802bb2b46"
     },
     {
       "path": "packages/knowledge_service/index_health.py",
@@ -636,8 +641,8 @@
     },
     {
       "path": "packages/knowledge_service/index_service.py",
-      "size": 8227,
-      "sha256": "b551f35e1d0aecd9878e4c3bf258f8289cdfae78045d2b202cd71122ec74fa93"
+      "size": 8461,
+      "sha256": "2a673dc84ff721d41ad55a546d410b57a072a193d354bf00e0ee7e5076d09f97"
     },
     {
       "path": "packages/knowledge_service/service.py",
@@ -691,8 +696,8 @@
     },
     {
       "path": "README.md",
-      "size": 41237,
-      "sha256": "389801627dcd2211f0955627dafe5d1deb8f781748ad0d95f339282ddd906cfe"
+      "size": 42358,
+      "sha256": "f90c8a44e161720767c90cb22ce4da4811144953e901e46134d4793ac88b2147"
     },
     {
       "path": "scripts/bench.py",
@@ -936,8 +941,8 @@
     },
     {
       "path": "tests/test_knowledge_search_config.py",
-      "size": 10779,
-      "sha256": "dfbec21c6fe2cbd333692f53680d20e7ddcd5bf806c594c27cf9e82ad9b5106d"
+      "size": 15837,
+      "sha256": "89274f696bc3ae34c1a67e0f948614dfac803ee028c5f5e468f2b087ea163c7a"
     },
     {
       "path": "tests/test_knowledge_service.py",
@@ -997,7 +1002,7 @@
     {
       "path": "VERSION",
       "size": 7,
-      "sha256": "6a5953413ab0b83ab7c6c3f080df322580d42cc33524f5857533ca01f3da6312"
+      "sha256": "b7c9900f90f674500897abbc5467c0478cd7a7a7dc2e4e7797a85ae1cebe4ae6"
     },
     {
       "path": "workbench.py",

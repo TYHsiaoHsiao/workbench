@@ -277,5 +277,125 @@ class HybridConfigIndexTest(unittest.TestCase):
         self.assertNotIn("02_方法.md", paths)
 
 
+class SearchLimitsTest(unittest.TestCase):
+    """M30：min_score / max_per_file / snippet_chars / proximity_weight。"""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.mkdtemp(prefix="wb_kblimits_")
+        self.root = Path(self._tmp)
+        self.source = self.root / "kb"
+        self.out = self.root / "index"
+        self.source.mkdir(parents=True)
+        (self.source / "01_碎片.md").write_text(
+            "# 悬念开场\n\n建立悬念：第一幕用反常细节制造疑问。\n\n"
+            "# 另一段\n\n悬念升级：第二幕用误会加深紧张。\n",
+            encoding="utf-8",
+        )
+        (self.source / "02_参考.md").write_text(
+            "# 参考\n\n悬念与反转在第三幕同时出现。\n", encoding="utf-8"
+        )
+        build_index(self.source, self.out)
+
+    def tearDown(self) -> None:
+        shutil.rmtree(self._tmp, ignore_errors=True)
+
+    def _config(self, **extra) -> dict:
+        base = {
+            "contract_version": "0.1",
+            "weights": {"heading": 2.0, "path": 1.0, "phrase": 1.5, "coverage": 1.0},
+            "synonyms": {},
+            "stopwords": [],
+            "expand_limit": 8,
+        }
+        base.update(extra)
+        return base
+
+    def test_default_config_includes_m30_fields(self) -> None:
+        config = load_search_config()
+        self.assertEqual(0.0, config["min_score"])
+        self.assertEqual(2, config["max_per_file"])
+        self.assertEqual(120, config["snippet_chars"])
+        self.assertAlmostEqual(0.5, config["proximity_weight"])
+
+    def test_max_per_file_limits_same_file(self) -> None:
+        config = self._config(max_per_file=1, snippet_chars=40, proximity_weight=0.0)
+        result = search_index(self.out, "悬念", mode="hybrid", config=config)
+        self.assertEqual(1, result["max_per_file"])
+        same_file = [item for item in result["results"] if item["path"] == "01_碎片.md"]
+        self.assertLessEqual(len(same_file), 1)
+
+    def test_snippet_chars_truncates(self) -> None:
+        config = self._config(snippet_chars=40, max_per_file=5)
+        result = search_index(self.out, "悬念", mode="hybrid", config=config)
+        self.assertTrue(result["results"])
+        for item in result["results"]:
+            self.assertLessEqual(len(item["snippet"]), 41)
+
+    def test_min_score_filters_results(self) -> None:
+        config = self._config(min_score=999.0)
+        result = search_index(self.out, "悬念", mode="hybrid", config=config)
+        self.assertEqual(0, result["count"])
+        self.assertEqual([], result["results"])
+
+    def test_proximity_score_prefers_adjacent_terms(self) -> None:
+        from knowledge_service.index_builder import _proximity_score
+
+        near = _proximity_score("悬念反转相邻出现", {"悬念": 1.0, "反转": 1.0})
+        far = _proximity_score(
+            "悬念" + "填充内容" * 20 + "反转", {"悬念": 1.0, "反转": 1.0}
+        )
+        self.assertGreater(near, far)
+        self.assertGreater(near, 0.0)
+        self.assertLessEqual(near, 1.0)
+        self.assertEqual(0.0, _proximity_score("悬念", {"悬念": 1.0}))
+
+    def test_proximity_weight_changes_hybrid_scores(self) -> None:
+        plain = self._config(proximity_weight=0.0)
+        boosted = {**plain, "proximity_weight": 2.0}
+        low = search_index(self.out, "悬念", mode="hybrid", config=plain)
+        high = search_index(self.out, "悬念", mode="hybrid", config=boosted)
+        self.assertGreaterEqual(
+            max(item["score"] for item in high["results"]),
+            max(item["score"] for item in low["results"]),
+        )
+
+    def test_cli_min_score_and_max_per_file(self) -> None:
+        code = cli_main(
+            [
+                "index", "search", "--query", "悬念", "--out", str(self.out),
+                "--min-score", "999", "--json",
+            ]
+        )
+        self.assertEqual(0, code)
+        code = cli_main(
+            [
+                "index", "search", "--query", "悬念", "--out", str(self.out),
+                "--max-per-file", "1", "--json",
+            ]
+        )
+        self.assertEqual(0, code)
+
+    def test_service_report_includes_m30_fields(self) -> None:
+        config = self._config(
+            min_score=0.0, max_per_file=1, snippet_chars=40, proximity_weight=0.0
+        )
+        result = search_index_card(
+            "演示项目", "01", "建立悬念", ["悬念"],
+            index_dir=str(self.out), search_config=config,
+        )
+        report_cfg = result["report"]["search_config"]
+        self.assertEqual(1, report_cfg["max_per_file"])
+        self.assertEqual(40, report_cfg["snippet_chars"])
+        self.assertEqual(0.0, report_cfg["proximity_weight"])
+
+    def test_invalid_m30_config_rejected(self) -> None:
+        path = self.root / "bad-m30.json"
+        data = self._config()
+        data["max_per_file"] = 99
+        path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        with self.assertRaises(KnowledgeIndexError):
+            load_search_config(path)
+
+
 if __name__ == "__main__":
     unittest.main()

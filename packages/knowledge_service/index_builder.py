@@ -46,6 +46,10 @@ SEARCH_CONFIG_SCHEMA = "knowledge-search.schema.json"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SEARCH_CONFIG_PATH = REPO_ROOT / "content" / "knowledge-search.json"
 WEIGHT_KEYS = ("heading", "path", "phrase", "coverage")
+DEFAULT_MIN_SCORE = 0.0
+DEFAULT_MAX_PER_FILE = 2
+DEFAULT_SNIPPET_CHARS = 120
+DEFAULT_PROXIMITY_WEIGHT = 0.5
 DEFAULT_WEIGHTS = {
     "heading": HYBRID_HEADING_BONUS,
     "path": HYBRID_PATH_BONUS,
@@ -59,6 +63,10 @@ DEFAULT_SEARCH_CONFIG = {
     "stopwords": [],
     "expand_limit": 8,
     "synonym_weight": 0.5,
+    "min_score": DEFAULT_MIN_SCORE,
+    "max_per_file": DEFAULT_MAX_PER_FILE,
+    "snippet_chars": DEFAULT_SNIPPET_CHARS,
+    "proximity_weight": DEFAULT_PROXIMITY_WEIGHT,
 }
 MAX_QUERY_TERMS = 16
 DEFAULT_SYNONYM_WEIGHT = 0.5
@@ -432,6 +440,27 @@ def verify_index(out_dir: str | Path) -> dict[str, Any]:
     }
 
 
+def _safe_float(value: Any, default: float, low: float, high: float | None) -> float:
+    """M30：数值配置回退与夹取。"""
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return float(default)
+    number = float(value)
+    if number < low:
+        return float(default)
+    if high is not None and number > high:
+        return float(default)
+    return number
+
+
+def _safe_int(value: Any, default: int, low: int, high: int) -> int:
+    """M30：整数配置回退与夹取。"""
+    if not isinstance(value, int) or isinstance(value, bool):
+        return int(default)
+    if value < low or value > high:
+        return int(default)
+    return int(value)
+
+
 def _merge_weights(weights: dict[str, Any] | None) -> dict[str, float]:
     merged = dict(DEFAULT_WEIGHTS)
     if weights is None:
@@ -499,6 +528,10 @@ def load_search_config(path: str | Path | None = None) -> dict[str, Any]:
         "stopwords": stopwords[:200],
         "expand_limit": max(0, min(32, expand_limit)),
         "synonym_weight": float(synonym_weight),
+        "min_score": _safe_float(config.get("min_score"), DEFAULT_MIN_SCORE, 0.0, None),
+        "max_per_file": _safe_int(config.get("max_per_file"), DEFAULT_MAX_PER_FILE, 1, 10),
+        "snippet_chars": _safe_int(config.get("snippet_chars"), DEFAULT_SNIPPET_CHARS, 40, 400),
+        "proximity_weight": _safe_float(config.get("proximity_weight"), DEFAULT_PROXIMITY_WEIGHT, 0.0, 2.0),
     }
 
 
@@ -558,6 +591,36 @@ def _query_variants(text: str, config: dict[str, Any] | None, limit: int = 4) ->
     return variants
 
 
+def _proximity_score(text: str, terms: dict[str, float]) -> float:
+    """M30：查询词在片段内越接近得分越高（0–1）。"""
+    if not text or len(terms) < 2:
+        return 0.0
+    positions: list[tuple[int, int]] = []
+    for term in terms:
+        if not term:
+            continue
+        start = 0
+        while True:
+            index = text.find(term, start)
+            if index < 0:
+                break
+            positions.append((index, len(term)))
+            start = index + 1
+    if len(positions) < 2:
+        return 0.0
+    positions.sort()
+    best_span = None
+    for left in range(len(positions)):
+        for right in range(left + 1, len(positions)):
+            span = positions[right][0] + positions[right][1] - positions[left][0]
+            if best_span is None or span < best_span:
+                best_span = span
+        if left > 32:
+            break
+    assert best_span is not None
+    return round(1.0 / (1.0 + best_span / 60.0), 6)
+
+
 def _rank_candidate(
     text: str,
     path: str,
@@ -588,6 +651,9 @@ def _rank_candidate(
         )
         total = sum(terms.values()) or 1.0
         score += float(active_weights.get("coverage", 0.0)) * (matched / total)
+    prox_weight = float((config or {}).get("proximity_weight", 0.0) or 0.0)
+    if prox_weight:
+        score += prox_weight * _proximity_score(snippet_text, terms)
     return round(score, 6)
 
 
@@ -663,7 +729,37 @@ def _resolved_config(config: dict[str, Any] | None) -> dict[str, Any]:
         "stopwords": [str(item).strip() for item in (config.get("stopwords") or []) if str(item).strip()],
         "expand_limit": max(0, min(32, expand_limit)),
         "synonym_weight": float(synonym_weight),
+        "min_score": _safe_float(config.get("min_score"), DEFAULT_MIN_SCORE, 0.0, None),
+        "max_per_file": _safe_int(config.get("max_per_file"), DEFAULT_MAX_PER_FILE, 1, 10),
+        "snippet_chars": _safe_int(config.get("snippet_chars"), DEFAULT_SNIPPET_CHARS, 40, 400),
+        "proximity_weight": _safe_float(config.get("proximity_weight"), DEFAULT_PROXIMITY_WEIGHT, 0.0, 2.0),
     }
+
+
+def _apply_result_limits(
+    results: list[dict[str, Any]], cfg: dict[str, Any], *, limit: int
+) -> list[dict[str, Any]]:
+    """M30：min_score 过滤、每文件结果上限与片段长度控制。"""
+    min_score = float(cfg.get("min_score", DEFAULT_MIN_SCORE) or 0.0)
+    max_per_file = int(cfg.get("max_per_file", DEFAULT_MAX_PER_FILE) or 0)
+    snippet_chars = int(cfg.get("snippet_chars", DEFAULT_SNIPPET_CHARS) or 0)
+    kept: list[dict[str, Any]] = []
+    per_file: dict[str, int] = {}
+    for item in results:
+        score = item.get("score")
+        if min_score > 0 and score is not None and float(score) < min_score:
+            continue
+        path = str(item.get("path") or "")
+        if max_per_file > 0 and per_file.get(path, 0) >= max_per_file:
+            continue
+        snippet = str(item.get("snippet") or "")
+        if snippet_chars > 0 and len(snippet) > snippet_chars:
+            snippet = snippet[:snippet_chars] + "…"
+        kept.append({**item, "snippet": snippet})
+        per_file[path] = per_file.get(path, 0) + 1
+        if len(kept) >= limit:
+            break
+    return kept
 
 
 def search_index(
@@ -752,13 +848,14 @@ def search_index(
             results = sorted(
                 ranked.values(),
                 key=lambda item: (-float(item["score"]), str(item["path"]), str(item["heading"])),
-            )[:limit]
+            )
             actual = "hybrid"
         else:
             results = _like_rows(conn, text, limit)
             actual = "like"
     finally:
         conn.close()
+    results = _apply_result_limits(results, cfg, limit=limit)
     payload: dict[str, Any] = {
         "ok": True,
         "query": text,
@@ -766,6 +863,10 @@ def search_index(
         "mode": actual,
         "results": results,
         "terms": terms,
+        "min_score": float(cfg.get("min_score", DEFAULT_MIN_SCORE) or 0.0),
+        "max_per_file": int(cfg.get("max_per_file", DEFAULT_MAX_PER_FILE) or 0),
+        "snippet_chars": int(cfg.get("snippet_chars", DEFAULT_SNIPPET_CHARS) or 0),
+        "proximity_weight": float(cfg.get("proximity_weight", DEFAULT_PROXIMITY_WEIGHT) or 0.0),
     }
     if actual == "hybrid":
         payload["weights"] = dict(cfg["weights"])

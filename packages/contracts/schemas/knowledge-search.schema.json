@@ -3,7 +3,12 @@
   "title": "Knowledge Search Config v0.1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["contract_version", "weights", "synonyms", "stopwords"],
+  "required": [
+    "contract_version",
+    "weights",
+    "synonyms",
+    "stopwords"
+  ],
   "properties": {
     "contract_version": {
       "type": "string",
@@ -12,25 +17,48 @@
     "weights": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["heading", "path", "phrase", "coverage"],
+      "required": [
+        "heading",
+        "path",
+        "phrase",
+        "coverage"
+      ],
       "properties": {
-        "heading": {"type": "number", "minimum": 0},
-        "path": {"type": "number", "minimum": 0},
-        "phrase": {"type": "number", "minimum": 0},
-        "coverage": {"type": "number", "minimum": 0}
+        "heading": {
+          "type": "number",
+          "minimum": 0
+        },
+        "path": {
+          "type": "number",
+          "minimum": 0
+        },
+        "phrase": {
+          "type": "number",
+          "minimum": 0
+        },
+        "coverage": {
+          "type": "number",
+          "minimum": 0
+        }
       }
     },
     "synonyms": {
       "type": "object",
       "additionalProperties": {
         "type": "array",
-        "items": {"type": "string", "minLength": 1},
+        "items": {
+          "type": "string",
+          "minLength": 1
+        },
         "maxItems": 10
       }
     },
     "stopwords": {
       "type": "array",
-      "items": {"type": "string", "minLength": 1},
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
       "maxItems": 200
     },
     "expand_limit": {
@@ -43,6 +71,29 @@
       "minimum": 0,
       "maximum": 1,
       "description": "同义词扩展项在词项覆盖率中的权重（M29；原词固定 1.0）"
+    },
+    "min_score": {
+      "type": "number",
+      "minimum": 0,
+      "description": "结果最低分数阈值（M30；默认 0 表示不过滤，仅对带分数结果生效）"
+    },
+    "max_per_file": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 10,
+      "description": "同一文件最多返回的结果条数（M30；默认 2）"
+    },
+    "snippet_chars": {
+      "type": "integer",
+      "minimum": 40,
+      "maximum": 400,
+      "description": "结果片段最大字符数（M30；默认 120，超出截断加省略号）"
+    },
+    "proximity_weight": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2,
+      "description": "查询词邻近度加权（M30；默认 0.5，0 关闭）"
     }
   }
 }

@@ -883,6 +883,10 @@ def cmd_index_search(args: argparse.Namespace) -> int:
         overrides = _parse_search_weights(getattr(args, "weights", None))
         if overrides:
             config = {**config, "weights": {**config["weights"], **overrides}}
+        if getattr(args, "min_score", None) is not None:
+            config = {**config, "min_score": float(args.min_score)}
+        if getattr(args, "max_per_file", None) is not None:
+            config = {**config, "max_per_file": int(args.max_per_file)}
         result = search_index(
             _index_out(args.out),
             args.query,
@@ -2964,6 +2968,18 @@ def build_parser() -> argparse.ArgumentParser:
     index_search.add_argument(
         "--weights",
         help="临时覆盖权重，如 heading=3,path=1,phrase=2,coverage=1（M27；仅 hybrid 生效）",
+    )
+    index_search.add_argument(
+        "--min-score",
+        type=float,
+        default=None,
+        help="M30：最低分数阈值，过滤低于该分数的结果（默认 0 不过滤；仅对带分结果生效）",
+    )
+    index_search.add_argument(
+        "--max-per-file",
+        type=int,
+        default=None,
+        help="M30：同一文件最多返回的结果条数（默认 2；1–10）",
     )
     index_search.add_argument("--out", help="索引输出目录（缺省 workbench/index）")
     index_search.add_argument("--json", action="store_true", help="以 JSON 输出")

@@ -197,3 +197,10 @@
 - **同义词扩展结果排序不理想**：调整 `content/knowledge-search.json` 的 `synonym_weight`（0–1，越小越强调原词命中）或 `weights.coverage`，再用 `index search --weights ...` 临时对比；`index search` 的 JSON 输出含 `term_weights` 便于排查。
 - **索引健康巡检退出码 1**：表示存在结构/卫生/陈旧问题（healthy 时为 0），CI/脚本可据此阻断；`--json` 报告含 `suggestions` 处理建议。
 
+## 18. 检索结果精细化（M30）
+
+- **结果太少或全被过滤**：`min_score` 默认 0 不过滤；若调到大于 0 且使用 LIKE 候选（无 bm25 分数）不受影响，但 hybrid 的 FTS 候选分数为 `-bm25` 正值，阈值过高会全被过滤。先用 `--min-score 0` 观察 `results[].score` 再设阈值。
+- **每个文件只出现一条**：默认 `max_per_file=2`（M30 起）；需要更多时在配置中调大（1–10）或临时无参数重建配置文件；注意 FTS/LIKE 同段候选会按文件+标题去重后计入。
+- **片段被截断**：默认 `snippet_chars=120`，超出加 `…`；调大需改配置文件（40–400）。
+- **邻近度加权效果不明显**：默认 `proximity_weight=0.5`，只对同片段内多个查询词生效；可临时 `--weights` 对比或改配置（0–2）。
+

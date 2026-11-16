@@ -1,4 +1,4 @@
-# 知识库索引维护（M21–M29）
+# 知识库索引维护（M21–M30）
 
 > FR-10 基础版：把 Markdown 知识库按契约重建为 SQLite FTS5 索引，并提供增量维护与检索命令。
 > 索引产物默认 `index/`（仓库内、已 gitignore、不入发行包）；知识库本体保持只读。
@@ -74,6 +74,10 @@ hybrid 分数 = 基础分 + 标题命中 2.0 + 路径命中 1.0 + 短语命中 1
 - `stopwords`：查询词过滤（如「的/了/是」）。
 - `expand_limit`：同义词扩展上限（默认 8；hybrid 实际查询变体最多 4 个）。
 - `synonym_weight`：同义词扩展项在词项覆盖率中的权重（0–1，默认 0.5；原词固定 1.0，M29）。
+- `min_score`：结果最低分数阈值（≥0，默认 0 表示不过滤；仅对有分数的候选生效，M30）。
+- `max_per_file`：同一文件最多返回条数（1–10，默认 2；M30）。
+- `snippet_chars`：结果片段最大字符数（40–400，默认 120，超出截断加省略号；M30）。
+- `proximity_weight`：查询词邻近度加权（0–2，默认 0.5；0 关闭；仅 hybrid 排序生效，M30）。
 
 ```bash
 python workbench.py index search --query 悬念 --mode hybrid --config content/knowledge-search.json
@@ -95,3 +99,12 @@ python workbench.py index search --query 悬念 --mode hybrid --weights heading=
 python workbench.py index health --source 06-全球电影节获奖剧本
 python workbench.py index health --out index --json
 ```
+
+## 10. 结果精细化（M30）
+
+hybrid 检索在原有「标题/路径/短语/词项覆盖率」加权之外，加入**查询词邻近度**：
+
+- `_proximity_score`：同片段内多个查询词出现位置越接近得分越高（0–1，按最短跨度与 60 字归一），由 `proximity_weight`（0–2，默认 0.5）加权进总分。
+- `_apply_result_limits`：所有模式统一后处理——`min_score > 0` 时过滤低于阈值的结果；同一文件最多 `max_per_file` 条；片段超过 `snippet_chars` 截断并加 `…`。
+- CLI 覆盖：`index search --min-score 2.5 --max-per-file 1`；配置文件同样支持四项字段（`content/knowledge-search.json` 已提供默认值）。
+- 返回 JSON 顶层附带 `min_score`/`max_per_file`/`snippet_chars`/`proximity_weight` 便于核对；`index_service` 的 `report.search_config` 同步暴露。
