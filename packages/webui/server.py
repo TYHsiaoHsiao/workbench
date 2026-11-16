@@ -42,6 +42,7 @@ from flow import (
     list_baselines,
     list_batches,
     batch_report,
+    batch_trend_svg,
     push_batch_report,
     list_graphs,
     list_notifications,
@@ -603,6 +604,25 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                     "format": report["format"],
                     "summary": report["summary"],
                     "text": report["text"],
+                }
+            )
+            return
+        if path == "/api/batches/trend":
+            project = self._project_from(query)
+            limit = 10
+            values = query.get("limit") or []
+            if values:
+                try:
+                    limit = max(1, min(50, int(values[0])))
+                except ValueError:
+                    pass
+            trend = batch_trend_svg(project, limit=limit)
+            self._json(
+                {
+                    "ok": True,
+                    "project": trend["project"],
+                    "summary": trend["summary"],
+                    "svg": trend["svg"],
                 }
             )
             return

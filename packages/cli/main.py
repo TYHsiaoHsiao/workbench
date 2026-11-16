@@ -105,6 +105,7 @@ from flow import (
     summarize_notifications,
     push_queue_alerts,
     batch_report,
+    batch_trend_svg,
     push_batch_report,
     default_graph,
     format_replay_text,
@@ -1771,6 +1772,36 @@ def cmd_flow_batch_show(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_flow_batch_trend(args: argparse.Namespace) -> int:
+    """M37：导出批次趋势 SVG（自包含，可写入文件或打印）。"""
+    try:
+        trend = batch_trend_svg(args.project, limit=args.limit)
+    except (FlowError, ValueError) as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    out = str(getattr(args, "out", "") or "").strip()
+    if out:
+        target = Path(out).expanduser()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(trend["svg"], encoding="utf-8", newline="\n")
+    if args.json:
+        _emit(
+            {
+                "ok": True,
+                "project": trend["project"],
+                "summary": trend["summary"],
+                "out": out or None,
+                "svg_chars": len(trend["svg"]),
+            },
+            True,
+        )
+    elif not out:
+        _print(trend["svg"])
+    else:
+        _print(f"已写入 SVG：{out}")
+    return EXIT_OK
+
+
 def cmd_flow_batch_report(args: argparse.Namespace) -> int:
     """M33：导出最近批次的趋势报表（Markdown/CSV/HTML）；M36：可推送到 webhook。"""
     push = bool(getattr(args, "push", False))
@@ -3298,7 +3329,7 @@ def build_parser() -> argparse.ArgumentParser:
     flow_batch.add_argument("--workers", type=int, default=2, help="并行线程数（1–8，默认 2）")
     flow_batch.add_argument("--limit", type=int, default=20, help="最多运行流程图数量（默认 20）")
     flow_batch.add_argument("--webhook-url", help="批次失败时外送 webhook（JSON POST，M28）")
-    flow_batch.add_argument("--webhook-format", choices=["generic", "feishu"], default="generic", help="webhook 消息格式（M33；feishu=飞书文本消息）")
+    flow_batch.add_argument("--webhook-format", choices=["generic", "feishu", "feishu_card"], default="generic", help="webhook 消息格式（M33；feishu=飞书文本消息，feishu_card=飞书卡片）")
     flow_batch.add_argument("--webhook-retries", type=int, default=0, help="webhook 失败额外重试次数（0–3，M33）")
     flow_batch.add_argument("--json", action="store_true", help="以 JSON 输出")
     flow_batch.set_defaults(func=cmd_flow_batch)
@@ -3310,10 +3341,16 @@ def build_parser() -> argparse.ArgumentParser:
     flow_batch_report.add_argument("--out", default="", help="写入文件路径（缺省打印到标准输出）")
     flow_batch_report.add_argument("--push", action="store_true", help="把报表摘要推送到 webhook（M36）")
     flow_batch_report.add_argument("--webhook-url", help="推送目标 webhook URL（--push 时必填）")
-    flow_batch_report.add_argument("--webhook-format", choices=["generic", "feishu"], default="generic", help="推送消息格式（M36；feishu=飞书文本消息）")
+    flow_batch_report.add_argument("--webhook-format", choices=["generic", "feishu", "feishu_card"], default="generic", help="推送消息格式（M36；feishu=飞书文本消息，feishu_card=飞书卡片）")
     flow_batch_report.add_argument("--webhook-retries", type=int, default=0, help="推送失败额外重试次数（0–3，M36）")
     flow_batch_report.add_argument("--json", action="store_true", help="以 JSON 输出统计摘要")
     flow_batch_report.set_defaults(func=cmd_flow_batch_report)
+    flow_batch_trend = flow_sub.add_parser("batch-trend", help="导出批次趋势 SVG 图（自包含单文件，M37）")
+    flow_batch_trend.add_argument("--project", required=True, help="项目名或项目路径")
+    flow_batch_trend.add_argument("--limit", type=int, default=10, help="最近批次数（默认 10）")
+    flow_batch_trend.add_argument("--out", default="", help="写入 SVG 文件路径（缺省打印到标准输出）")
+    flow_batch_trend.add_argument("--json", action="store_true", help="以 JSON 输出统计摘要")
+    flow_batch_trend.set_defaults(func=cmd_flow_batch_trend)
 
     flow_batches = flow_sub.add_parser("batches", help="列出批次运行记录")
     flow_batches.add_argument("--project", required=True, help="项目名或项目路径")
@@ -3382,7 +3419,7 @@ def build_parser() -> argparse.ArgumentParser:
     queue_alerts.add_argument("--project", required=True, help="项目名或项目路径")
     queue_alerts.add_argument("--limit", type=int, default=50, help="聚合最近条数（默认 50）")
     queue_alerts.add_argument("--webhook-url", default=None, help="把告警摘要 JSON POST 到该地址（M32，event=queue.alerts.digest）")
-    queue_alerts.add_argument("--webhook-format", choices=["generic", "feishu"], default="generic", help="webhook 格式（M33；feishu=飞书文本消息）")
+    queue_alerts.add_argument("--webhook-format", choices=["generic", "feishu", "feishu_card"], default="generic", help="webhook 格式（M33；feishu=飞书文本消息，feishu_card=飞书卡片）")
     queue_alerts.add_argument("--webhook-retries", type=int, default=0, help="webhook 失败额外重试次数（0–3，M33）")
     queue_alerts.add_argument("--fail-if-failures", action="store_true", help="存在失败通知时退出码 2（便于 cron/巡检判断）")
     queue_alerts.add_argument("--dedupe-minutes", type=int, default=30, help="相同告警静默窗口分钟数（M34；0=关闭去重，默认 30）")
@@ -3396,7 +3433,7 @@ def build_parser() -> argparse.ArgumentParser:
     queue_run.add_argument("--retry-failed", type=int, default=0, help="先把失败条目重置重试（上限 0–10，默认 0 关闭）")
     queue_run.add_argument("--notify-cmd", help="失败通知外送命令（末尾追加通知文本，如 powershell -c ...）")
     queue_run.add_argument("--webhook-url", help="失败通知 webhook（JSON POST，如钉钉/自建接口）")
-    queue_run.add_argument("--webhook-format", choices=["generic", "feishu"], default="generic", help="webhook 格式（M33；feishu=飞书文本消息）")
+    queue_run.add_argument("--webhook-format", choices=["generic", "feishu", "feishu_card"], default="generic", help="webhook 格式（M33；feishu=飞书文本消息，feishu_card=飞书卡片）")
     queue_run.add_argument("--webhook-retries", type=int, default=0, help="webhook 失败额外重试次数（0–3，M33）")
     queue_run.add_argument("--json", action="store_true", help="以 JSON 输出")
     queue_run.set_defaults(func=cmd_flow_queue_run)
@@ -3436,7 +3473,7 @@ def build_parser() -> argparse.ArgumentParser:
     queue_daemon.add_argument("--retry-failed", type=int, default=0, help="失败条目自动重置重试上限（0–10，默认 0 关闭）")
     queue_daemon.add_argument("--notify-cmd", help="失败通知外送命令（末尾追加通知文本）")
     queue_daemon.add_argument("--webhook-url", help="失败通知 webhook（JSON POST）")
-    queue_daemon.add_argument("--webhook-format", choices=["generic", "feishu"], default="generic", help="webhook 格式（M33；feishu=飞书文本消息）")
+    queue_daemon.add_argument("--webhook-format", choices=["generic", "feishu", "feishu_card"], default="generic", help="webhook 格式（M33；feishu=飞书文本消息，feishu_card=飞书卡片）")
     queue_daemon.add_argument("--webhook-retries", type=int, default=0, help="webhook 失败额外重试次数（0–3，M33）")
     queue_daemon.add_argument("--log-file", help="守护日志文件（默认 00_project/workflows/daemon.log）")
     queue_daemon.add_argument("--rotate-bytes", type=int, default=1048576, help="日志轮转阈值字节（超限重命名为 .1，默认 1MB）")

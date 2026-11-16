@@ -1,4 +1,4 @@
-"""M33/M35：批次趋势报表（Markdown/CSV/HTML）。"""
+"""批次趋势报表（Markdown/CSV/HTML）与趋势 SVG 图（M33/M35/M37）。"""
 from __future__ import annotations
 
 import json
@@ -15,7 +15,7 @@ from core_router.project import create_project  # noqa: E402
 from flow import default_graph, write_graph_data  # noqa: E402
 from flow.batch import run_batch  # noqa: E402
 from flow.graph import FlowError  # noqa: E402
-from flow.report import REPORT_FORMATS, batch_report, push_batch_report  # noqa: E402
+from flow.report import REPORT_FORMATS, batch_report, batch_trend_svg, push_batch_report  # noqa: E402
 
 
 def make_graph(graph_id: str) -> dict:
@@ -93,6 +93,28 @@ class BatchReportTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             batch_report(self.project, fmt="xlsx")
         self.assertEqual(["md", "csv", "html"], list(REPORT_FORMATS))
+
+
+class BatchTrendSvgTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        base = Path(self._tmp.name)
+        report = create_project("趋势图测试", base=base / "projects")
+        self.project = Path(report["path"])
+        write_graph_data(self.project, make_graph("flow-trend"))
+
+    def test_trend_svg_contains_bars_and_summary(self) -> None:
+        trend = batch_trend_svg(self.project, limit=10)
+        self.assertTrue(trend["ok"])
+        self.assertIn("<svg", trend["svg"])
+        self.assertIn("批次趋势", trend["svg"])
+        self.assertGreaterEqual(trend["summary"]["batches"], 0)
+
+    def test_trend_svg_empty_project(self) -> None:
+        empty = Path(create_project("趋势空项目", base=Path(self._tmp.name) / "projects")["path"])
+        trend = batch_trend_svg(empty, limit=5)
+        self.assertIn("暂无批次数据", trend["svg"])
 
 
 class BatchReportPushTest(unittest.TestCase):

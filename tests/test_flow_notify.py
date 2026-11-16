@@ -1,4 +1,4 @@
-"""M33：通知外送增强（重试/退避、飞书消息格式）。零依赖，mock urlopen。"""
+"""通知外送增强：重试/退避、飞书文本与卡片格式（M33/M37）。零依赖，mock urlopen。"""
 from __future__ import annotations
 
 import json
@@ -36,6 +36,21 @@ class WebhookBodyTest(unittest.TestCase):
         self.assertIn("AI 影视工作台", text)
         self.assertIn("队列运行失败 1 条", text)
         self.assertIn("g1、g2", text)
+
+    def test_feishu_card_format(self) -> None:
+        payload = {"event": "batch.report", "message": "批次报表：成功 1 / 失败 0", "failed_graphs": []}
+        body = build_webhook_body(payload, "feishu_card")
+        self.assertEqual("interactive", body["msg_type"])
+        card = body["card"]
+        self.assertEqual("green", card["header"]["template"])
+        self.assertIn("batch.report", card["header"]["title"]["content"])
+        self.assertIn("批次报表", card["elements"][0]["text"]["content"])
+
+    def test_feishu_card_red_on_failures(self) -> None:
+        payload = {"event": "queue.alerts.digest", "message": "队列运行失败 1 条", "failed_graphs": ["flow-main"]}
+        body = build_webhook_body(payload, "feishu_card")
+        self.assertEqual("red", body["card"]["header"]["template"])
+        self.assertIn("失败图：flow-main", body["card"]["elements"][0]["text"]["content"])
 
     def test_unknown_format_rejected(self) -> None:
         with self.assertRaises(ValueError):

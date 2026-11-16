@@ -213,4 +213,81 @@ def push_batch_report(
     }
 
 
-__all__ = ["COLS", "REPORT_FORMATS", "batch_report", "push_batch_report"]
+def batch_trend_svg(
+    project_root: str | Path,
+    *,
+    limit: int = 10,
+) -> dict[str, Any]:
+    """M37：生成自包含 SVG 趋势图（最近 ``limit`` 个批次的成功/失败条形）。"""
+    from .batch import list_batches
+
+    project = _require_project(project_root)
+    batches = list_batches(project, limit=max(1, min(50, int(limit))))
+    report = batch_report(project_root, limit=limit, fmt="md")
+    summary = report["summary"]
+    bar_w = 26.0
+    gap = 16.0
+    left = 70.0
+    top = 54.0
+    chart_h = 120.0
+    width = max(320.0, left + len(batches) * (bar_w + gap) + 40.0)
+    height = top + chart_h + 74.0
+    max_total = max([int(item.get("total") or 0) for item in batches] + [1])
+    scale = chart_h / max_total
+    bars: list[str] = []
+    for index, item in enumerate(batches):
+        succeeded = int(item.get("succeeded") or 0)
+        failed = int(item.get("failed") or 0)
+        total = max(1, succeeded + failed)
+        x = left + index * (bar_w + gap)
+        base_y = top + chart_h
+        ok_h = scale * succeeded
+        bad_h = scale * failed
+        if ok_h > 0:
+            bars.append(
+                f'<rect x="{x:.1f}" y="{base_y - ok_h:.1f}" width="{bar_w:.1f}" height="{ok_h:.1f}" fill="#22c55e" rx="2">'
+                f'<title>{html.escape(str(item.get("batch_id")))}：成功 {succeeded}</title></rect>'
+            )
+        if bad_h > 0:
+            bars.append(
+                f'<rect x="{x:.1f}" y="{base_y - ok_h - bad_h:.1f}" width="{bar_w:.1f}" height="{bad_h:.1f}" fill="#ef4444" rx="2">'
+                f'<title>{html.escape(str(item.get("batch_id")))}：失败 {failed}</title></rect>'
+            )
+        if total <= 1 and ok_h == 0 and bad_h == 0:
+            bars.append(
+                f'<rect x="{x:.1f}" y="{base_y - 2:.1f}" width="{bar_w:.1f}" height="2" fill="#475569" rx="1"/>'
+            )
+        label = html.escape(str(item.get("batch_id", ""))[-8:])
+        bars.append(
+            f'<text x="{x + bar_w / 2:.1f}" y="{base_y + 16:.1f}" text-anchor="middle" '
+            f'fill="#94a3b8" font-size="10" font-family="ui-monospace, monospace">{label}</text>'
+        )
+    if not batches:
+        bars.append(
+            f'<text x="{width / 2:.1f}" y="{top + chart_h / 2:.1f}" text-anchor="middle" '
+            f'fill="#94a3b8" font-size="13" font-family="system-ui, sans-serif">（暂无批次数据）</text>'
+        )
+    title = html.escape(f"批次趋势（最近 {len(batches)} 次）· 成功率 {summary['success_rate']}")
+    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="{width:.0f}" height="{height:.0f}" viewBox="0 0 {width:.0f} {height:.0f}" role="img" aria-label="批次趋势图">
+<rect x="0" y="0" width="{width:.0f}" height="{height:.0f}" fill="#0f172a"/>
+<text x="{left:.0f}" y="26" fill="#e2e8f0" font-size="15" font-weight="600" font-family="system-ui, sans-serif">{title}</text>
+<rect x="{left:.0f}" y="32" width="12" height="12" fill="#22c55e" rx="2"/>
+<text x="{left + 18:.0f}" y="42" fill="#94a3b8" font-size="11" font-family="system-ui, sans-serif">成功</text>
+<rect x="{left + 58:.0f}" y="32" width="12" height="12" fill="#ef4444" rx="2"/>
+<text x="{left + 76:.0f}" y="42" fill="#94a3b8" font-size="11" font-family="system-ui, sans-serif">失败</text>
+<line x1="{left - 10:.0f}" y1="{top + chart_h:.0f}" x2="{width - 20:.0f}" y2="{top + chart_h:.0f}" stroke="#334155" stroke-width="1"/>
+<text x="{left - 14:.0f}" y="{top + 12:.0f}" text-anchor="end" fill="#64748b" font-size="10" font-family="system-ui, sans-serif">{max_total}</text>
+<text x="{left - 14:.0f}" y="{top + chart_h:.0f}" text-anchor="end" fill="#64748b" font-size="10" font-family="system-ui, sans-serif">0</text>
+{chr(10).join(bars)}
+<text x="{left:.0f}" y="{height - 14:.0f}" fill="#64748b" font-size="10" font-family="system-ui, sans-serif">bars = 成功/失败图数；标签为批次 ID 尾 8 位</text>
+</svg>
+"""
+    return {
+        "ok": True,
+        "project": str(project),
+        "summary": summary,
+        "svg": svg,
+    }
+
+
+__all__ = ["COLS", "REPORT_FORMATS", "batch_report", "batch_trend_svg", "push_batch_report"]

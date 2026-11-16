@@ -1,7 +1,7 @@
 """失败通知外送：把 JSON 通知 POST 到 webhook（零依赖，失败不影响主流程）。
 
 M28 起由批次运行（``flow.batch``）与队列运行（``flow.queue``）共用；
-M33 增加重试/退避与飞书文本消息格式（``format="feishu"``）。
+M33 增加重试/退避与飞书文本消息格式（``format="feishu"``）；M37 增加飞书卡片格式（``format="feishu_card"``）。
 """
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-USER_AGENT = "workbench-flow/2.33"
-WEBHOOK_FORMATS = ("generic", "feishu")
+USER_AGENT = "workbench-flow/2.37"
+WEBHOOK_FORMATS = ("generic", "feishu", "feishu_card")
 
 
 def build_webhook_body(payload: dict[str, Any], fmt: str = "generic") -> dict[str, Any]:
@@ -28,6 +28,27 @@ def build_webhook_body(payload: dict[str, Any], fmt: str = "generic") -> dict[st
         if failed:
             text += "\n失败图：" + "、".join(str(item) for item in failed[:10])
         return {"msg_type": "text", "content": {"text": text}}
+    if fmt == "feishu_card":
+        message = str(payload.get("message") or "").strip()
+        if not message:
+            message = json.dumps(payload, ensure_ascii=False)
+        failed = payload.get("failed_graphs") or []
+        event = str(payload.get("event") or "通知")
+        failed_line = ("\n失败图：" + "、".join(str(item) for item in failed[:10])) if failed else ""
+        color = "red" if (failed or int((payload.get("summary") or {}).get("failed") or 0) > 0) else "green"
+        return {
+            "msg_type": "interactive",
+            "card": {
+                "config": {"wide_screen_mode": True},
+                "header": {
+                    "title": {"tag": "plain_text", "content": f"AI 影视工作台 · {event}"},
+                    "template": color,
+                },
+                "elements": [
+                    {"tag": "div", "text": {"tag": "lark_md", "content": message + failed_line}},
+                ],
+            },
+        }
     raise ValueError(f"未知 webhook 格式: {fmt}（可选 {'/'.join(WEBHOOK_FORMATS)}）")
 
 

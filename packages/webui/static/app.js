@@ -1884,7 +1884,8 @@ function renderBatches() {
     '<button data-batch-report="md" title="下载批次趋势报表（Markdown，M34）">报表 MD</button>' +
     '<button data-batch-report="csv" title="下载批次趋势报表（CSV，M34）">报表 CSV</button>' +
     '<button data-batch-report="html" title="下载自包含批次趋势报表（HTML 单文件，M35）">报表 HTML</button>' +
-    '<button id="btn-batch-report-push" title="把批次报表摘要推送到 webhook（M36；支持飞书格式）">推送报表</button>' +
+    '<button id="btn-batch-trend" title="下载批次趋势 SVG 图（自包含单文件，M37）">趋势 SVG</button>' +
+    '<button id="btn-batch-report-push" title="把批次报表摘要推送到 webhook（M36；支持飞书格式与卡片）">推送报表</button>' +
     '<button id="btn-batch-report-preview" title="在面板内预览 Markdown 报表（M34）">报表预览</button>';
   box.classList.remove("hidden");
   box.innerHTML =
@@ -1903,6 +1904,9 @@ function renderBatches() {
   box.querySelectorAll("[data-batch-report]").forEach((btn) =>
     btn.addEventListener("click", () => downloadBatchReport(btn.dataset.batchReport))
   );
+  if ($("#btn-batch-trend")) {
+    $("#btn-batch-trend").addEventListener("click", () => downloadBatchTrendSvg());
+  }
   if ($("#btn-batch-report-preview")) {
     $("#btn-batch-report-preview").addEventListener("click", () => previewBatchReport());
   }
@@ -1960,6 +1964,29 @@ async function recoverBatchById(batchId) {
     loadBatches();
   } catch (err) {
     logLine("恢复失败图失败：" + err.message, "err");
+  }
+}
+
+async function downloadBatchTrendSvg() {
+  // M37：批次趋势 SVG 图下载（自包含单文件）
+  if (!state.project) return;
+  try {
+    const data = await api(
+      "/api/batches/trend?project=" + encodeURIComponent(state.project) + "&limit=10"
+    );
+    const blob = new Blob([data.svg || ""], { type: "image/svg+xml;charset=utf-8" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "batch-trend.svg";
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(link.href);
+      link.remove();
+    }, 0);
+    logLine("批次趋势 SVG 已下载（最近 " + ((data.summary || {}).batches || 0) + " 次批次）", "ok");
+  } catch (err) {
+    logLine("下载批次趋势 SVG 失败：" + err.message, "err");
   }
 }
 

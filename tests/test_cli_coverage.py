@@ -239,6 +239,44 @@ class CliCoverageTest(unittest.TestCase):
         self.assertEqual("text", body["msg_type"])
         self.assertIn("g1、g2", body["content"]["text"])
 
+    def test_m37_batch_trend_and_feishu_card(self) -> None:
+        from unittest import mock
+
+        _json_any(run_cli(["flow", "batch", "--project", str(self.project), "--all", "--dry-run", "--json"]))
+        trend = _json(run_cli(["flow", "batch-trend", "--project", str(self.project), "--limit", "5", "--json"]))
+        self.assertTrue(trend["ok"])
+        self.assertGreater(trend["svg_chars"], 100)
+        svg_out = self.root / "trend.svg"
+        code, _ = run_cli(["flow", "batch-trend", "--project", str(self.project),
+                           "--limit", "5", "--out", str(svg_out)])
+        self.assertEqual(0, code)
+        self.assertIn("<svg", svg_out.read_text(encoding="utf-8"))
+
+        class FakeResponse:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        captured: dict = {}
+
+        def fake_urlopen(request, timeout=10):
+            captured["body"] = request.data
+            return FakeResponse()
+
+        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            code, output = run_cli(
+                ["flow", "batch-report", "--project", str(self.project), "--push",
+                 "--webhook-url", "http://example.test/hook", "--webhook-format", "feishu_card", "--json"]
+            )
+        self.assertEqual(0, code, msg=output)
+        body = json.loads(captured["body"].decode("utf-8"))
+        self.assertEqual("interactive", body["msg_type"])
+        self.assertEqual("batch.report", body["card"]["header"]["title"]["content"].split("·")[-1].strip())
+
     def test_index_and_knowledge_cli(self) -> None:
         source = self.root / "kb"
         source.mkdir()

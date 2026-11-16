@@ -1,4 +1,4 @@
-# 命令卡（v2.23.0）
+# 命令卡（v2.24.0）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -209,7 +209,7 @@ python workbench.py flow run --project 雨夜回声 --graph flow-main --dry-run
 | `python workbench.py flow batch --project <项目> --all --webhook-url <URL>` | M28：批次失败汇总 JSON POST（`event=batch.run`，含 `failed_graphs` 与 `summary`） |
 | Web：运行面板「批次历史」 | M28：最近 10 个批次；失败行「恢复失败图」→ `POST /api/batches/<id>/recover` |
 
-## 15. 队列运维与批次趋势（M31/M32/M33/M34/M35/M36）
+## 15. 队列运维与批次趋势（M31/M32/M33/M34/M35/M36/M37）
 
 | 命令 | 作用 |
 |---|---|
@@ -223,4 +223,6 @@ python workbench.py flow run --project 雨夜回声 --graph flow-main --dry-run
 | Web：批次历史「推送报表」 | M36：`POST /api/batches/report/push`（body project/webhook_url/limit/format/webhook_format/retries → `{ok,summary,webhook}`） |
 | `python workbench.py flow batch-report --project <项目> [--format md|csv|html] [--out 路径] [--json]` | M33/M35：最近批次趋势报表（批次数/图数/成功/失败/成功率/平均耗时），可写文件或输出 JSON 摘要；html 为自包含单文件报告 |
 | `python workbench.py flow batch-report --project <项目> --push --webhook-url <url> [--webhook-format generic|feishu] [--webhook-retries 0–3]` | M36：把批次报表摘要推送到 webhook（`event=batch.report`），失败按 retries 固定退避重试 |
+| `--webhook-format feishu_card` | M37：飞书卡片消息（`msg_type=interactive`，告警红/报表绿），适用于 `batch-report --push`、`queue alerts`、`queue run`、`queue daemon`、`flow batch`。 |
+| `python workbench.py flow batch-trend --project <项目> [--limit 10] [--out 路径] [--json]` | M37：导出批次趋势 SVG 图（自包含单文件，成功/失败条形）；`--out` 写文件，缺省打印到标准输出。 |
 | Web：运行面板「批次历史趋势」/「失败告警」/「cron 预览」 | M31：`POST /api/cron/preview` + `GET /api/queue/alerts`；趋势为最近 10 批次成功/失败 SVG 条 |

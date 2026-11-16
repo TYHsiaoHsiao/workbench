@@ -92,7 +92,7 @@ from .queue import (
 )
 from .cron import cron_matches, next_run, parse_cron
 from .notify import WEBHOOK_FORMATS, notify_webhook
-from .report import REPORT_FORMATS, batch_report, push_batch_report
+from .report import REPORT_FORMATS, batch_report, batch_trend_svg, push_batch_report
 
 __all__ = [
     "PORT_COMPAT",
@@ -181,6 +181,7 @@ __all__ = [
     "WEBHOOK_FORMATS",
     "REPORT_FORMATS",
     "batch_report",
+    "batch_trend_svg",
     "push_batch_report",
     "TemplateError",
     "get_template",

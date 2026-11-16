@@ -218,8 +218,11 @@
 - HTML 报表打不开或样式丢失：`--format html` / Web「报表 HTML」生成的是自包含单文件（内联 CSS、无外链资源），用浏览器直接打开；若页面空白，检查文件是否被下载为 `.html`、终端/编辑器是否把它当纯文本保存。
 - HTML 与 Markdown/CSV 报表数字不一致：三者都从同一批次快照生成，差异通常来自两次调用之间又跑了新批次；用 `--limit` 固定范围或先看面板「刷新」后再导出。
 
-## 20. 批次报表推送与告警静默窗口（M36）
+## 20. 批次报表推送、静默窗口与趋势图（M36/M37）
 
 - **`flow batch-report --push` 无输出/失败**：必须显式提供 `--webhook-url`（Web 面板会弹窗询问）；`--webhook-format feishu` 仅改变请求体格式，URL 仍填飞书机器人 hook 地址；返回 `webhook.error` 为底层连接错误。
 - **Web 告警面板显示「静默中」**：`ALERTS_DEDUPE_MINUTES=30` 内相同失败集合不会重复外送；需要演练可临时用 `flow queue alerts --dedupe-minutes 0 --webhook-url <url>`。
 - **推送接口返回 200 但 `ok=false`**：说明 webhook 已配置但实际发送失败，查看 `webhook.error/status_code`，并检查 URL、网络与目标机器人是否可用。
+
+- **飞书卡片不显示/降级为文本（M37）**：`--webhook-format feishu_card` 发送 `msg_type=interactive` 卡片；若机器人版本或权限不支持卡片，会收到 400/19002，检查机器人是否启用「自定义机器人」且未被安全策略拦截，必要时退回 `--webhook-format feishu` 文本消息。
+- **趋势 SVG 无法打开或显示比例异常（M37）**：`flow batch-trend --out trend.svg` 输出自包含 SVG；若项目暂无批次，会显示「暂无批次数据」；浏览器/编辑器需支持 SVG 1.1，`--limit` 过大时为宽图，可先 `--limit 10` 再调整。

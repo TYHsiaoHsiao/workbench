@@ -350,6 +350,21 @@ class WebUIApiTest(unittest.TestCase):
         self.assertIn("批次趋势报表", data["text"])
         self.assertIn("<style>", data["text"])
 
+    def test_batches_trend_endpoint(self) -> None:
+        # M37：批次趋势 SVG 端点
+        status, data = self.client.json(
+            "POST",
+            "/api/workflows/batch",
+            {"project": str(self.project), "dry_run": True, "auto_confirm": True},
+        )
+        self.assertEqual(200, status, msg=data)
+        status, data = self.client.json("GET", self._q("/api/batches/trend?limit=5"))
+        self.assertEqual(200, status, msg=data)
+        self.assertTrue(data["ok"], msg=data)
+        self.assertIn("<svg", data["svg"])
+        self.assertIn("批次趋势", data["svg"])
+        self.assertGreaterEqual(data["summary"]["batches"], 1)
+
     def test_batches_report_push_endpoint(self) -> None:
         # M36：批次报表推送端点（webhook 由 mock 捕获）
         from unittest import mock as _mock

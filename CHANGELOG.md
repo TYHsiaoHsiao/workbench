@@ -1,3 +1,11 @@
+## [2.24.0] - 2026-11-16 — 可视化节点工作台（M37：飞书卡片通知与批次趋势 SVG 图）
+
+- 通知：`WEBHOOK_FORMATS` 新增 `feishu_card`，发送 `msg_type=interactive` 卡片（告警红/报表绿、标题含 event、正文含摘要与失败图，M37）。
+- 报表：新增 `flow batch-trend`（`--out` 导出自包含 SVG、`--json` 输出摘要）；`report.py::batch_trend_svg` 生成成功/失败条形趋势图。
+- Web：`GET /api/batches/trend?project=&limit=` 返回 SVG；批次历史面板新增「趋势 SVG」下载按钮。
+- CLI：`flow batch-report`、`flow batch`、`flow queue alerts/run/daemon` 的 `--webhook-format` 均支持 `feishu_card`。
+- 测试：新增 6 项（`test_flow_notify` 卡片 2、`test_flow_report` 趋势 SVG 2、Web 端点 1、CLI 1），全量 524 项通过。兼容性：纯新增格式与命令，向后兼容。
+
 ## [2.23.0] - 2026-11-16 — 批次报表推送与告警静默窗口状态（M36）
 
 - 批次报表推送：`flow batch-report --push --webhook-url <url>`（`event=batch.report`，复用飞书格式 `--webhook-format feishu` 与 `--webhook-retries 0–3`）；Web `POST /api/batches/report/push`；批次面板「推送报表」按钮。
