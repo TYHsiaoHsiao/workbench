@@ -226,3 +226,11 @@
 
 - **飞书卡片不显示/降级为文本（M37）**：`--webhook-format feishu_card` 发送 `msg_type=interactive` 卡片；若机器人版本或权限不支持卡片，会收到 400/19002，检查机器人是否启用「自定义机器人」且未被安全策略拦截，必要时退回 `--webhook-format feishu` 文本消息。
 - **趋势 SVG 无法打开或显示比例异常（M37）**：`flow batch-trend --out trend.svg` 输出自包含 SVG；若项目暂无批次，会显示「暂无批次数据」；浏览器/编辑器需支持 SVG 1.1，`--limit` 过大时为宽图，可先 `--limit 10` 再调整。
+
+### macOS 作业排队被取消（远端 CI）
+
+现象：GitHub Actions 中 `test (macos-latest, py3.12)` 长时间 `queued`，约 15 分钟后变 `cancelled`，日志无步骤输出，其余作业成功。
+
+原因：GitHub 托管 macOS runner 调度不稳定（排队期间未分配 runner），与工作台代码无关。
+
+处理：工作流矩阵已排除 `macos-latest + 3.12`，macOS 平台覆盖保留在 Python 3.11；如需恢复，观察 `gh run list --json` 中 macOS 作业排队情况后移除 `docs/ci.md` 中对应 `exclude`。

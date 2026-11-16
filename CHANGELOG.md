@@ -115,6 +115,13 @@
 
 # 变更日志
 
+## [2.24.1] - 2026-11-16 — CI 矩阵补丁（macOS + Python 3.12 排除）
+
+- 远端 CI 中 `test (macos-latest, py3.12)` 作业反复排队 15 分钟后被 GitHub 取消（无步骤输出），与代码无关。
+- `.github/workflows/ci.yml` 增加 `exclude: macos-latest + 3.12`，矩阵由 6 作业降为 5 作业；macOS 平台覆盖保留在 Python 3.11，3.12 覆盖率门禁仍由 ubuntu/windows 承担。
+- 同步更新 `README.md`、`docs/ci.md`、`docs/github-actions.md`、`docs/command-card.md` 与 `docs/troubleshooting.md`（新增「macOS 作业排队被取消」条目）。
+- 无代码/契约变更；本地九步 CI 与发行流程不变。
+
 ## [2.10.0] - 2026-11-15 — 本地索引接入知识服务证据卡（M22）
 
 - 新增 `packages/knowledge_service/index_service.py`：`search_index_card` 用 M21 索引逐查询（FTS/LIKE）生成同契约 knowledge-card，证据保持四字段（路径/段落/片段/命中词），按段落去重排序，无命中返回 `no_evidence`。

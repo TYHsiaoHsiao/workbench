@@ -5,7 +5,7 @@
 ## 1. 当前状态
 
 - 工作流：`.github/workflows/ci.yml`（M26 硬化：`permissions: contents: read`、`concurrency` 取消旧运行、`timeout-minutes: 30`、`PYTHONIOENCODING=utf-8`、artifact 保留 7 天）。
-- 矩阵：`ubuntu-latest` / `windows-latest` / `macos-latest` × Python `3.11` / `3.12`，共 6 个作业。
+- 矩阵：`ubuntu-latest` / `windows-latest` / `macos-latest` × Python `3.11` / `3.12`，共 6 个作业；当前排除 `macos-latest + 3.12`（runner 排队不稳定），实际 5 个作业。
 - 触发：`push`、`pull_request`、`workflow_dispatch`。
 - **真实远端执行的前提**：仓库已配置 git remote 且 Actions 已启用。本机当前 `git remote` 为空，本地只能验证工作流内容（`python scripts/ci_ready.py`），无法实际触发远端。
 

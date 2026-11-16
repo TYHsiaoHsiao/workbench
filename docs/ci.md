@@ -25,7 +25,7 @@
 `.github/workflows/ci.yml`：
 
 - 触发：`push`、`pull_request`、`workflow_dispatch`。
-- 矩阵：`ubuntu-latest` / `windows-latest` / `macos-latest` × Python `3.11` / `3.12`，共 6 个作业。
+- 矩阵：`ubuntu-latest` / `windows-latest` / `macos-latest` × Python `3.11` / `3.12`，共 6 个作业；由于 GitHub 托管 `macos-latest` 的 Python 3.12 作业多次排队超时被取消，当前排除 `macos-latest + 3.12`，实际 5 个作业（macOS 平台覆盖保留在 3.11，3.12 覆盖率门禁由 ubuntu/windows 承担）。
 - 步骤：`actions/checkout@v4` → `actions/setup-python@v5` → `python scripts/run_ci.py` → `python scripts/build_release.py` → `python scripts/package_smoke.py` → `actions/upload-artifact@v4`（`dist/workbench-*.zip` 与 `.sha256`）。
 
 > 本仓库默认无远端（`git remote -v` 为空），workflow 需推送到 GitHub 后才执行；本地等价入口是 `scripts/run_ci.py`。
