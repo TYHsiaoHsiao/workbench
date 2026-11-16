@@ -1862,17 +1862,54 @@ function renderBatches() {
       return html;
     })
     .join("");
+  const failedBatches = batchCache.filter((batch) => (batch.failed || 0) > 0);
+  const recoverAllBtn = failedBatches.length
+    ? '<button id="btn-batch-recover-all" title="依次重跑最近失败批次的失败图（最多 5 个批次，M32）">恢复全部失败图</button>'
+    : "";
   box.classList.remove("hidden");
   box.innerHTML =
     '<div class="queue-head"><span>批次历史（最近 ' +
     batchCache.length +
-    ' 次）</span><button id="btn-batch-refresh" title="刷新批次历史">刷新</button></div>' +
+    ' 次）</span><button id="btn-batch-refresh" title="刷新批次历史">刷新</button>' +
+    recoverAllBtn +
+    "</div>" +
     renderBatchTrend() +
     rows;
   $("#btn-batch-refresh").addEventListener("click", () => loadBatches());
+  if ($("#btn-batch-recover-all")) {
+    $("#btn-batch-recover-all").addEventListener("click", () => recoverAllFailedBatches());
+  }
   box.querySelectorAll("[data-batch-recover]").forEach((btn) =>
     btn.addEventListener("click", () => recoverBatchById(btn.dataset.batchRecover))
   );
+}
+
+async function recoverAllFailedBatches() {
+  if (!state.project) return;
+  const failed = batchCache.filter((batch) => (batch.failed || 0) > 0).slice(0, 5);
+  if (!failed.length) return;
+  if (!window.confirm("依次重跑最近 " + failed.length + " 个失败批次的失败图？")) return;
+  let recovered = 0;
+  for (const batch of failed) {
+    try {
+      const data = await api("/api/batches/" + encodeURIComponent(batch.batch_id) + "/recover", {
+        method: "POST",
+        body: JSON.stringify({ project: state.project }),
+      });
+      const summary = (data.batch || {}).summary || {};
+      recovered += data.recovered || 0;
+      logLine(
+        "批量恢复 " + batch.batch_id + "：" + (data.recovered || 0) + " 个 → 成功 " +
+          (summary.succeeded || 0) + " / 失败 " + (summary.failed || 0),
+        data.ok ? "ok" : "err"
+      );
+    } catch (err) {
+      logLine("批量恢复 " + batch.batch_id + " 失败：" + err.message, "err");
+    }
+  }
+  setStatus("恢复全部失败批次完成：共重跑 " + recovered + " 个失败图");
+  loadRunHistory();
+  loadBatches();
 }
 
 async function recoverBatchById(batchId) {

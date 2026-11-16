@@ -27,6 +27,7 @@ from flow.queue import (  # noqa: E402
     retry_entry,
     run_queue,
     summarize_notifications,
+    push_queue_alerts,
 )
 
 
@@ -433,3 +434,58 @@ class NotificationSummaryTest(unittest.TestCase):
         self.assertEqual(0, summary["count"])
         self.assertEqual([], summary["failed_graphs"])
         self.assertEqual("", summary["latest_at"])
+
+
+class AlertsDigestTest(unittest.TestCase):
+    """M32：告警摘要外送。"""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.base = Path(self._tmp.name)
+        report = create_project("告警摘要", base=self.base / "projects")
+        self.project = Path(report["path"])
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _seed(self, records: list[dict]) -> None:
+        path = notify_path(self.project)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("\n".join(json.dumps(item, ensure_ascii=False) for item in records) + "\n", encoding="utf-8")
+
+    def test_push_posts_digest(self) -> None:
+        self._seed(
+            [
+                {"at": "2026-11-16T09:00:00", "status": "failed", "message": "队列运行失败 2 条",
+                 "failed_graphs": ["g1", "g2"]},
+                {"at": "2026-11-16T10:00:00", "status": "failed", "message": "队列运行失败 1 条",
+                 "failed_graphs": ["g1"]},
+            ]
+        )
+        captured: dict = {}
+
+        def fake_urlopen(request, timeout=10):
+            captured["body"] = request.data
+            return _FakeResponse(200)
+
+        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            result = push_queue_alerts(self.project, webhook_url="http://example.test/alerts")
+        self.assertTrue(result["ok"])
+        self.assertEqual(200, result["webhook"]["status_code"])
+        body = json.loads(captured["body"].decode("utf-8"))
+        self.assertEqual("queue.alerts.digest", body["event"])
+        self.assertEqual(2, body["count"])
+        self.assertEqual(["g1", "g2"], body["failed_graphs"])
+        self.assertIn("队列失败告警摘要", body["message"])
+
+    def test_push_tolerates_failure(self) -> None:
+        self._seed([{"at": "2026-11-16T09:00:00", "status": "failed", "message": "x", "failed_graphs": ["g1"]}])
+        with mock.patch("urllib.request.urlopen", side_effect=OSError("boom")):
+            result = push_queue_alerts(self.project, webhook_url="http://example.test/alerts")
+        self.assertFalse(result["ok"])
+        self.assertIn("boom", result["webhook"]["error"])
+        self.assertEqual(1, result["summary"]["count"])
+
+    def test_push_requires_webhook(self) -> None:
+        with self.assertRaises(FlowError):
+            push_queue_alerts(self.project, webhook_url="")

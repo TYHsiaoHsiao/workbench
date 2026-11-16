@@ -204,8 +204,10 @@
 - **片段被截断**：默认 `snippet_chars=120`，超出加 `…`；调大需改配置文件（40–400）。
 - **邻近度加权效果不明显**：默认 `proximity_weight=0.5`，只对同片段内多个查询词生效；可临时 `--weights` 对比或改配置（0–2）。
 
-## 19. 队列运维与批次趋势（M31）
+## 19. 队列运维与批次趋势（M31/M32）
 
 - **`flow cron-preview` 报错**：表达式必须是 5 段（分 时 日 月 周），支持 `*`、`*/n`、`a-b`、`a-b/n` 与逗号列表；含空格时需加引号；解析失败退出码 1。
 - **`flow queue alerts` 显示 0 条**：只统计失败通知 JSONL（`00_project/workflows/queue-notifications.jsonl`，M16 起）；从未产生失败通知或未跑过队列时为空；webhook 未配置不影响聚合。
 - **批次趋势/告警面板不刷新**：趋势图来自批次记录（最近 10 条），告警来自通知 JSONL；点击面板「刷新」或切换项目重新加载；`POST /api/cron/preview` 为无状态预览，不注册系统计划任务。
+- 告警摘要外送失败（M32）：`flow queue alerts --webhook-url` 返回「告警摘要外送失败: …」时检查地址可达性、`timeout=10` 与目标服务是否接受 `application/json`；外送失败不影响本地 JSONL 与聚合结果。
+- 巡检退出码（M32）：`flow queue alerts --fail-if-failures` 在存在失败通知时返回 2（不是错误码 1）；cron/巡检脚本据此触发告警，无失败时返回 0。

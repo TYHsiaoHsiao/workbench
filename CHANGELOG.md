@@ -1,3 +1,10 @@
+## [2.19.0] - 2026-11-16 — 可视化节点工作台（M32：队列告警运维闭环）
+
+- 告警摘要外送：`flow queue alerts --webhook-url <url>` 聚合失败通知并 POST `event=queue.alerts.digest`（payload：count/latest_at/last_message/failed_graphs/message）；外送失败不抛异常，CLI 以 EXIT_FAIL 报告。
+- 巡检退出码：`flow queue alerts --fail-if-failures` 在存在失败通知时返回退出码 2，便于 cron/巡检脚本判断。
+- Web 一键恢复：批次历史面板显示「恢复全部失败图」按钮，依次重跑最近最多 5 个失败批次的失败图并累计提示。
+- 测试与质量：新增 4 项测试合计 497 项；行覆盖率 80.89%（6802/8409）、分支覆盖率 51.22%（3195/6238）；九步 CI、发行包冒烟、回滚演练 2.18.0→2.19.0→2.18.0 通过。
+- 兼容性：仅新增可选参数、只读聚合与前端按钮，无契约变更，MINOR 向后兼容。
 ## [2.18.0] - 2026-11-16 — 可视化节点工作台（M31：批次/队列运维收尾）
 
 - cron 表达式预览：新增 `flow cron-preview --expression <5 段> [--count] [--json]` 与 `POST /api/cron/preview`；前端运行面板「cron 预览」显示下一次触发时间（零依赖解析，非法表达式退出 1）。

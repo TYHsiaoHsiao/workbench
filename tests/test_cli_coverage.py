@@ -139,6 +139,49 @@ class CliCoverageTest(unittest.TestCase):
         alerts = _json(run_cli(["flow", "queue", "alerts", "--project", str(self.project), "--json"]))
         self.assertEqual(0, alerts["count"])
 
+    def test_m32_alerts_push_and_exit(self) -> None:
+        from unittest import mock
+
+        code, _ = run_cli(["flow", "queue", "alerts", "--project", str(self.project),
+                           "--fail-if-failures", "--json"])
+        self.assertEqual(0, code)
+        notif = self.project / "00_project" / "workflows" / "queue-notifications.jsonl"
+        notif.parent.mkdir(parents=True, exist_ok=True)
+        notif.write_text(
+            '{"at": "2026-11-16T09:00:00", "status": "failed", "message": "x", "failed_graphs": ["g1"]}\n',
+            encoding="utf-8",
+        )
+        code, _ = run_cli(["flow", "queue", "alerts", "--project", str(self.project),
+                           "--fail-if-failures", "--json"])
+        self.assertEqual(2, code)
+        captured: dict = {}
+
+        class FakeResponse:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def read(self):
+                return b"{}"
+
+        def fake_urlopen(request, timeout=10):
+            captured["body"] = request.data
+            return FakeResponse()
+
+        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            code, output = run_cli(["flow", "queue", "alerts", "--project", str(self.project),
+                                    "--webhook-url", "http://example.test/hook", "--json"])
+        self.assertEqual(0, code, msg=output)
+        data = json.loads(output)
+        self.assertTrue(data["webhook"]["ok"])
+        body = json.loads(captured["body"].decode("utf-8"))
+        self.assertEqual("queue.alerts.digest", body["event"])
+        self.assertEqual(["g1"], body["failed_graphs"])
+
     def test_index_and_knowledge_cli(self) -> None:
         source = self.root / "kb"
         source.mkdir()

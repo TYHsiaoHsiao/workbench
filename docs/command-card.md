@@ -1,4 +1,4 @@
-# 命令卡（v2.18.0）
+# 命令卡（v2.19.0）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -209,10 +209,12 @@ python workbench.py flow run --project 雨夜回声 --graph flow-main --dry-run
 | `python workbench.py flow batch --project <项目> --all --webhook-url <URL>` | M28：批次失败汇总 JSON POST（`event=batch.run`，含 `failed_graphs` 与 `summary`） |
 | Web：运行面板「批次历史」 | M28：最近 10 个批次；失败行「恢复失败图」→ `POST /api/batches/<id>/recover` |
 
-## 15. 队列运维与批次趋势（M31）
+## 15. 队列运维与批次趋势（M31/M32）
 
 | 命令 | 作用 |
 |---|---|
 | `python workbench.py flow cron-preview --expression "*/5 * * * *" [--count 3] [--json]` | cron 表达式预览下一次触发时间（5 段：分 时 日 月 周；非法表达式退出 1） |
 | `python workbench.py flow queue alerts --project <项目> [--limit 20] [--json]` | 失败通知聚合：条数/最近时间与消息/失败图 Top5/最近记录 |
+| `python workbench.py flow queue alerts --project <项目> --webhook-url <url>` | 聚合失败通知并把摘要 POST 到 webhook（M32；`event=queue.alerts.digest`，失败时 EXIT_FAIL） |
+| `python workbench.py flow queue alerts --project <项目> --fail-if-failures` | 存在失败通知时退出码 2（巡检/cron 判断，M32） |
 | Web：运行面板「批次历史趋势」/「失败告警」/「cron 预览」 | M31：`POST /api/cron/preview` + `GET /api/queue/alerts`；趋势为最近 10 批次成功/失败 SVG 条 |

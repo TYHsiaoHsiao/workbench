@@ -503,3 +503,8 @@ button.link:hover { text-decoration: underline; }
 .cron-line button { padding: 4px 12px; }
 .batch-trend { display: flex; align-items: center; gap: 10px; margin: 6px 0 2px; flex-wrap: wrap; }
 .batch-trend svg { display: block; }
+
+/* M32：批次面板多按钮间距 */
+.queue-head { gap: 6px; }
+.queue-head button + button { margin-left: 0; }
+

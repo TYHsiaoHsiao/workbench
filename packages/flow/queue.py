@@ -186,6 +186,37 @@ def summarize_notifications(project_root: str | Path, *, limit: int = 50) -> dic
     }
 
 
+def push_queue_alerts(
+    project_root: str | Path,
+    *,
+    webhook_url: str,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """M32：把失败通知聚合摘要外送到 webhook（cron/告警巡检用，只读，不改队列）。"""
+    url = (webhook_url or "").strip()
+    if not url:
+        raise FlowError("缺少 webhook 地址")
+    project = _require_project(project_root)
+    summary = summarize_notifications(project, limit=limit)
+    failed_ids = [item["graph_id"] for item in summary["failed_graphs"]]
+    message = f"队列失败告警摘要：{summary['count']} 条"
+    if summary["failed_graphs"]:
+        top = "、".join(f"{item['graph_id']}({item['count']})" for item in summary["failed_graphs"])
+        message += f"；失败图 {top}"
+    payload = {
+        "at": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "event": "queue.alerts.digest",
+        "project": project.name,
+        "count": summary["count"],
+        "latest_at": summary["latest_at"],
+        "last_message": summary["last_message"],
+        "failed_graphs": failed_ids,
+        "message": message,
+    }
+    webhook = _notify_webhook(url, payload)
+    return {"ok": bool(webhook.get("ok")), "webhook": webhook, "summary": summary, "payload": payload}
+
+
 def _notify_external(notify_cmd: list[str] | None, message: str) -> bool:
     """调用外部命令外送通知（如桌面通知脚本），命令最后一个参数为通知文本。"""
     if not notify_cmd:
@@ -568,6 +599,7 @@ __all__ = [
     "new_queue_id",
     "normalize_schedule",
     "notify_path",
+    "push_queue_alerts",
     "queue_path",
     "retry_entry",
     "run_queue",

@@ -103,6 +103,7 @@ from flow import (
     run_queue,
     set_baseline,
     summarize_notifications,
+    push_queue_alerts,
     default_graph,
     format_replay_text,
     instantiate_template,
@@ -2004,16 +2005,42 @@ def cmd_flow_queue_notifications(args: argparse.Namespace) -> int:
 
 
 def cmd_flow_queue_alerts(args: argparse.Namespace) -> int:
-    """M31：聚合最近的队列失败通知，供运维快速查看告警。"""
+    """M31：聚合最近的队列失败通知；M32：可外送摘要并按告警数返回退出码。"""
     try:
         project = resolve_project(args.project)
         summary = summarize_notifications(project, limit=args.limit)
     except FlowError as exc:
         _print(f"错误: {exc}")
         return EXIT_FAIL
+    webhook_url = str(getattr(args, "webhook_url", None) or "").strip()
+    pushed: dict | None = None
+    if webhook_url:
+        try:
+            pushed = push_queue_alerts(project, webhook_url=webhook_url, limit=args.limit)
+        except FlowError as exc:
+            if args.json:
+                _emit({"ok": False, "error": str(exc)}, True)
+            else:
+                _print(f"错误: {exc}")
+            return EXIT_FAIL
+        if not pushed["ok"]:
+            error = pushed["webhook"].get("error") or "未知错误"
+            if args.json:
+                _emit({"ok": False, "error": f"告警摘要外送失败: {error}", "webhook": pushed["webhook"]}, True)
+            else:
+                _print(f"告警摘要外送失败: {error}")
+            return EXIT_FAIL
+        if not args.json:
+            _print(f"告警摘要已外送: {pushed['webhook'].get('status_code') or 'OK'}")
+    has_failures = summary["count"] > 0
+    fail_if = bool(getattr(args, "fail_if_failures", False))
     if args.json:
-        _emit({"ok": True, "project": str(project), **summary}, True)
-        return EXIT_OK
+        payload = {"ok": True, "project": str(project), **summary}
+        if pushed is not None:
+            payload["webhook"] = pushed["webhook"]
+            payload["pushed"] = True
+        _emit(payload, True)
+        return 2 if (fail_if and has_failures) else EXIT_OK
     if not summary["count"]:
         _print("暂无失败通知记录")
         return EXIT_OK
@@ -2023,7 +2050,7 @@ def cmd_flow_queue_alerts(args: argparse.Namespace) -> int:
     if summary["failed_graphs"]:
         top = "、".join(f"{item['graph_id']}({item['count']})" for item in summary["failed_graphs"])
         _print(f"失败图 Top: {top}")
-    return EXIT_OK
+    return 2 if fail_if else EXIT_OK
 
 
 def cmd_flow_cron_preview(args: argparse.Namespace) -> int:
@@ -3251,9 +3278,11 @@ def build_parser() -> argparse.ArgumentParser:
     queue_notifications.add_argument("--json", action="store_true", help="以 JSON 输出")
     queue_notifications.set_defaults(func=cmd_flow_queue_notifications)
 
-    queue_alerts = queue_sub.add_parser("alerts", help="聚合最近失败通知（次数/最近消息/失败图 Top，M31）")
+    queue_alerts = queue_sub.add_parser("alerts", help="聚合最近失败通知（次数/最近消息/失败图 Top；M32 可外送摘要）")
     queue_alerts.add_argument("--project", required=True, help="项目名或项目路径")
     queue_alerts.add_argument("--limit", type=int, default=50, help="聚合最近条数（默认 50）")
+    queue_alerts.add_argument("--webhook-url", default=None, help="把告警摘要 JSON POST 到该地址（M32，event=queue.alerts.digest）")
+    queue_alerts.add_argument("--fail-if-failures", action="store_true", help="存在失败通知时退出码 2（便于 cron/巡检判断）")
     queue_alerts.add_argument("--json", action="store_true", help="以 JSON 输出")
     queue_alerts.set_defaults(func=cmd_flow_queue_alerts)
 
