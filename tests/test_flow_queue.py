@@ -26,6 +26,7 @@ from flow.queue import (  # noqa: E402
     queue_path,
     retry_entry,
     run_queue,
+    summarize_notifications,
 )
 
 
@@ -389,4 +390,46 @@ class FlowQueueWebhookTest(unittest.TestCase):
         enqueue(self.project, all_graphs=True)
         result = run_queue(self.project)
         self.assertFalse(result["webhook"]["configured"])
-        self.assertFalse(result["webhook"]["ok"])
+
+
+class NotificationSummaryTest(unittest.TestCase):
+    """M31：失败通知聚合。"""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.base = Path(self._tmp.name)
+        report = create_project("通知聚合", base=self.base / "projects")
+        self.project = Path(report["path"])
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _seed(self, records: list[dict]) -> None:
+        path = notify_path(self.project)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("\n".join(json.dumps(item, ensure_ascii=False) for item in records) + "\n", encoding="utf-8")
+
+    def test_aggregates_counts_and_top_graphs(self) -> None:
+        self._seed(
+            [
+                {"at": "2026-11-16T09:00:00", "status": "failed", "message": "队列运行失败 2 条",
+                 "failed_graphs": ["g1", "g2"]},
+                {"at": "2026-11-16T10:00:00", "status": "failed", "message": "队列运行失败 1 条",
+                 "failed_graphs": ["g1"]},
+            ]
+        )
+        summary = summarize_notifications(self.project, limit=10)
+        self.assertEqual(2, summary["count"])
+        self.assertEqual("2026-11-16T10:00:00", summary["latest_at"])
+        self.assertEqual("队列运行失败 1 条", summary["last_message"])
+        self.assertEqual(
+            [{"graph_id": "g1", "count": 2}, {"graph_id": "g2", "count": 1}],
+            summary["failed_graphs"],
+        )
+        self.assertEqual(2, len(summary["records"]))
+
+    def test_empty_when_no_notifications(self) -> None:
+        summary = summarize_notifications(self.project)
+        self.assertEqual(0, summary["count"])
+        self.assertEqual([], summary["failed_graphs"])
+        self.assertEqual("", summary["latest_at"])

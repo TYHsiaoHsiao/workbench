@@ -85,6 +85,7 @@ from .queue import (
     queue_path,
     retry_entry,
     run_queue,
+    summarize_notifications,
     validate_queue,
     write_queue,
 )
@@ -167,6 +168,7 @@ __all__ = [
     "load_queue",
     "queue_path",
     "run_queue",
+    "summarize_notifications",
     "validate_queue",
     "write_queue",
     "parse_cron",

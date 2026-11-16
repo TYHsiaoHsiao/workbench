@@ -124,9 +124,20 @@ class CliCoverageTest(unittest.TestCase):
         code, output = run_cli(["flow", "queue", "run", "--project", str(self.project), "--limit", "1", "--json"])
         self.assertIn(code, (0, 1), msg=output)
         _json(run_cli(["flow", "queue", "notifications", "--project", str(self.project), "--json"]))
+        alerts = _json(run_cli(["flow", "queue", "alerts", "--project", str(self.project), "--json"]))
+        self.assertIn("count", alerts)
         code, output = run_cli(["flow", "queue", "daemon", "--project", str(self.project),
                                 "--until-empty", "--interval", "1", "--limit", "1"])
         self.assertEqual(0, code, msg=output)
+
+    def test_m31_cron_and_alerts(self) -> None:
+        preview = _json(run_cli(["flow", "cron-preview", "--expression", "*/5 * * * *", "--count", "3", "--json"]))
+        self.assertTrue(preview["ok"])
+        self.assertEqual(3, len(preview["next"]))
+        code, _ = run_cli(["flow", "cron-preview", "--expression", "bad expr", "--json"])
+        self.assertEqual(1, code)
+        alerts = _json(run_cli(["flow", "queue", "alerts", "--project", str(self.project), "--json"]))
+        self.assertEqual(0, alerts["count"])
 
     def test_index_and_knowledge_cli(self) -> None:
         source = self.root / "kb"

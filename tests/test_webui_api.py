@@ -924,6 +924,39 @@ class WebUIApiTest(unittest.TestCase):
         status, raw = self.client.request("HEAD", "/")
         self.assertIn(status, (200, 404, 501), msg=raw)
 
+    def test_m31_cron_preview_endpoint(self) -> None:
+        status, data = self.client.json(
+            "POST", "/api/cron/preview", {"expression": "*/5 * * * *", "count": 3}
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertTrue(data["ok"])
+        self.assertEqual(3, len(data["next"]))
+        status, data = self.client.json("POST", "/api/cron/preview", {"expression": "bad expr"})
+        self.assertEqual(400, status, msg=data)
+        self.assertFalse(data["ok"])
+
+    def test_m31_queue_alerts_endpoint(self) -> None:
+        path = self.project / "00_project" / "workflows" / "queue-notifications.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            '{"at": "2026-11-16T09:00:00", "status": "failed", "message": "队列运行失败 2 条", '
+            '"failed_graphs": ["g1", "g2"]}\n'
+            '{"at": "2026-11-16T10:00:00", "status": "failed", "message": "队列运行失败 1 条", '
+            '"failed_graphs": ["g1"]}\n',
+            encoding="utf-8",
+        )
+        status, data = self.client.json("GET", self._q("/api/queue/alerts?limit=10"))
+        self.assertEqual(200, status, msg=data)
+        self.assertTrue(data["ok"])
+        self.assertEqual(2, data["count"])
+        self.assertEqual(
+            [{"graph_id": "g1", "count": 2}, {"graph_id": "g2", "count": 1}],
+            data["failed_graphs"],
+        )
+        status, data = self.client.json("GET", self._q("/api/queue/alerts"))
+        self.assertEqual(200, status)
+        self.assertEqual(2, data["count"])
+
 
 if __name__ == "__main__":
     unittest.main()

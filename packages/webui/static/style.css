@@ -493,3 +493,13 @@ button.link:hover { text-decoration: underline; }
 /* 批次历史面板（M28） */
 .batch-box { margin-top: 8px; }
 .batch-box .queue-head span { color: #9db4d0; }
+
+/* M31：失败告警聚合、cron 预览与批次趋势 */
+.queue-alerts { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.queue-alerts .queue-head span { color: #fca5a5; }
+.cron-box { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.cron-line { display: flex; gap: 8px; margin-top: 6px; }
+.cron-line input { flex: 1; padding: 4px 8px; background: #0f1620; border: 1px solid var(--line); border-radius: 4px; color: var(--text); }
+.cron-line button { padding: 4px 12px; }
+.batch-trend { display: flex; align-items: center; gap: 10px; margin: 6px 0 2px; flex-wrap: wrap; }
+.batch-trend svg { display: block; }

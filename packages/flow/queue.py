@@ -167,6 +167,25 @@ def list_notifications(project_root: str | Path, *, limit: int = 20) -> list[dic
     return records
 
 
+def summarize_notifications(project_root: str | Path, *, limit: int = 50) -> dict[str, Any]:
+    """聚合最近的队列失败通知（M31）：次数、最近时间/消息、失败图 Top 与原始记录。"""
+    records = list_notifications(project_root, limit=max(1, min(200, int(limit))))
+    failed_graphs: dict[str, int] = {}
+    for record in records:
+        for graph_id in record.get("failed_graphs") or []:
+            if isinstance(graph_id, str) and graph_id:
+                failed_graphs[graph_id] = failed_graphs.get(graph_id, 0) + 1
+    top = sorted(failed_graphs.items(), key=lambda item: (-item[1], item[0]))[:5]
+    latest = records[0] if records else None
+    return {
+        "count": len(records),
+        "latest_at": str(latest.get("at") or "") if latest else "",
+        "last_message": str(latest.get("message") or "") if latest else "",
+        "failed_graphs": [{"graph_id": graph_id, "count": count} for graph_id, count in top],
+        "records": records,
+    }
+
+
 def _notify_external(notify_cmd: list[str] | None, message: str) -> bool:
     """调用外部命令外送通知（如桌面通知脚本），命令最后一个参数为通知文本。"""
     if not notify_cmd:
@@ -552,6 +571,7 @@ __all__ = [
     "queue_path",
     "retry_entry",
     "run_queue",
+    "summarize_notifications",
     "validate_queue",
     "write_queue",
     "enqueue",

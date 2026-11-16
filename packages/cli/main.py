@@ -102,6 +102,7 @@ from flow import (
     enqueue,
     run_queue,
     set_baseline,
+    summarize_notifications,
     default_graph,
     format_replay_text,
     instantiate_template,
@@ -2002,6 +2003,50 @@ def cmd_flow_queue_notifications(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_flow_queue_alerts(args: argparse.Namespace) -> int:
+    """M31：聚合最近的队列失败通知，供运维快速查看告警。"""
+    try:
+        project = resolve_project(args.project)
+        summary = summarize_notifications(project, limit=args.limit)
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    if args.json:
+        _emit({"ok": True, "project": str(project), **summary}, True)
+        return EXIT_OK
+    if not summary["count"]:
+        _print("暂无失败通知记录")
+        return EXIT_OK
+    _print(f"失败通知：{summary['count']} 条；最近 {summary['latest_at']}")
+    if summary["last_message"]:
+        _print(f"最近消息: {summary['last_message']}")
+    if summary["failed_graphs"]:
+        top = "、".join(f"{item['graph_id']}({item['count']})" for item in summary["failed_graphs"])
+        _print(f"失败图 Top: {top}")
+    return EXIT_OK
+
+
+def cmd_flow_cron_preview(args: argparse.Namespace) -> int:
+    """M31：解析 cron 表达式并预览下一次触发时间。"""
+    try:
+        spec = parse_cron(args.expression)
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    next_times = []
+    moment = datetime.now()
+    for _ in range(max(1, min(10, args.count))):
+        moment = next_run(spec, after=moment)
+        next_times.append(moment.isoformat(timespec="minutes"))
+    if args.json:
+        _emit({"ok": True, "expression": args.expression, "next": next_times}, True)
+        return EXIT_OK
+    _print(f"cron: {args.expression}")
+    for item in next_times:
+        _print(f"- {item}")
+    return EXIT_OK
+
+
 def _append_daemon_log(project: Path, line: str, log_file: str | None, rotate_bytes: int) -> None:
     path = Path(log_file) if log_file else (Path(project) / "00_project" / "workflows" / "daemon.log")
     try:
@@ -3206,6 +3251,12 @@ def build_parser() -> argparse.ArgumentParser:
     queue_notifications.add_argument("--json", action="store_true", help="以 JSON 输出")
     queue_notifications.set_defaults(func=cmd_flow_queue_notifications)
 
+    queue_alerts = queue_sub.add_parser("alerts", help="聚合最近失败通知（次数/最近消息/失败图 Top，M31）")
+    queue_alerts.add_argument("--project", required=True, help="项目名或项目路径")
+    queue_alerts.add_argument("--limit", type=int, default=50, help="聚合最近条数（默认 50）")
+    queue_alerts.add_argument("--json", action="store_true", help="以 JSON 输出")
+    queue_alerts.set_defaults(func=cmd_flow_queue_alerts)
+
     queue_run = queue_sub.add_parser("run", help="顺序执行队列中已到期的 pending 条目（可按项目或全部项目）")
     queue_run.add_argument("--project", help="项目名或项目路径（与 --all-projects 二选一）")
     queue_run.add_argument("--all-projects", action="store_true", help="依次执行默认项目根下所有项目的队列")
@@ -3254,6 +3305,12 @@ def build_parser() -> argparse.ArgumentParser:
     queue_daemon.add_argument("--log-file", help="守护日志文件（默认 00_project/workflows/daemon.log）")
     queue_daemon.add_argument("--rotate-bytes", type=int, default=1048576, help="日志轮转阈值字节（超限重命名为 .1，默认 1MB）")
     queue_daemon.set_defaults(func=cmd_flow_queue_daemon)
+
+    flow_cron = flow_sub.add_parser("cron-preview", help="解析 cron 表达式并预览下一次触发时间（M31）")
+    flow_cron.add_argument("--expression", required=True, help="cron 表达式（5 段：分 时 日 月 周）")
+    flow_cron.add_argument("--count", type=int, default=5, help="预览次数（1–10，默认 5）")
+    flow_cron.add_argument("--json", action="store_true", help="以 JSON 输出")
+    flow_cron.set_defaults(func=cmd_flow_cron_preview)
 
     flow_replay = flow_sub.add_parser("replay", help="查看运行回放（每步耗时与失败定位）")
     flow_replay.add_argument("--project", required=True, help="项目名或项目路径")

@@ -40,6 +40,7 @@ const state = {
   awaiting: null,
   replay: null,
   queue: [],
+  queueAlerts: null,
   lastBatchId: null,
   templates: [],
   history: [],
@@ -1521,6 +1522,80 @@ async function loadQueue() {
   } catch (err) {
     logLine("加载队列失败：" + err.message, "warn");
   }
+  await loadQueueAlerts();
+}
+
+/* ---------------- 失败告警聚合（M31） ---------------- */
+
+async function loadQueueAlerts() {
+  if (!state.project) {
+    state.queueAlerts = null;
+    renderQueueAlerts();
+    return;
+  }
+  try {
+    const data = await api("/api/queue/alerts?project=" + encodeURIComponent(state.project) + "&limit=50");
+    state.queueAlerts = data;
+    renderQueueAlerts();
+  } catch (err) {
+    logLine("加载失败告警失败：" + err.message, "warn");
+  }
+}
+
+function renderQueueAlerts() {
+  const box = $("#queue-alerts");
+  if (!box) return;
+  const alerts = state.queueAlerts;
+  if (!alerts || !alerts.count) {
+    box.classList.add("hidden");
+    box.innerHTML = "";
+    return;
+  }
+  const top = (alerts.failed_graphs || [])
+    .map((item) => item.graph_id + "(" + item.count + ")")
+    .join("、");
+  box.innerHTML =
+    '<div class="queue-head"><span>失败告警：' + alerts.count + " 条 · 最近 " + escapeHtml(alerts.latest_at || "-") + "</span>" +
+    '<button id="btn-alerts-refresh" title="刷新失败告警聚合">刷新</button></div>' +
+    (alerts.last_message ? '<div class="queue-notice">' + escapeHtml(alerts.last_message) + "</div>" : "") +
+    (top ? '<div class="queue-meta">失败图 Top：' + escapeHtml(top) + "</div>" : "");
+  box.classList.remove("hidden");
+  const btn = $("#btn-alerts-refresh");
+  if (btn) btn.addEventListener("click", () => loadQueueAlerts());
+}
+
+/* ---------------- cron 触发预览（M31） ---------------- */
+
+function renderCronBox() {
+  const box = $("#cron-box");
+  if (!box) return;
+  box.innerHTML =
+    '<div class="queue-head"><span>cron 触发预览（M31）</span></div>' +
+    '<div class="cron-line"><input id="cron-input" placeholder="*/5 * * * *" value="*/5 * * * *" />' +
+    '<button id="btn-cron-preview" title="解析 cron 表达式并预览下一次触发">预览</button></div>' +
+    '<div id="cron-result" class="queue-meta"></div>';
+  box.classList.remove("hidden");
+  $("#btn-cron-preview").addEventListener("click", () => previewCronExpression());
+}
+
+async function previewCronExpression() {
+  const exprInput = $("#cron-input");
+  const out = $("#cron-result");
+  if (!exprInput || !out) return;
+  const expression = exprInput.value.trim();
+  if (!expression) {
+    out.textContent = "请输入 5 段 cron 表达式";
+    return;
+  }
+  try {
+    const data = await api("/api/cron/preview", {
+      method: "POST",
+      body: JSON.stringify({ expression: expression, count: 3 }),
+    });
+    out.textContent = "下一次：" + (data.next || []).join("，");
+  } catch (err) {
+    out.textContent = "解析失败：" + err.message;
+  }
 }
 
 function renderQueue() {
@@ -1727,6 +1802,32 @@ async function loadBatches() {
   }
 }
 
+function renderBatchTrend() {
+  // M31：最近 10 次批次的成功/失败条形趋势（纯 SVG，无第三方依赖）
+  const trends = (batchCache || []).slice(0, 10).reverse();
+  if (!trends.length) return "";
+  const maxTotal = Math.max(...trends.map((batch) => batch.total || 1), 1);
+  const gap = 3;
+  let x = 0;
+  const bars = trends
+    .map((batch) => {
+      const okW = Math.max(1, Math.round(80 * ((batch.succeeded || 0) / maxTotal)));
+      const failW = Math.max(0, Math.round(80 * ((batch.failed || 0) / maxTotal)));
+      const bar = { x, okW, failW, batch };
+      x += okW + failW + gap;
+      return (
+        '<g><rect x="' + bar.x + '" y="6" width="' + okW + '" height="8" fill="#4f9cf9"></rect>' +
+        '<rect x="' + (bar.x + okW) + '" y="6" width="' + failW + '" height="8" fill="#f87171"></rect>' +
+        "<title>" + escapeHtml(batch.batch_id) + "：成功 " + (batch.succeeded || 0) + " / 失败 " + (batch.failed || 0) + "</title></g>"
+      );
+    })
+    .join("");
+  return (
+    '<div class="batch-trend"><span class="queue-meta">成功/失败趋势（最近 ' + trends.length + " 次）</span>" +
+    '<svg width="' + x + '" height="22" viewBox="0 0 ' + x + ' 22">' + bars + "</svg></div>"
+  );
+}
+
 function renderBatches() {
   const box = $("#batch-box");
   if (!box) return;
@@ -1766,6 +1867,7 @@ function renderBatches() {
     '<div class="queue-head"><span>批次历史（最近 ' +
     batchCache.length +
     ' 次）</span><button id="btn-batch-refresh" title="刷新批次历史">刷新</button></div>' +
+    renderBatchTrend() +
     rows;
   $("#btn-batch-refresh").addEventListener("click", () => loadBatches());
   box.querySelectorAll("[data-batch-recover]").forEach((btn) =>
@@ -2395,6 +2497,7 @@ function bindUi() {
   $("#btn-queue-run").addEventListener("click", () => runQueue());
   $("#btn-snapshot-create").addEventListener("click", () => createSnapshot());
   $("#btn-snapshot-refresh").addEventListener("click", () => loadSnapshots());
+  renderCronBox();
   $("#btn-undo").addEventListener("click", () => undo());
   $("#btn-redo").addEventListener("click", () => redo());
   $("#btn-projects").addEventListener("click", () => openProjects());

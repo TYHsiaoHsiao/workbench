@@ -16,6 +16,7 @@ import os
 import re
 import secrets
 import threading
+from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -47,6 +48,8 @@ from flow import (
     list_snapshots,
     load_node_types,
     load_templates,
+    next_run,
+    parse_cron,
     cancel_entry,
     move_entry,
     read_batch,
@@ -59,6 +62,7 @@ from flow import (
     retry_entry,
     run_batch,
     run_queue,
+    summarize_notifications,
     validate_graph,
     write_graph_data,
 )
@@ -541,6 +545,18 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
                 }
             )
             return
+        if path == "/api/queue/alerts":
+            project = self._project_from(query)
+            limit = 50
+            values = query.get("limit") or []
+            if values:
+                try:
+                    limit = max(1, min(200, int(values[0])))
+                except ValueError:
+                    pass
+            summary = summarize_notifications(project, limit=limit)
+            self._json({"ok": True, "project": str(project), **summary})
+            return
         if path == "/api/batches":
             project = self._project_from(query)
             limit = 20
@@ -628,6 +644,23 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
         self._error("not found", HTTPStatus.NOT_FOUND)
 
     def _api_post(self, path: str, query: dict[str, list[str]], body: dict[str, Any]) -> None:
+        if path == "/api/cron/preview":
+            expression = str(body.get("expression") or "").strip()
+            if not expression:
+                raise FlowError("缺少 cron 表达式")
+            try:
+                count = int(body.get("count") or 5)
+            except (TypeError, ValueError):
+                count = 5
+            count = max(1, min(10, count))
+            spec = parse_cron(expression)
+            next_times: list[str] = []
+            moment = datetime.now()
+            for _ in range(count):
+                moment = next_run(spec, after=moment)
+                next_times.append(moment.isoformat(timespec="minutes"))
+            self._json({"ok": True, "expression": expression, "next": next_times})
+            return
         if path.startswith("/api/projects/") and path.endswith("/artifacts/snapshot"):
             name = unquote(path[len("/api/projects/"): -len("/artifacts/snapshot")]).strip("/")
             project = resolve_project(name)
