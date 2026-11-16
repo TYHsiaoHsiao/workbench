@@ -22,6 +22,7 @@ from knowledge_service import (  # noqa: E402
 from knowledge_service.index_builder import (  # noqa: E402
     SEARCH_CONFIG_SCHEMA,
     _merge_weights,
+    _query_term_weights,
     _query_terms,
     _rank_candidate,
     normalize_query_text,
@@ -131,6 +132,31 @@ class SearchConfigTest(unittest.TestCase):
         )
         self.assertGreater(base, low)
 
+    def test_query_term_weights_mark_synonyms(self) -> None:
+        config = {
+            "synonyms": {"悬念": ["悬疑"]},
+            "stopwords": [],
+            "expand_limit": 8,
+            "synonym_weight": 0.3,
+        }
+        weights = _query_term_weights("悬念", config)
+        self.assertEqual(1.0, weights["悬念"])
+        self.assertEqual(0.3, weights["悬疑"])
+
+    def test_synonym_weight_loaded_and_validated(self) -> None:
+        path = self.root / "search-weighted.json"
+        _write_config(path, synonyms={"悬念": ["悬疑"]})
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["synonym_weight"] = 0.2
+        path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        self.assertEqual(0.2, load_search_config(path)["synonym_weight"])
+
+        bad = self.root / "search-bad-weight.json"
+        data["synonym_weight"] = 2
+        bad.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        with self.assertRaises(KnowledgeIndexError):
+            load_search_config(bad)
+
 
 class HybridConfigIndexTest(unittest.TestCase):
     """建索引后验证同义词检索、权重覆盖与 CLI/服务接入。"""
@@ -225,6 +251,17 @@ class HybridConfigIndexTest(unittest.TestCase):
         self.assertIn("search_config", report)
         self.assertEqual(2.0, report["search_config"]["weights"]["heading"])
         self.assertGreaterEqual(report["search_config"]["synonyms"], 0)
+
+    def test_synonym_weight_pushes_expanded_match_down(self) -> None:
+        config = self._config()
+        config["synonym_weight"] = 0.2
+        result = search_index(self.out, "悬念", mode="hybrid", config=config)
+        self.assertEqual(0.2, result["synonym_weight"])
+        self.assertEqual(0.2, result["term_weights"]["悬疑"])
+        scores = {item["path"]: item["score"] for item in result["results"]}
+        self.assertIn("01_故事.md", scores)
+        self.assertIn("02_方法.md", scores)
+        self.assertGreater(scores["01_故事.md"], scores["02_方法.md"])
 
     def test_service_custom_config_changes_evidence(self) -> None:
         no_syn = self._config(synonyms={})

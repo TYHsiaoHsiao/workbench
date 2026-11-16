@@ -1,4 +1,4 @@
-# 知识库索引维护（M21–M27）
+# 知识库索引维护（M21–M29）
 
 > FR-10 基础版：把 Markdown 知识库按契约重建为 SQLite FTS5 索引，并提供增量维护与检索命令。
 > 索引产物默认 `index/`（仓库内、已 gitignore、不入发行包）；知识库本体保持只读。
@@ -73,6 +73,7 @@ hybrid 分数 = 基础分 + 标题命中 2.0 + 路径命中 1.0 + 短语命中 1
 - `synonyms`：查询词扩展（如「悬念」→「悬疑/紧张」）；hybrid 对每个变体各检索一次后合并去重。
 - `stopwords`：查询词过滤（如「的/了/是」）。
 - `expand_limit`：同义词扩展上限（默认 8；hybrid 实际查询变体最多 4 个）。
+- `synonym_weight`：同义词扩展项在词项覆盖率中的权重（0–1，默认 0.5；原词固定 1.0，M29）。
 
 ```bash
 python workbench.py index search --query 悬念 --mode hybrid --config content/knowledge-search.json
@@ -80,3 +81,17 @@ python workbench.py index search --query 悬念 --mode hybrid --weights heading=
 ```
 
 `--weights` 覆盖配置权重、`--config` 指定其他配置文件；`doctor` 要求 `knowledge-index` 与 `knowledge-search` 两份契约、且默认配置可加载。限制：配置只影响排序与单轮扩展，不改变 FTS 召回口径；不做语义/向量检索。
+
+## 9. 健康巡检（M29）
+
+`python workbench.py index health --out index [--source <源目录>] [--json]` 只读巡检：
+
+- 结构一致性：元数据 documents/chunks 与数据库计数、FTS 行数与 chunks 对齐、FTS5 MATCH 探针。
+- 数据卫生：无主分块（chunks 有而 documents 无）、空分块、重复文档路径。
+- 陈旧度（可选 `--source`）：把源目录文件与索引记录按 mtime_ns 比对，统计新增/变更/删除（列表各限 20 条）。
+- 输出 `status`（healthy/problems）、`stats`、`checks[]`、`stale`、`suggestions[]`；存在问题返回退出码 1，建议通常是全量重建或 `index build --incremental`。
+
+```bash
+python workbench.py index health --source 06-全球电影节获奖剧本
+python workbench.py index health --out index --json
+```

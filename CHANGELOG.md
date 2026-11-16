@@ -1,3 +1,12 @@
+## [2.16.0] - 2026-11-16 — 可视化节点工作台（M29：索引健康巡检与同义词权重）
+
+- 新增 `packages/knowledge_service/index_health.py`：`check_health()` 巡检元数据/文档/FTS 行一致性、无主分块、空分块、重复路径、FTS MATCH 探针；可选 `--source` 比对新/变更/删除文件（mtime_ns 口径，限量 20 条/类），输出 `status`（healthy/problems）、`checks`、`stale`、`suggestions`。
+- 新增 CLI `index health --out index [--source 目录] [--json]`：文本/JSON 报告，存在问题退出码 1；`doctor` 的索引检查不变。
+- `knowledge-search` 契约新增可选 `synonym_weight`（0–1，默认 0.5）：同义词扩展项在词项覆盖率中的权重，原词固定 1.0；hybrid 返回新增 `term_weights` 与 `synonym_weight`。
+- 新增 9 项测试（健康巡检 6：健康/缺失索引/陈旧度/无主分块/源目录不匹配/CLI 退出码；同义词权重 3：词项权重标记、配置加载与范围校验、扩展命中降权排序），合计 479 项。
+
+兼容性：`knowledge-search` 契约新增可选字段；`index health` 为新增子命令，既有命令行为不变（向后兼容 MINOR）。
+
 ## [2.15.0] - 2026-11-16 — 可视化节点工作台（M28：队列运维增强）
 
 - 新增 `packages/flow/cron.py`：零依赖五段式 cron 解析（`*`、`*/n`、`a-b`、`a-b/n`、列表；日/周同时受限按 OR），`parse_cron`/`cron_matches`/`next_run`。

@@ -32,6 +32,7 @@ from .index_builder import (
     split_chunks,
     verify_index,
 )
+from .index_health import check_health
 from .index_service import KnowledgeIndexServiceError, search_index_card
 from .service import (
     FALLBACK_MAX_FILE_BYTES,
@@ -59,6 +60,7 @@ __all__ = [
     "SCOPE_BY_STAGE",
     "SEARCH_CONFIG_SCHEMA",
     "build_index",
+    "check_health",
     "default_index_dir",
     "discover_kb_root",
     "index_info",

@@ -58,8 +58,10 @@ DEFAULT_SEARCH_CONFIG = {
     "synonyms": {},
     "stopwords": [],
     "expand_limit": 8,
+    "synonym_weight": 0.5,
 }
 MAX_QUERY_TERMS = 16
+DEFAULT_SYNONYM_WEIGHT = 0.5
 
 
 class KnowledgeIndexError(RuntimeError):
@@ -483,12 +485,20 @@ def load_search_config(path: str | Path | None = None) -> dict[str, Any]:
     expand_limit = config.get("expand_limit", 8)
     if not isinstance(expand_limit, int) or isinstance(expand_limit, bool):
         expand_limit = 8
+    synonym_weight = config.get("synonym_weight", DEFAULT_SYNONYM_WEIGHT)
+    if (
+        not isinstance(synonym_weight, (int, float))
+        or isinstance(synonym_weight, bool)
+        or not 0 <= float(synonym_weight) <= 1
+    ):
+        synonym_weight = DEFAULT_SYNONYM_WEIGHT
     return {
         "contract_version": str(config.get("contract_version", "0.1")),
         "weights": weights,
         "synonyms": synonyms,
         "stopwords": stopwords[:200],
         "expand_limit": max(0, min(32, expand_limit)),
+        "synonym_weight": float(synonym_weight),
     }
 
 
@@ -498,11 +508,13 @@ def normalize_query_text(text: str) -> str:
     return " ".join(normalized.split())
 
 
-def _query_terms(text: str, config: dict[str, Any] | None = None) -> list[str]:
+def _query_term_weights(text: str, config: dict[str, Any] | None = None) -> dict[str, float]:
+    """返回查询词项及权重：原词 1.0，同义词扩展 ``synonym_weight``（M29）。"""
     cfg = config or {}
     synonyms = cfg.get("synonyms") or {}
     stopwords = {str(word) for word in (cfg.get("stopwords") or [])}
     expand_limit = int(cfg.get("expand_limit", 8) or 0)
+    synonym_weight = float(cfg.get("synonym_weight", DEFAULT_SYNONYM_WEIGHT) or 0.0)
     terms: list[str] = []
     for token in re.split(r"[^0-9A-Za-z\u4e00-\u9fff]+", text):
         if not token:
@@ -520,14 +532,19 @@ def _query_terms(text: str, config: dict[str, Any] | None = None) -> list[str]:
     for term in filtered:
         if term not in unique:
             unique.append(term)
-    expanded: list[str] = []
+    weights: dict[str, float] = {}
     for term in unique[:MAX_QUERY_TERMS]:
-        if term not in expanded:
-            expanded.append(term)
+        weights.setdefault(term, 1.0)
         for synonym in synonyms.get(term, [])[: max(1, expand_limit)]:
-            if synonym not in expanded:
-                expanded.append(synonym)
-    return expanded[:MAX_QUERY_TERMS] or [text]
+            weights.setdefault(synonym, synonym_weight)
+    return weights
+
+
+def _query_terms(text: str, config: dict[str, Any] | None = None) -> list[str]:
+    weights = _query_term_weights(text, config)
+    if not weights:
+        return [text]
+    return list(weights)[:MAX_QUERY_TERMS]
 
 
 def _query_variants(text: str, config: dict[str, Any] | None, limit: int = 4) -> list[str]:
@@ -562,10 +579,15 @@ def _rank_candidate(
         score += float(active_weights.get("path", 0.0))
     if text and text in snippet_text:
         score += float(active_weights.get("phrase", 0.0))
-    terms = _query_terms(text, config)
+    terms = _query_term_weights(text, config)
     if terms:
-        hits = sum(1 for term in terms if term in heading_text or term in snippet_text or term in path)
-        score += float(active_weights.get("coverage", 0.0)) * (hits / len(terms))
+        matched = sum(
+            weight
+            for term, weight in terms.items()
+            if term in heading_text or term in snippet_text or term in path
+        )
+        total = sum(terms.values()) or 1.0
+        score += float(active_weights.get("coverage", 0.0)) * (matched / total)
     return round(score, 6)
 
 
@@ -623,6 +645,13 @@ def _resolved_config(config: dict[str, Any] | None) -> dict[str, Any]:
     expand_limit = config.get("expand_limit", 8)
     if not isinstance(expand_limit, int) or isinstance(expand_limit, bool):
         expand_limit = 8
+    synonym_weight = config.get("synonym_weight", DEFAULT_SYNONYM_WEIGHT)
+    if (
+        not isinstance(synonym_weight, (int, float))
+        or isinstance(synonym_weight, bool)
+        or not 0 <= float(synonym_weight) <= 1
+    ):
+        synonym_weight = DEFAULT_SYNONYM_WEIGHT
     return {
         "contract_version": str(config.get("contract_version", "0.1")),
         "weights": _merge_weights(config.get("weights")),
@@ -633,6 +662,7 @@ def _resolved_config(config: dict[str, Any] | None) -> dict[str, Any]:
         },
         "stopwords": [str(item).strip() for item in (config.get("stopwords") or []) if str(item).strip()],
         "expand_limit": max(0, min(32, expand_limit)),
+        "synonym_weight": float(synonym_weight),
     }
 
 
@@ -740,4 +770,6 @@ def search_index(
     if actual == "hybrid":
         payload["weights"] = dict(cfg["weights"])
         payload["variants"] = _query_variants(text, cfg)
+        payload["term_weights"] = _query_term_weights(text, cfg)
+        payload["synonym_weight"] = cfg["synonym_weight"]
     return payload

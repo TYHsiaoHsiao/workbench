@@ -62,6 +62,7 @@ from knowledge_service import (
     KnowledgeService,
     KnowledgeServiceError,
     build_index,
+    check_health,
     discover_kb_root,
     index_info,
     load_search_config,
@@ -815,6 +816,36 @@ def cmd_index_verify(args: argparse.Namespace) -> int:
         if report["ok"]:
             _print(f"文档 {meta.get('documents')} 份 / 分块 {meta.get('chunks')} 块，FTS 可查询")
     return EXIT_OK if report["ok"] else EXIT_FAIL
+
+
+def cmd_index_health(args: argparse.Namespace) -> int:
+    try:
+        report = check_health(_index_out(args.out), source_root=getattr(args, "source", None))
+    except KnowledgeIndexError as exc:
+        _print(f"索引健康巡检失败: {exc}")
+        return EXIT_FAIL
+    if args.json:
+        _emit(report, True)
+    else:
+        _print(f"索引健康: {report['status']}（index_id {report['meta']['index_id']}）")
+        stats = report["stats"]
+        _print(
+            f"文档 {stats['documents']} 份 / 分块 {stats['chunks']} 块 / FTS 行 {stats['fts_rows']}；"
+            f"库 {stats['db_bytes']} 字节"
+        )
+        for item in report["checks"]:
+            mark = "[OK]" if item["ok"] else "[问题]"
+            _print(f"{mark} {item['name']}: {item['detail']}")
+        stale = report.get("stale") or {}
+        if stale:
+            _print(
+                f"源目录差异: 新增 {stale['new_count']} / 变更 {stale['changed_count']} / "
+                f"删除 {stale['removed_count']}"
+            )
+        _print("建议:")
+        for tip in report["suggestions"]:
+            _print(f"- {tip}")
+    return EXIT_OK if report["status"] == "healthy" else EXIT_FAIL
 
 
 _SEARCH_WEIGHT_KEYS = ("heading", "path", "phrase", "coverage")
@@ -2906,6 +2937,16 @@ def build_parser() -> argparse.ArgumentParser:
     index_verify.add_argument("--out", help="索引输出目录（缺省 workbench/index）")
     index_verify.add_argument("--json", action="store_true", help="以 JSON 输出")
     index_verify.set_defaults(func=cmd_index_verify)
+
+    index_health = index_sub.add_parser(
+        "health", help="索引健康巡检（结构/FTS 一致性/可选源目录陈旧度，M29）"
+    )
+    index_health.add_argument("--out", help="索引输出目录（缺省 workbench/index）")
+    index_health.add_argument(
+        "--source", help="可选：源目录；提供时检查新增/变更/删除的陈旧文件"
+    )
+    index_health.add_argument("--json", action="store_true", help="以 JSON 输出")
+    index_health.set_defaults(func=cmd_index_health)
 
     index_search = index_sub.add_parser("search", help="检索本地索引（trigram FTS，短词回退 LIKE）")
     index_search.add_argument("--query", required=True, help="查询词（中文可直接检索）")

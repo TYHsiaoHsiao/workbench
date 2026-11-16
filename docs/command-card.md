@@ -1,4 +1,4 @@
-# 命令卡（v2.15.0）
+# 命令卡（v2.16.0）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -188,15 +188,16 @@ python workbench.py flow run --project 雨夜回声 --graph flow-main --dry-run
 | `docs/ci.md` | 门禁清单/矩阵/覆盖率策略/排障 |
 | `docs/github-actions.md` | 远端 CI 接入指南（M26：remote/Actions、矩阵耗时、artifact、排障） |
 
-## 13. 知识库索引维护（M21/M22/M24/M27）
+## 13. 知识库索引维护（M21/M22/M24/M27/M29）
 
 | 命令 | 作用 |
 |---|---|
 | `python workbench.py index build --source <目录> [--out index] [--incremental] [--index-id ID] [--json]` | 按契约重建索引（默认全量；`--incremental` 复用未变文件、重索引变更、删除消失文档） |
 | `python workbench.py index info [--out index] [--json]` | 索引信息（index_id/模式/来源/文档与分块数/更新时间） |
 | `python workbench.py index verify [--out index] [--json]` | 校验元数据契约、库计数与 FTS 可查询性 |
+| `python workbench.py index health [--out index] [--source 源目录] [--json]` | M29：健康巡检（元数据/文档/FTS 一致性、无主/空分块、重复路径、源目录陈旧度），问题退出码 1 |
 | `python workbench.py index search --query <词> [--limit 8] [--mode hybrid] [--out index] [--json]` | 全文检索：`--mode auto|fts|like|hybrid`（默认 hybrid，标题/路径/短语/覆盖率加权）；≥3 字走 FTS5 trigram，短词 LIKE 回退（M24） |
-| `python workbench.py index search --query <词> [--mode hybrid] [--config <path>] [--weights heading=3,path=1,phrase=2,coverage=1]` | M27：自定义检索权重与查询扩展（默认 `content/knowledge-search.json`；`--weights` 仅 hybrid 生效） |
+| `python workbench.py index search --query <词> [--mode hybrid] [--config <path>] [--weights heading=3,path=1,phrase=2,coverage=1]` | M27：自定义检索权重与查询扩展（默认 `content/knowledge-search.json`；`--weights` 仅 hybrid 生效）；M29：配置可选 `synonym_weight`（0–1，默认 0.5）控制同义词在词项覆盖率中的权重 |
 | `python workbench.py knowledge search --project 项目名 --stage 01 --problem "问题" --query "查询词" --index index` | M22：索引检索并生成同契约知识卡（`--json` 输出 report；不写参考记忆） |
 
 ## 14. 队列 webhook 通知（M24）

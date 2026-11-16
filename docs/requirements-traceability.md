@@ -1,6 +1,6 @@
 # 需求追溯表（FR ↔ 实现 ↔ 里程碑 ↔ 证据）
 
-> 版本：2.15.0 · 状态：M28（迭代 31）落盘 · 维护规则见文末
+> 版本：2.16.0 · 状态：M29（迭代 32）落盘 · 维护规则见文末
 
 本文件把 PRD §6 的 22 条功能需求（FR-01–FR-22）映射到工作台实现、里程碑与验证证据，作为需求—实现—验收之间的可审计链路。检查工具：`python scripts/check_fr_mapping.py`（CI 门禁，要求 22 条全覆盖、无重复）。
 
@@ -44,6 +44,7 @@
 | 项目状态快照与回滚/发行包回滚演练 | M18（2.6.0） | `core_router/rollback.py`、`rollback_drill.py` | FR-21、FR-22 |
 | 检索配置与查询扩展 | M27（2.14.0） | `knowledge-search` 契约、`content/knowledge-search.json`、`packages/knowledge_service/index_builder.py::load_search_config/search_index`、CLI `index search --config/--weights`、`tests/test_knowledge_search_config.py` | FR-10、FR-12 |
 | 队列运维增强（cron/批次 webhook/批次历史） | M28（2.15.0） | `packages/flow/cron.py`、`packages/flow/notify.py`、`flow queue daemon --cron`、`flow batch --webhook-url`、Web `loadBatches` 面板、`tests/test_flow_cron.py`、`tests/test_flow_batch_webhook.py` | FR-17、FR-19、FR-22 |
+| 索引健康巡检与同义词权重 | M29（2.16.0） | `packages/knowledge_service/index_health.py::check_health`、CLI `index health`、`knowledge-search` 可选 `synonym_weight`、`tests/test_index_health.py`、`tests/test_knowledge_search_config.py` | FR-10、FR-12 |
 | 远端 CI 工作流硬化与就绪检查 | M26（2.13.1） | `.github/workflows/ci.yml`（permissions/concurrency/timeout/UTF-8）、`scripts/ci_ready.py`、`docs/github-actions.md`、`tests/test_ci_ready.py` | FR-21、FR-22 |
 | 分支覆盖率门禁 | M25（2.13.0） | `scripts/coverage_check.py --branches`（`dis` 静态分支点 + 局部 `sys.monitoring` BRANCH 事件）、`scripts/run_ci.py` 覆盖率步骤、`tests/test_ci_scripts.py::BranchCoverageTest` | FR-22（NFR） |
 | 索引混合排序与队列 webhook 通知 | M24（2.12.0） | `packages/knowledge_service/index_builder.py::search_index(mode)`、`knowledge_service/index_service.py`（hybrid 排序）、`packages/flow/queue.py::_notify_webhook`、CLI `index search --mode`/`queue run --webhook-url`、`tests/test_knowledge_index.py::HybridSearchTest`、`tests/test_flow_queue.py::FlowQueueWebhookTest` | FR-10、FR-17、FR-19 |

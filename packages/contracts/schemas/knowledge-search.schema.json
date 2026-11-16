@@ -37,6 +37,12 @@
       "type": "integer",
       "minimum": 0,
       "maximum": 32
+    },
+    "synonym_weight": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "同义词扩展项在词项覆盖率中的权重（M29；原词固定 1.0）"
     }
   }
 }

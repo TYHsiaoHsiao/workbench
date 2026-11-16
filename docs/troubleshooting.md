@@ -190,3 +190,10 @@
 
 - **`index search` 报「权重键无效」/「权重 X 不是数字」**：`--weights` 只接受 `heading/path/phrase/coverage` 四个非负数，格式 `key=value,key=value`。
 - **`index search` 报「检索配置契约校验失败」**：`content/knowledge-search.json` 或 `--config` 文件不符合 `knowledge-search.schema.json`（检查 weights 四键、synonyms 数组、stopwords、expand_limit 0–32）。
+
+## 17. 索引健康巡检（M29）
+
+- **`index health` 报 problems**：按 `checks[]` 定位——documents/chunks 与元数据不一致、FTS 行数不对或无主分块时，全量重建索引（`index build --source <目录>`）；仅陈旧度问题时用 `index build --source <目录> --incremental`。
+- **同义词扩展结果排序不理想**：调整 `content/knowledge-search.json` 的 `synonym_weight`（0–1，越小越强调原词命中）或 `weights.coverage`，再用 `index search --weights ...` 临时对比；`index search` 的 JSON 输出含 `term_weights` 便于排查。
+- **索引健康巡检退出码 1**：表示存在结构/卫生/陈旧问题（healthy 时为 0），CI/脚本可据此阻断；`--json` 报告含 `suggestions` 处理建议。
+

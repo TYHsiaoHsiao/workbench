@@ -205,6 +205,7 @@ def search_index_card(
             "synonyms": len(cfg.get("synonyms") or {}),
             "stopwords": len(cfg.get("stopwords") or []),
             "expand_limit": cfg.get("expand_limit", 8),
+            "synonym_weight": cfg.get("synonym_weight", 0.5),
         },
         "candidates": len(candidates),
         "evidence": len(evidence),
