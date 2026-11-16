@@ -34,7 +34,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest]
         python-version: ["3.11", "3.12"]
     steps:
       - run: python scripts/ci_ready.py --require-remote
@@ -83,10 +83,15 @@ class CiReadyTest(unittest.TestCase):
         self.assertIn("工作流文件不存在", report["missing"])
 
     def test_missing_matrix_phrase_detected(self) -> None:
-        self.path.write_text(WORKFLOW_TEXT.replace("macos-latest", "linux-latest"), encoding="utf-8")
+        self.path.write_text(WORKFLOW_TEXT.replace("windows-latest", "linux-latest"), encoding="utf-8")
         report = ci_ready.check_workflow(self.root)
         self.assertFalse(report["ok"])
-        self.assertIn("macos-latest", report["missing"])
+        self.assertIn("windows-latest", report["missing"])
+
+    def test_workflow_without_macos_still_passes(self) -> None:
+        report = ci_ready.check_workflow(self.root)
+        self.assertTrue(report["ok"])
+        self.assertFalse(report["macos_present"])
 
     def test_main_exit_codes(self) -> None:
         with unittest.mock.patch.object(ci_ready, "list_remotes", return_value=[]):

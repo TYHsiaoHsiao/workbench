@@ -49,3 +49,4 @@ python scripts/ci_ready.py --json
 - **覆盖率/分支覆盖失败**：先本地 `python scripts/run_ci.py` 复现；分支门禁 50%、行 80%。
 - **artifact 缺失**：`dist/` 生成失败或 `if-no-files-found: error` 触发；查看 build_release 步骤日志。
 - **当前无 remote**：本地 CI（`run_ci.py`）不受影响；远端执行只是**待配置**状态，不是失败。
+- 自 2.24.3 起 `ci_ready.py` 将 macOS 视为可选矩阵项（`macos_present` 字段），工作流移除 macOS 时仍判定就绪。

@@ -3,6 +3,9 @@
 检查 GitHub Actions 工作流是否包含预期的跨平台矩阵与关键步骤，并检查当前仓库
 是否已配置 git remote（真实远端执行的前提）。
 
+矩阵要求：默认包含 ubuntu-latest 与 windows-latest（macOS 作业在托管 runner
+排队不稳定时暂移除，属可选；详见 docs/github-actions.md 的说明）。
+
 用法::
 
     python scripts/ci_ready.py                 # 本地自检（无 remote 仅提示，不失败）
@@ -23,7 +26,6 @@ WORKFLOW = Path(".github") / "workflows" / "ci.yml"
 REQUIRED_PHRASES = (
     "ubuntu-latest",
     "windows-latest",
-    "macos-latest",
     '"3.11"',
     '"3.12"',
     "scripts/run_ci.py",
@@ -55,7 +57,8 @@ def check_workflow(root: Path = REPO_ROOT) -> dict[str, object]:
         "ok": not missing,
         "path": WORKFLOW.as_posix(),
         "missing": missing,
-        "has_matrix": all(os_name in text for os_name in ("ubuntu-latest", "windows-latest", "macos-latest")),
+        "has_matrix": all(os_name in text for os_name in ("ubuntu-latest", "windows-latest")),
+        "macos_present": "macos-latest" in text,
         "hint": "" if not missing else "补齐工作流中的矩阵/步骤（详见 docs/github-actions.md）",
     }
 

@@ -72,3 +72,4 @@ python scripts/package_smoke.py              # 发行包冒烟
 - 工作流硬化：`permissions: contents: read`、`concurrency` 取消同分支旧运行、`timeout-minutes: 30`、`PYTHONIOENCODING=utf-8`、artifact 保留 7 天。
 - 真实远端执行前提：仓库配置 git remote 并在 Settings → Actions 启用；接入步骤与排障见 `docs/github-actions.md`。
 - 当前状态：本地 `git remote` 为空，远端矩阵属于「待配置」而非失败；本地九步 CI 不受影响。
+- `ci_ready.py` 的矩阵要求为 `ubuntu-latest` + `windows-latest`（macOS 作业可选；当前工作流因托管 macOS runner 排队取消而暂移除，恢复方式见 `docs/github-actions.md`）。

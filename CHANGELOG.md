@@ -115,6 +115,13 @@
 
 # 变更日志
 
+## [2.24.3] - 2026-11-16 — 远端 CI 就绪检查矩阵对齐（2.24.3 补丁）
+
+- `scripts/ci_ready.py`：必需矩阵项改为 `ubuntu-latest` + `windows-latest`；`macos-latest` 改为可选，新增 `macos_present` 字段。
+- 修复 2.24.2 推送后远端 readiness 检查误报「缺失 macos-latest」导致 4 作业矩阵在第一步失败的问题（run 43858101631 / 43858110055）。
+- `tests/test_ci_ready.py`：新增「无 macOS 工作流仍通过」用例；缺矩阵短语用例改为检测 `windows-latest`。
+- 兼容性：PATCH，无契约/行为破坏；含 macOS 的工作流仍判定就绪。
+
 ## [2.24.2] - 2026-11-16 — CI 矩阵修正（移除 macOS）
 
 - GitHub 托管 macOS runner 持续不可用：`macos-latest` 作业排队约 15 分钟后被取消（无步骤输出），与代码无关；2.24.1 中排除 `macos + 3.12` 后仍复现，故从矩阵移除 macOS。
