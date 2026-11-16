@@ -7,7 +7,9 @@
   短于 3 个字符的查询自动回退为 LIKE；
 - 全量构建与增量维护共用同一份元数据（``knowledge-index-meta.json``），并受
   ``knowledge-index.schema.json`` 契约约束；
-- 索引文件不写入项目目录，默认落在 ``workbench/index/``（可被 .gitignore 忽略）。
+- 索引文件不写入项目目录，默认落在 ``workbench/index/``（可被 .gitignore 忽略）；
+- 检索配置（M27）：``content/knowledge-search.json`` 受 ``knowledge-search.schema.json``
+  约束，可调标题/路径/短语/覆盖率权重、同义词与停用词，用于 hybrid 排序与查询扩展。
 """
 from __future__ import annotations
 
@@ -16,6 +18,7 @@ import json
 import re
 import secrets
 import sqlite3
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -39,6 +42,24 @@ HYBRID_HEADING_BONUS = 2.0
 HYBRID_PATH_BONUS = 1.0
 HYBRID_PHRASE_BONUS = 1.5
 HYBRID_TERM_COVERAGE_BONUS = 1.0
+SEARCH_CONFIG_SCHEMA = "knowledge-search.schema.json"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_SEARCH_CONFIG_PATH = REPO_ROOT / "content" / "knowledge-search.json"
+WEIGHT_KEYS = ("heading", "path", "phrase", "coverage")
+DEFAULT_WEIGHTS = {
+    "heading": HYBRID_HEADING_BONUS,
+    "path": HYBRID_PATH_BONUS,
+    "phrase": HYBRID_PHRASE_BONUS,
+    "coverage": HYBRID_TERM_COVERAGE_BONUS,
+}
+DEFAULT_SEARCH_CONFIG = {
+    "contract_version": "0.1",
+    "weights": dict(DEFAULT_WEIGHTS),
+    "synonyms": {},
+    "stopwords": [],
+    "expand_limit": 8,
+}
+MAX_QUERY_TERMS = 16
 
 
 class KnowledgeIndexError(RuntimeError):
@@ -409,15 +430,79 @@ def verify_index(out_dir: str | Path) -> dict[str, Any]:
     }
 
 
-def _like_pattern(query: str) -> str:
-    return "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+def _merge_weights(weights: dict[str, Any] | None) -> dict[str, float]:
+    merged = dict(DEFAULT_WEIGHTS)
+    if weights is None:
+        return merged
+    if not isinstance(weights, dict):
+        raise KnowledgeIndexError("weights 必须是对象")
+    for key, value in weights.items():
+        if key not in WEIGHT_KEYS:
+            raise KnowledgeIndexError(
+                f"权重键无效: {key!r}（可选 {('/'.join(WEIGHT_KEYS))}）"
+            )
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
+            raise KnowledgeIndexError(f"权重 {key} 必须是非负数字，实际 {value!r}")
+        merged[key] = float(value)
+    return merged
 
 
-def _clean_fragment(value: Any) -> str:
-    return " ".join(str(value or "").replace("[", " ").replace("]", " ").split())
+def load_search_config(path: str | Path | None = None) -> dict[str, Any]:
+    """加载检索配置（缺省 ``content/knowledge-search.json``，缺失时用内置默认）。
+
+    配置受 :data:`SEARCH_CONFIG_SCHEMA` 契约约束；返回标准化字典：
+    ``{"contract_version", "weights", "synonyms", "stopwords", "expand_limit"}``。
+    """
+    config: dict[str, Any]
+    candidate = Path(path).expanduser() if path else DEFAULT_SEARCH_CONFIG_PATH
+    if candidate.is_file():
+        try:
+            raw = json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise KnowledgeIndexError(f"检索配置读取失败: {candidate}: {exc}") from exc
+        errors = validate(raw, schema_name=SEARCH_CONFIG_SCHEMA)
+        if errors:
+            raise KnowledgeIndexError(
+                "检索配置契约校验失败：" + "；".join(errors[:5])
+            )
+        config = raw
+    elif path:
+        raise KnowledgeIndexError(f"检索配置文件不存在: {candidate}")
+    else:
+        config = dict(DEFAULT_SEARCH_CONFIG)
+    weights = _merge_weights(config.get("weights"))
+    synonyms_raw = config.get("synonyms") or {}
+    synonyms: dict[str, list[str]] = {}
+    for key, values in synonyms_raw.items():
+        if not isinstance(key, str) or not isinstance(values, list):
+            continue
+        cleaned = [str(item).strip() for item in values if str(item).strip()]
+        if cleaned:
+            synonyms[key] = cleaned[:10]
+    stopwords = [str(item).strip() for item in (config.get("stopwords") or []) if str(item).strip()]
+    expand_limit = config.get("expand_limit", 8)
+    if not isinstance(expand_limit, int) or isinstance(expand_limit, bool):
+        expand_limit = 8
+    return {
+        "contract_version": str(config.get("contract_version", "0.1")),
+        "weights": weights,
+        "synonyms": synonyms,
+        "stopwords": stopwords[:200],
+        "expand_limit": max(0, min(32, expand_limit)),
+    }
 
 
-def _query_terms(text: str) -> list[str]:
+def normalize_query_text(text: str) -> str:
+    """NFKC 归一 + 连续空白折叠（大小写对中文无影响，ASCII 交给 _query_terms）。"""
+    normalized = unicodedata.normalize("NFKC", str(text or ""))
+    return " ".join(normalized.split())
+
+
+def _query_terms(text: str, config: dict[str, Any] | None = None) -> list[str]:
+    cfg = config or {}
+    synonyms = cfg.get("synonyms") or {}
+    stopwords = {str(word) for word in (cfg.get("stopwords") or [])}
+    expand_limit = int(cfg.get("expand_limit", 8) or 0)
     terms: list[str] = []
     for token in re.split(r"[^0-9A-Za-z\u4e00-\u9fff]+", text):
         if not token:
@@ -430,29 +515,66 @@ def _query_terms(text: str) -> list[str]:
             terms.append(token)
         else:
             terms.extend(token[i : i + 2] for i in range(len(token) - 1))
+    filtered = [term for term in terms if term not in stopwords]
     unique: list[str] = []
-    for term in terms:
+    for term in filtered:
         if term not in unique:
             unique.append(term)
-    return unique[:12] or [text]
+    expanded: list[str] = []
+    for term in unique[:MAX_QUERY_TERMS]:
+        if term not in expanded:
+            expanded.append(term)
+        for synonym in synonyms.get(term, [])[: max(1, expand_limit)]:
+            if synonym not in expanded:
+                expanded.append(synonym)
+    return expanded[:MAX_QUERY_TERMS] or [text]
 
 
-def _rank_candidate(text: str, path: str, heading: str, snippet: str, base: float) -> float:
-    """混合排序打分：基础分 + 标题/路径/短语命中 + 查询词项覆盖率。"""
+def _query_variants(text: str, config: dict[str, Any] | None, limit: int = 4) -> list[str]:
+    """hybrid 检索的查询扩展：原查询 + 由同义词扩展出的词项（去重、限量）。"""
+    variants = [text]
+    for term in _query_terms(text, config):
+        if term not in variants:
+            variants.append(term)
+        if len(variants) >= limit:
+            break
+    return variants
+
+
+def _rank_candidate(
+    text: str,
+    path: str,
+    heading: str,
+    snippet: str,
+    base: float,
+    *,
+    weights: dict[str, float] | None = None,
+    config: dict[str, Any] | None = None,
+) -> float:
+    """混合排序打分：基础分 + 标题/路径/短语命中 + 查询词项覆盖率（权重可配）。"""
+    active_weights = weights or DEFAULT_WEIGHTS
     heading_text = _clean_fragment(heading)
     snippet_text = _clean_fragment(snippet)
     score = float(base)
     if text and text in heading_text:
-        score += HYBRID_HEADING_BONUS
+        score += float(active_weights.get("heading", 0.0))
     if text and text in path:
-        score += HYBRID_PATH_BONUS
+        score += float(active_weights.get("path", 0.0))
     if text and text in snippet_text:
-        score += HYBRID_PHRASE_BONUS
-    terms = _query_terms(text)
+        score += float(active_weights.get("phrase", 0.0))
+    terms = _query_terms(text, config)
     if terms:
         hits = sum(1 for term in terms if term in heading_text or term in snippet_text or term in path)
-        score += HYBRID_TERM_COVERAGE_BONUS * (hits / len(terms))
+        score += float(active_weights.get("coverage", 0.0)) * (hits / len(terms))
     return round(score, 6)
+
+
+def _like_pattern(query: str) -> str:
+    return "%" + query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+
+def _clean_fragment(value: Any) -> str:
+    return " ".join(str(value or "").replace("[", " ").replace("]", " ").split())
 
 
 def _candidate_key(path: str, heading: str, snippet: str) -> tuple[str, str]:
@@ -493,20 +615,43 @@ def _like_rows(conn: sqlite3.Connection, text: str, limit: int) -> list[dict[str
     return results
 
 
+def _resolved_config(config: dict[str, Any] | None) -> dict[str, Any]:
+    if config is None:
+        return load_search_config()
+    if not isinstance(config, dict):
+        raise KnowledgeIndexError("检索配置必须是对象")
+    expand_limit = config.get("expand_limit", 8)
+    if not isinstance(expand_limit, int) or isinstance(expand_limit, bool):
+        expand_limit = 8
+    return {
+        "contract_version": str(config.get("contract_version", "0.1")),
+        "weights": _merge_weights(config.get("weights")),
+        "synonyms": {
+            str(key): [str(item).strip() for item in values if str(item).strip()][:10]
+            for key, values in (config.get("synonyms") or {}).items()
+            if isinstance(values, list)
+        },
+        "stopwords": [str(item).strip() for item in (config.get("stopwords") or []) if str(item).strip()],
+        "expand_limit": max(0, min(32, expand_limit)),
+    }
+
+
 def search_index(
     out_dir: str | Path,
     query: str,
     *,
     limit: int = 8,
     mode: str = "auto",
+    config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """检索索引。
 
     ``mode``：auto（默认，>=3 字符走 FTS5 trigram、否则 LIKE 回退）、
     fts（强制 FTS，短查询报错）、like（强制 LIKE）、
-    hybrid（M24：FTS + LIKE 候选合并，按标题/路径/短语/词项覆盖率加权排序）。
+    hybrid（M24：FTS + LIKE 候选合并，按标题/路径/短语/词项覆盖率加权排序；
+    M27：权重/同义词/停用词来自 ``knowledge-search.json`` 检索配置，并做查询扩展）。
     """
-    text = (query or "").strip()
+    text = normalize_query_text(query)
     if not text:
         raise KnowledgeIndexError("查询词不能为空")
     if limit <= 0:
@@ -515,6 +660,8 @@ def search_index(
         raise KnowledgeIndexError(
             f"检索模式无效: {mode!r}（可选 auto/fts/like/hybrid）"
         )
+    cfg = _resolved_config(config)
+    terms = _query_terms(text, cfg)
     out = Path(out_dir).expanduser()
     db_file = _db_path(out)
     if not db_file.is_file():
@@ -538,22 +685,30 @@ def search_index(
             actual = "fts"
         elif mode == "hybrid":
             candidates: list[dict[str, Any]] = []
-            if len(text) >= MIN_FTS_QUERY_CHARS:
-                for row in _fts_rows(conn, text, limit * 3):
-                    candidates.append(
-                        {
-                            "path": row["path"],
-                            "heading": row["heading"],
-                            "snippet": row["snippet"],
-                            "base": max(0.0, -float(row["score"])),
-                        }
-                    )
-            for item in _like_rows(conn, text, limit * 2):
-                candidates.append({**item, "base": 1.0})
+            variants = _query_variants(text, cfg)
+            for variant in variants:
+                if len(variant) >= MIN_FTS_QUERY_CHARS:
+                    for row in _fts_rows(conn, variant, limit * 3):
+                        candidates.append(
+                            {
+                                "path": row["path"],
+                                "heading": row["heading"],
+                                "snippet": row["snippet"],
+                                "base": max(0.0, -float(row["score"])),
+                            }
+                        )
+                for item in _like_rows(conn, variant, limit * 2):
+                    candidates.append({**item, "base": 1.0})
             ranked: dict[tuple[str, str, str], dict[str, Any]] = {}
             for item in candidates:
                 score = _rank_candidate(
-                    text, item["path"], item["heading"], item["snippet"], item["base"]
+                    text,
+                    item["path"],
+                    item["heading"],
+                    item["snippet"],
+                    item["base"],
+                    weights=cfg["weights"],
+                    config=cfg,
                 )
                 key = _candidate_key(item["path"], item["heading"], item["snippet"])
                 current = ranked.get(key)
@@ -574,10 +729,15 @@ def search_index(
             actual = "like"
     finally:
         conn.close()
-    return {
+    payload: dict[str, Any] = {
         "ok": True,
         "query": text,
         "count": len(results),
         "mode": actual,
         "results": results,
+        "terms": terms,
     }
+    if actual == "hybrid":
+        payload["weights"] = dict(cfg["weights"])
+        payload["variants"] = _query_variants(text, cfg)
+    return payload

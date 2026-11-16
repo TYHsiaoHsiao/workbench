@@ -1,4 +1,4 @@
-# 知识库索引维护（M21–M24）
+# 知识库索引维护（M21–M27）
 
 > FR-10 基础版：把 Markdown 知识库按契约重建为 SQLite FTS5 索引，并提供增量维护与检索命令。
 > 索引产物默认 `index/`（仓库内、已 gitignore、不入发行包）；知识库本体保持只读。
@@ -64,3 +64,19 @@ python workbench.py index search --query 第一幕 --limit 5
 | hybrid | 合并 FTS(limit×3)+LIKE(limit×2) 候选，按 (path, heading) 去重后加权排序 |
 
 hybrid 分数 = 基础分 + 标题命中 2.0 + 路径命中 1.0 + 短语命中 1.5 + 词项覆盖率 1.0；score 仅用于排序，不承诺跨查询可比。短查询（<3 字）由 LIKE 候选兜底。
+
+## 8. 检索配置与查询扩展（M27）
+
+`content/knowledge-search.json` 由 `knowledge-search.schema.json` 校验，字段：
+
+- `weights`：`heading`/`path`/`phrase`/`coverage`，默认 `2.0/1.0/1.5/1.0`（仅 hybrid 排序使用）。
+- `synonyms`：查询词扩展（如「悬念」→「悬疑/紧张」）；hybrid 对每个变体各检索一次后合并去重。
+- `stopwords`：查询词过滤（如「的/了/是」）。
+- `expand_limit`：同义词扩展上限（默认 8；hybrid 实际查询变体最多 4 个）。
+
+```bash
+python workbench.py index search --query 悬念 --mode hybrid --config content/knowledge-search.json
+python workbench.py index search --query 悬念 --mode hybrid --weights heading=3,path=1,phrase=2,coverage=1
+```
+
+`--weights` 覆盖配置权重、`--config` 指定其他配置文件；`doctor` 要求 `knowledge-index` 与 `knowledge-search` 两份契约、且默认配置可加载。限制：配置只影响排序与单轮扩展，不改变 FTS 召回口径；不做语义/向量检索。

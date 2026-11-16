@@ -64,6 +64,7 @@ from knowledge_service import (
     build_index,
     discover_kb_root,
     index_info,
+    load_search_config,
     search_index,
     search_index_card,
     verify_index,
@@ -279,6 +280,12 @@ def _check_index() -> tuple[bool, str]:
     schemas = set(list_schemas())
     if "knowledge-index.schema.json" not in schemas:
         return False, "缺少索引契约: knowledge-index.schema.json"
+    if "knowledge-search.schema.json" not in schemas:
+        return False, "缺少检索配置契约: knowledge-search.schema.json"
+    try:
+        config = load_search_config()
+    except KnowledgeIndexError as exc:
+        return False, f"检索配置不可用: {exc}"
     try:
         probe = sqlite3.connect(":memory:")
         try:
@@ -287,7 +294,12 @@ def _check_index() -> tuple[bool, str]:
             probe.close()
     except sqlite3.Error as exc:
         return False, f"SQLite FTS5 trigram 不可用（需要 >= 3.34）: {exc}"
-    return True, "索引维护契约 1 份（knowledge-index）· FTS5 trigram 可用"
+    weights = config["weights"]
+    return True, (
+        "索引契约 2 份（knowledge-index/knowledge-search）· FTS5 trigram 可用 · "
+        f"检索权重 heading={weights['heading']}/path={weights['path']}/"
+        f"phrase={weights['phrase']}/coverage={weights['coverage']}"
+    )
 
 
 def cmd_doctor(args: argparse.Namespace) -> int:
@@ -802,10 +814,47 @@ def cmd_index_verify(args: argparse.Namespace) -> int:
     return EXIT_OK if report["ok"] else EXIT_FAIL
 
 
+_SEARCH_WEIGHT_KEYS = ("heading", "path", "phrase", "coverage")
+
+
+def _parse_search_weights(value: str | None) -> dict[str, float] | None:
+    if not value:
+        return None
+    weights: dict[str, float] = {}
+    for part in str(value).split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "=" not in part:
+            raise KnowledgeIndexError(f"权重格式应为 key=value，实际 {part!r}")
+        key, raw = part.split("=", 1)
+        key = key.strip()
+        if key not in _SEARCH_WEIGHT_KEYS:
+            raise KnowledgeIndexError(
+                f"权重键无效: {key!r}（可选 {'/'.join(_SEARCH_WEIGHT_KEYS)}）"
+            )
+        try:
+            number = float(raw.strip())
+        except ValueError:
+            raise KnowledgeIndexError(f"权重 {key} 不是数字: {raw!r}") from None
+        if number < 0:
+            raise KnowledgeIndexError(f"权重 {key} 必须非负，实际 {number!r}")
+        weights[key] = number
+    return weights or None
+
+
 def cmd_index_search(args: argparse.Namespace) -> int:
     try:
+        config = load_search_config(getattr(args, "config", None))
+        overrides = _parse_search_weights(getattr(args, "weights", None))
+        if overrides:
+            config = {**config, "weights": {**config["weights"], **overrides}}
         result = search_index(
-            _index_out(args.out), args.query, limit=args.limit, mode=getattr(args, "mode", "hybrid")
+            _index_out(args.out),
+            args.query,
+            limit=args.limit,
+            mode=getattr(args, "mode", "hybrid"),
+            config=config,
         )
     except KnowledgeIndexError as exc:
         _print(f"检索失败: {exc}")
@@ -814,6 +863,13 @@ def cmd_index_search(args: argparse.Namespace) -> int:
         _emit(result, True)
     else:
         _print(f"检索「{result['query']}」→ {result['count']} 条（模式 {result['mode']}）")
+        if result.get("weights"):
+            weights = result["weights"]
+            _print(
+                "权重: " + "，".join(f"{key}={weights.get(key)}" for key in _SEARCH_WEIGHT_KEYS)
+            )
+        if result.get("variants"):
+            _print("查询扩展: " + " / ".join(result["variants"]))
         for item in result["results"]:
             _print(f"- {item['path']} · {item['heading'] or '（无标题）'}")
             _print(f"  {item['snippet']}")
@@ -2820,6 +2876,14 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["hybrid", "fts", "like"],
         default="hybrid",
         help="检索模式：hybrid（默认，混合排序）/ fts / like",
+    )
+    index_search.add_argument(
+        "--config",
+        help="检索配置文件（M27；缺省 content/knowledge-search.json：权重/同义词/停用词）",
+    )
+    index_search.add_argument(
+        "--weights",
+        help="临时覆盖权重，如 heading=3,path=1,phrase=2,coverage=1（M27；仅 hybrid 生效）",
     )
     index_search.add_argument("--out", help="索引输出目录（缺省 workbench/index）")
     index_search.add_argument("--json", action="store_true", help="以 JSON 输出")

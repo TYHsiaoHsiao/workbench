@@ -185,3 +185,6 @@
 
 - **GitHub Actions 没有触发**：`python scripts/ci_ready.py --json` 查看工作流是否缺少矩阵/步骤短语与 `git remote` 是否为空；补 remote 后在仓库 Settings → Actions 启用工作流，详见 `docs/github-actions.md`。
 - **远端 Windows 作业中文乱码**：工作流已设 `PYTHONIOENCODING=utf-8`；本地复现时同样设置该环境变量。
+
+- **`index search` 报「权重键无效」/「权重 X 不是数字」**：`--weights` 只接受 `heading/path/phrase/coverage` 四个非负数，格式 `key=value,key=value`。
+- **`index search` 报「检索配置契约校验失败」**：`content/knowledge-search.json` 或 `--config` 文件不符合 `knowledge-search.schema.json`（检查 weights 四键、synonyms 数组、stopwords、expand_limit 0–32）。

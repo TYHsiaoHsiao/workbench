@@ -16,6 +16,7 @@ from .index_builder import (
     KnowledgeIndexError,
     default_index_dir,
     index_ready,
+    load_search_config,
     search_index,
 )
 from .service import SCOPE_BY_STAGE
@@ -70,10 +71,13 @@ def search_index_card(
     index_dir: str | None = None,
     evidence_limit: int = 8,
     per_query_limit: int = 8,
+    search_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """用本地索引生成 evidence 链知识卡。
 
-    返回 ``{"ok", "status", "card", "report"}``，结构对齐 :func:`service.search`。
+    ``search_config`` 为 M27 检索配置（权重/同义词/停用词）；缺省加载
+    ``content/knowledge-search.json``。返回 ``{"ok", "status", "card", "report"}``，
+    结构对齐 :func:`service.search`。
     """
     project = str(project or "").strip()
     problem = str(problem or "").strip()
@@ -93,15 +97,20 @@ def search_index_card(
     out_dir = default_index_dir() if not index_dir else index_dir
     try:
         ready = index_ready(out_dir)
+        cfg = load_search_config() if search_config is None else search_config
     except KnowledgeIndexError as exc:
         raise KnowledgeIndexServiceError(str(exc)) from exc
+    if not isinstance(cfg, dict) or not isinstance(cfg.get("weights"), dict):
+        raise KnowledgeIndexServiceError("search_config 必须是含 weights 的检索配置对象")
     meta = ready["meta"]
 
     collected: list[dict[str, Any]] = []
     query_modes: dict[str, str] = {}
     for item in raw_queries:
         query = item["query"]
-        result = search_index(out_dir, query, limit=per_query_limit, mode="hybrid")
+        result = search_index(
+            out_dir, query, limit=per_query_limit, mode="hybrid", config=cfg
+        )
         query_modes[query] = result["mode"]
         for hit in result["results"]:
             heading = (hit.get("heading") or "").strip()
@@ -191,6 +200,12 @@ def search_index_card(
         "source_root": meta["source_root"],
         "queries": raw_queries,
         "query_modes": query_modes,
+        "search_config": {
+            "weights": dict(cfg["weights"]),
+            "synonyms": len(cfg.get("synonyms") or {}),
+            "stopwords": len(cfg.get("stopwords") or []),
+            "expand_limit": cfg.get("expand_limit", 8),
+        },
         "candidates": len(candidates),
         "evidence": len(evidence),
         "read_only": True,

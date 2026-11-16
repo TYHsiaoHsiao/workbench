@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Knowledge Search Config v0.1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "weights", "synonyms", "stopwords"],
+  "properties": {
+    "contract_version": {
+      "type": "string",
+      "const": "0.1"
+    },
+    "weights": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["heading", "path", "phrase", "coverage"],
+      "properties": {
+        "heading": {"type": "number", "minimum": 0},
+        "path": {"type": "number", "minimum": 0},
+        "phrase": {"type": "number", "minimum": 0},
+        "coverage": {"type": "number", "minimum": 0}
+      }
+    },
+    "synonyms": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {"type": "string", "minLength": 1},
+        "maxItems": 10
+      }
+    },
+    "stopwords": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "maxItems": 200
+    },
+    "expand_limit": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 32
+    }
+  }
+}

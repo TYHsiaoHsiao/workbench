@@ -7,7 +7,7 @@
 - **契约先行**：阶段产物、参考记忆、知识卡、风格画像、项目状态全部有 JSON Schema；
 - **品牌守卫**：仓库与工作区零品牌残留，CI 阻断回归。
 
-当前版本 `2.13.1`：迭代 0（地基）、迭代 1a（B 知识服务 PoC）、迭代 2 方案 A（有限正文回退）、迭代 2.1（精度修订）、迭代 1b（A 编排硬化）、迭代 3（C 风格服务）、迭代 4（试点与固化）、1.0.1（真实项目补丁）、1.0.2（工作台体验补丁）、M1（可视化节点工作台骨架，1.1.0）、M2/M3（可视化节点工作台能力层，1.2.0）、M4（运行回放与图导入导出，1.3.0）与 M5（并行执行、节点级重试、项目管理面板，1.4.0）与 M6（状态锁与事务、运行对比、项目预览，1.5.0）以及 M7（条件分支与循环、运行基线与回归告警、产物快照差异，1.6.0）与 M8（复合节点与真实生成平台适配，1.7.0）以及 M9（生成任务状态轮询与 Web 生成面板，1.8.0）与 M10（生成结果回填、失败重试与任务详情抽屉，1.9.0）与 M11（批量回填、生成平台流程节点与生成面板筛选，1.10.0）与 M12（批次编排、批量自动重试与批次历史，2.0.0）已完成；2.0.1 为实时预览与界面迭代补丁（`/api/dev/version` 自动刷新、节点分类视觉与 17 类节点演示图，见 `docs/release-notes-2.0.1.md`）；2.1.0 为 M13 批次增强（批次并行预演（仅 dry-run）、失败图一键恢复与批次恢复 API，见 `docs/release-notes-2.1.0.md`）；2.2.0 为 M14 批次队列化与失败通知（项目内批次队列、顺序执行与失败汇总通知、CLI 跨项目 `--all-projects`，见 `docs/release-notes-2.2.0.md`）；2.3.0 为 M15 队列增强（定时调度、条目取消/重排与 `flow queue daemon` 后台守护，见 `docs/release-notes-2.3.0.md`）；2.4.0 为 M16 队列失败重试与通知外送（失败条目重试、JSONL 通知日志与 `--notify-cmd` 外送、daemon 日志轮转，见 `docs/release-notes-2.4.0.md`）；2.5.0 为 M17 PRD 验收对齐（打包冒烟、文档链接检查、CLI 冷启动基准、PRD 指标/验收章节一致性修订，见 `docs/release-notes-2.5.0.md`）；2.6.0 为 M18 项目状态快照与回滚（`rollback create/list/apply` 快照与安全回滚、`scripts/rollback_drill.py` 发行包升级→回滚演练，见 `docs/release-notes-2.6.0.md`）；2.7.0 为 M19 需求追溯与 FR↔里程碑映射（`docs/requirements-traceability.md`、`scripts/check_fr_mapping.py` 纳入 CI，见 `docs/release-notes-2.7.0.md`）；2.8.0 为 M20 跨平台 CI 矩阵、覆盖率与可复现构建门禁、Web 快照回滚面板（见 `docs/release-notes-2.8.0.md`）；2.9.0 为 M21 知识库索引维护（按契约重建/增量索引、SQLite FTS5 trigram 全文检索与 `workbench.py index` CLI，见 `docs/release-notes-2.9.0.md`）；2.10.0 为 M22 本地索引接入知识服务（`search_index_card` 用 `index/` 生成同契约知识卡、CLI `knowledge search --index`、flow `knowledge_search` 节点 `index` 参数，见 `docs/release-notes-2.10.0.md`）；2.11.0 为 M23 覆盖率提升与 80% CI 门禁（行覆盖率 80.8%、CLI 广覆盖与 Web 错误路径测试，见 `docs/release-notes-2.11.0.md`）；2.12.0 为 M24 索引混合排序与队列 webhook 通知（`index search --mode hybrid`、`queue run/daemon --webhook-url`，见 `docs/release-notes-2.12.0.md`）；2.13.0 为 M25 分支覆盖率门禁（行覆盖 ≥80% + 分支覆盖 ≥50%、`coverage_check.py --branches`，见 `docs/release-notes-2.13.0.md`）；2.13.1 为 M26 远端 CI 工作流硬化与就绪检查（concurrency/permissions/timeout、`scripts/ci_ready.py`、`docs/github-actions.md`，见 `docs/release-notes-2.13.1.md`）。三个试点：从零到 08（`试点A-雨夜回声`）、既有剧本到 05（`试点B-旧剧本接管`）、真实项目从零到 done（《死亡外科医生》，见 `docs/pilot-c-report.md`），指标与证据见 `docs/pilots/`。
+当前版本 `2.14.0`：迭代 0（地基）、迭代 1a（B 知识服务 PoC）、迭代 2 方案 A（有限正文回退）、迭代 2.1（精度修订）、迭代 1b（A 编排硬化）、迭代 3（C 风格服务）、迭代 4（试点与固化）、1.0.1（真实项目补丁）、1.0.2（工作台体验补丁）、M1（可视化节点工作台骨架，1.1.0）、M2/M3（可视化节点工作台能力层，1.2.0）、M4（运行回放与图导入导出，1.3.0）与 M5（并行执行、节点级重试、项目管理面板，1.4.0）与 M6（状态锁与事务、运行对比、项目预览，1.5.0）以及 M7（条件分支与循环、运行基线与回归告警、产物快照差异，1.6.0）与 M8（复合节点与真实生成平台适配，1.7.0）以及 M9（生成任务状态轮询与 Web 生成面板，1.8.0）与 M10（生成结果回填、失败重试与任务详情抽屉，1.9.0）与 M11（批量回填、生成平台流程节点与生成面板筛选，1.10.0）与 M12（批次编排、批量自动重试与批次历史，2.0.0）已完成；2.0.1 为实时预览与界面迭代补丁（`/api/dev/version` 自动刷新、节点分类视觉与 17 类节点演示图，见 `docs/release-notes-2.0.1.md`）；2.1.0 为 M13 批次增强（批次并行预演（仅 dry-run）、失败图一键恢复与批次恢复 API，见 `docs/release-notes-2.1.0.md`）；2.2.0 为 M14 批次队列化与失败通知（项目内批次队列、顺序执行与失败汇总通知、CLI 跨项目 `--all-projects`，见 `docs/release-notes-2.2.0.md`）；2.3.0 为 M15 队列增强（定时调度、条目取消/重排与 `flow queue daemon` 后台守护，见 `docs/release-notes-2.3.0.md`）；2.4.0 为 M16 队列失败重试与通知外送（失败条目重试、JSONL 通知日志与 `--notify-cmd` 外送、daemon 日志轮转，见 `docs/release-notes-2.4.0.md`）；2.5.0 为 M17 PRD 验收对齐（打包冒烟、文档链接检查、CLI 冷启动基准、PRD 指标/验收章节一致性修订，见 `docs/release-notes-2.5.0.md`）；2.6.0 为 M18 项目状态快照与回滚（`rollback create/list/apply` 快照与安全回滚、`scripts/rollback_drill.py` 发行包升级→回滚演练，见 `docs/release-notes-2.6.0.md`）；2.7.0 为 M19 需求追溯与 FR↔里程碑映射（`docs/requirements-traceability.md`、`scripts/check_fr_mapping.py` 纳入 CI，见 `docs/release-notes-2.7.0.md`）；2.8.0 为 M20 跨平台 CI 矩阵、覆盖率与可复现构建门禁、Web 快照回滚面板（见 `docs/release-notes-2.8.0.md`）；2.9.0 为 M21 知识库索引维护（按契约重建/增量索引、SQLite FTS5 trigram 全文检索与 `workbench.py index` CLI，见 `docs/release-notes-2.9.0.md`）；2.10.0 为 M22 本地索引接入知识服务（`search_index_card` 用 `index/` 生成同契约知识卡、CLI `knowledge search --index`、flow `knowledge_search` 节点 `index` 参数，见 `docs/release-notes-2.10.0.md`）；2.11.0 为 M23 覆盖率提升与 80% CI 门禁（行覆盖率 80.8%、CLI 广覆盖与 Web 错误路径测试，见 `docs/release-notes-2.11.0.md`）；2.12.0 为 M24 索引混合排序与队列 webhook 通知（`index search --mode hybrid`、`queue run/daemon --webhook-url`，见 `docs/release-notes-2.12.0.md`）；2.13.0 为 M25 分支覆盖率门禁（行覆盖 ≥80% + 分支覆盖 ≥50%、`coverage_check.py --branches`，见 `docs/release-notes-2.13.0.md`）；2.13.1 为 M26 远端 CI 工作流硬化与就绪检查（concurrency/permissions/timeout、`scripts/ci_ready.py`、`docs/github-actions.md`，见 `docs/release-notes-2.13.1.md`）；2.14.0 为 M27 索引检索配置增强（权重/同义词/停用词与 hybrid 查询扩展，`index search --weights/--config`，见 `docs/release-notes-2.14.0.md`）。三个试点：从零到 08（`试点A-雨夜回声`）、既有剧本到 05（`试点B-旧剧本接管`）、真实项目从零到 done（《死亡外科医生》，见 `docs/pilot-c-report.md`），指标与证据见 `docs/pilots/`。
 
 ## 目录结构
 
@@ -35,7 +35,7 @@ workbench/
     flow/                    # 可视化节点工作流：图模型与校验、节点注册表、执行引擎、项目内存储
     webui/                   # 本地 Web 服务 + 原生前端（画布/拖拽/连线/检查器/运行面板）
     generate/                # 生成平台适配层：4 provider 登记、任务记录（job 契约）、dry-run 默认
-  tests/                     # 442 个 unittest 用例
+  tests/                     # 459 个 unittest 用例
   scripts/                   # run_ci.py / build_manifest.py / pilot_matrix.py / 平台包装
   docs/                      # 架构、品牌守卫、命令卡、故障排查、迁移说明、迭代报告、pilots/
   .github/workflows/ci.yml   # GitHub Actions
@@ -130,12 +130,13 @@ python workbench.py index search --query 第一幕 --limit 5  # 全文检索证�
 python workbench.py index verify                          # 校验索引库与元数据一致性
 python workbench.py index search --query 第一幕 --mode hybrid --limit 5   # 混合排序（标题/路径/短语加权，M24）
 python workbench.py queue run --project 我的短片 --webhook-url https://example.com/hook  # 失败通知外送 webhook（M24）
+python workbench.py index search --query 第一幕 --mode hybrid --weights heading=3,path=1,phrase=2,coverage=1  # 自定义检索权重（M27；也可 --config 指定配置）
 python workbench.py project list --stats                            # 跨项目总览 + 流程/运行/待门禁/产物统计
 ```
 
 - 项目默认创建在「文档目录/AI 影视工作台/projects/<名称>/」，可用 `--project-root` 或环境变量 `AI_FILM_PROJECTS_ROOT` 覆盖；包含 `00_project/`（状态、参考记忆、历史、知识卡、风格卡）、`00_inbox/`、`01_story/` … `06_prompts/`。
 - 项目状态以 `00_project/state.json` 为唯一事实来源，必须通过 `state.schema.json`（v2 字段）校验；门禁与修订日志同文件持久化。
-- 本地 CI：`python scripts/run_ci.py`（编译 → 文档链接检查 → FR 追溯映射 → 442 项测试 → 行覆盖率 ≥80% / 分支覆盖率 ≥50% → doctor → CLI 冷启动 NFR 基准 → brand-guard → 可复现构建校验）。
+- 本地 CI：`python scripts/run_ci.py`（编译 → 文档链接检查 → FR 追溯映射 → 459 项测试 → 行覆盖率 ≥80% / 分支覆盖率 ≥50% → doctor → CLI 冷启动 NFR 基准 → brand-guard → 可复现构建校验）。
 - 文档链接检查：`python scripts/check_doc_links.py`（Markdown 链接与行内代码中的仓库内路径必须存在）。
 - CLI 冷启动基准：`python scripts/bench.py`（默认 5 次取中位数，`--enforce` 时超过 1.0s 退出码 1）。
 - 知识服务只读现有索引，不改知识库本体；先做元数据候选，召回不足时按预算做有限正文回退；只有路径/行号/命中词齐全才输出 `ok` 知识卡。回退可用 `--no-fallback` 关闭、用 `--fallback-files` / `--fallback-bytes` 调预算。证据按质量评分排序，并过滤「反转身」等动作误命中；高置信证据足够时会丢弃纯字面低置信证据（统计见 `report.evidence_quality`）。
@@ -162,6 +163,7 @@ python workbench.py project list --stats                            # 跨项目�
 | 阶段注册表 | `stage-registry.schema.json` | 8 阶段输入输出、门禁、挂载点 |
 | 流程图 / 运行记录 / 节点类型 / 模板 | `flow-graph.schema.json`、`flow-run.schema.json`、`flow-node-types.schema.json`、`flow-templates.schema.json`、`flow-batch.schema.json` | 可视化节点工作流（v0.1，见 `docs/flow-workbench.md`） |
 | 生成平台 | `generate-providers.schema.json`、`generate-job.schema.json` | 平台注册表（4 provider）与生成任务记录（v0.1，dry-run 默认） |
+| 检索配置 | `knowledge-search.schema.json` | 检索权重、同义词、停用词与查询扩展上限（v0.1，M27） |
 
 ## 迭代状态
 
@@ -192,6 +194,7 @@ python workbench.py project list --stats                            # 跨项目�
 | M14（17） | 批次队列化与失败通知：`flow queue add/list/run`（队列文件 `00_project/workflows/queue.json`，按创建顺序执行 pending 条目）、CLI 跨项目 `flow queue run --all-projects`、失败图汇总通知写回队列条目、Web API `POST /api/queue`/`POST /api/queue/run`/`GET /api/queue` 与前端队列列表；`flow-queue` 契约 v0.1 | 已完成（2.2.0） |
 | M15（18） | 队列增强：`flow queue add --at` 定时执行（`scheduled_at`）、`flow queue cancel/move` 取消与重排（`order`）、`flow queue daemon --interval/--limit/--until-empty/--all-projects` 后台守护；Web API `POST /api/queue/<id>/cancel`、`POST /api/queue/<id>/move` 与前端队列顺序/计划时间操作；`flow-queue` 契约新增可选字段 | 已完成（2.3.0） |
 | M16（19） | 队列重试与通知：`flow queue retry` 重置失败条目（`attempts` 计数）、`run --retry-failed N`/`daemon --retry-failed N` 自动重试、失败通知 JSONL（`00_project/workflows/queue-notifications.jsonl`）与 `--notify-cmd` 外部命令外送、`flow queue notifications` 查询、daemon `--log-file/--rotate-bytes` 日志轮转；Web API `GET /api/queue/notifications`、`POST /api/queue/<id>/retry` 与前端「重试」按钮 | 已完成（2.4.0） |
+| M27（30） | 索引检索配置增强：`knowledge-search` 契约 + `content/knowledge-search.json`（权重 heading/path/phrase/coverage、8 组同义词、13 个停用词、expand_limit 8）、`load_search_config`/`normalize_query_text`/同义词查询扩展、`index search --config/--weights`、doctor 要求 2 份索引契约；新增 17 项测试合计 459 项 | 已完成（2.14.0） |
 | M26（29） | 远端 CI 工作流硬化与就绪检查：`.github/workflows/ci.yml` 增加 `permissions/concurrency/timeout-minutes/PYTHONIOENCODING` 与 readiness 步骤（`ci_ready.py --require-remote`）；新增 `scripts/ci_ready.py`（矩阵/步骤自检 + git remote 检测，`--json/--require-remote`）与 `docs/github-actions.md` 接入指南；新增 8 项测试合计 442 项 | 已完成（2.13.1 PATCH） |
 | M25（28） | 分支覆盖率门禁：`coverage_check.py` 新增 `--branches/--min-branches`（`dis` 静态分支点 + 局部 `sys.monitoring` BRANCH 事件，只监控 `packages` 模块 code 对象），`run_ci.py` 覆盖率步骤改为 `--min 80 --branches --min-branches 50`；新增 5 项测试合计 434 项 | 已完成（2.13.0） |
 | M24（27） | 索引混合排序与队列 webhook 通知：`index search --mode auto|fts|like|hybrid`（默认 hybrid：标题/路径/短语/词项覆盖率加权，FTS+LIKE 候选按文件+标题去重后按分数降序）；`index_service` 证据卡改用 hybrid 排序；`queue run/daemon --webhook-url` 失败汇总 JSON POST（失败不阻断队列、未配置 no-op）；新增 9 项测试合计 429 项 | 已完成（2.12.0） |
@@ -243,11 +246,12 @@ python workbench.py project list --stats                            # 跨项目�
 - `docs/release-notes-2.12.0.md`：2.12.0 发行说明（M24 索引混合排序 `--mode hybrid`、队列 webhook 通知 `--webhook-url`、验证与限制）。
 - `docs/release-notes-2.13.0.md`：2.13.0 发行说明（M25 分支覆盖率门禁：`--branches`、局部 BRANCH 事件、行 80.84%/分支 50.52%、CI 门槛 50%）。
 - `docs/release-notes-2.13.1.md`：2.13.1 发行说明（M26 远端 CI 工作流硬化与 `ci_ready.py` 就绪检查；真实远端执行待配置 remote）。
+- `docs/release-notes-2.14.0.md`：2.14.0 发行说明（M27 索引检索配置增强：权重/同义词/停用词与 hybrid 查询扩展、验证与限制）。
 - `docs/pilot-c-report.md`：真实项目试点报告（《死亡外科医生》从零到 done、M1–M9、摩擦与 1.0.x 清单）。
 - `docs/architecture.md`：分层、数据流、阶段加载顺序、与现有 Skill 子系统的映射。
 - `docs/command-card.md`：全部命令速查（环境、项目、迁移、安装、知识、风格、可视化工作流、契约）。
 - `docs/requirements-traceability.md`：PRD §6 FR-01–FR-22 ↔ 实现/里程碑/证据映射（M19；`scripts/check_fr_mapping.py` 校验）。
-- `docs/knowledge-index.md`：知识库索引维护（M21：契约、`index` 命令、分块与增量策略、FTS5/规模与限制；M22：索引接入知识服务证据卡——`search_index_card`、CLI `--index`、flow 节点 `index` 参数）。
+- `docs/knowledge-index.md`：知识库索引维护（M21：契约、`index` 命令、分块与增量策略、FTS5/规模与限制；M22：索引接入知识服务证据卡——`search_index_card`、CLI `--index`、flow 节点 `index` 参数；M27：检索配置——权重/同义词/停用词与查询扩展）。
 - `docs/ci.md`：CI 九步门禁、GitHub Actions 跨平台矩阵、本地等价命令、覆盖率策略与可复现构建（M20）。
 - `docs/github-actions.md`：远端 CI 接入指南（M26：remote/Actions 启用、矩阵与耗时、artifact、排障）。
 - `docs/troubleshooting.md`：故障排查（环境、门禁、风格、知识、编码、迁移、导出）。

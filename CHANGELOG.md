@@ -1,3 +1,11 @@
+## [2.14.0] - 2026-11-16 — 可视化节点工作台（M27：索引检索配置增强）
+
+- 检索配置：新增 `knowledge-search.schema.json` 契约与默认 `content/knowledge-search.json`（权重 `heading/path/phrase/coverage`、8 组同义词、13 个停用词、`expand_limit`）。
+- 查询归一与扩展：`normalize_query_text`（NFKC + 空白折叠）、置信 `load_search_config`/`_merge_weights`；hybrid 模式对同义词变体逐查合并，按配置权重排序。
+- CLI：`index search` 新增 `--config`（配置文件）与 `--weights`（如 `heading=3,path=1,phrase=2,coverage=1`，仅 hybrid 生效）；`doctor` 要求 2 份索引契约并加载默认配置。
+- 服务：`index_service.search_index_card` 透传 `search_config`，report 暴露配置摘要（权重/同义词数/停用词数）。
+- 兼容性：默认配置与既有行为等价；新增 17 项测试合计 459 项；CI 九步全绿（覆盖率行 80.94%/分支 50.86%）。
+
 ## [2.13.1] - 2026-11-16 — 远端 CI 工作流硬化与就绪检查（M26）
 
 - `.github/workflows/ci.yml` 硬化：`permissions: contents: read`、`concurrency`（取消同分支旧运行）、`timeout-minutes: 30`、`PYTHONIOENCODING=utf-8`、artifact 保留 7 天，并新增 readiness 步骤。
