@@ -148,7 +148,7 @@ python workbench.py project list --stats                            # 跨项目�
 
 - 项目默认创建在「文档目录/AI 影视工作台/projects/<名称>/」，可用 `--project-root` 或环境变量 `AI_FILM_PROJECTS_ROOT` 覆盖；包含 `00_project/`（状态、参考记忆、历史、知识卡、风格卡）、`00_inbox/`、`01_story/` … `06_prompts/`。
 - 项目状态以 `00_project/state.json` 为唯一事实来源，必须通过 `state.schema.json`（v2 字段）校验；门禁与修订日志同文件持久化。
-- 本地 CI：`python scripts/run_ci.py`（编译 → 文档链接检查 → FR 追溯映射 → 513 项测试 → 行覆盖率 ≥80% / 分支覆盖率 ≥50% → doctor → CLI 冷启动 NFR 基准 → brand-guard → 可复现构建校验；Python 3.11 无 BRANCH 事件，自动只跑行覆盖率门禁）。
+- 本地 CI：`python scripts/run_ci.py`（编译 → 文档链接检查 → FR 追溯映射 → 513 项测试 → 行覆盖率 ≥80% / 分支覆盖率 ≥50% → doctor → CLI 冷启动 NFR 基准 → brand-guard → 可复现构建校验；Python 3.11 跳过覆盖率门禁，仅 3.12 强制双门槛）。
 - 文档链接检查：`python scripts/check_doc_links.py`（Markdown 链接与行内代码中的仓库内路径必须存在）。
 - CLI 冷启动基准：`python scripts/bench.py`（默认 5 次取中位数，`--enforce` 时超过 1.0s 退出码 1）。
 - 知识服务只读现有索引，不改知识库本体；先做元数据候选，召回不足时按预算做有限正文回退；只有路径/行号/命中词齐全才输出 `ok` 知识卡。回退可用 `--no-fallback` 关闭、用 `--fallback-files` / `--fallback-bytes` 调预算。证据按质量评分排序，并过滤「反转身」等动作误命中；高置信证据足够时会丢弃纯字面低置信证据（统计见 `report.evidence_quality`）。
@@ -157,7 +157,7 @@ python workbench.py project list --stats                            # 跨项目�
 - 生成发行包：`python scripts/build_release.py`（输出 `dist/workbench-<版本>.zip` 与 SHA-256）。
 - 发行包冒烟：`python scripts/package_smoke.py`（校验 `.sha256` → 解压到临时目录 → `version`/`doctor`/manifest 一致性；对应 PRD §11.3/§11.4）。
 - 行覆盖率检查：`python scripts/coverage_check.py`（`packages/` 可执行行，CI `--min 80`；2.13.0 实测 80.84%（行），已达 PRD ≥80% 目标）。
-- 分支覆盖率检查：`python scripts/coverage_check.py --branches --min-branches 50`（静态 `dis` 分支点 + 局部 `sys.monitoring` BRANCH 事件；2.13.0 实测 50.52%（2914/5768），CI 门禁 50%；Python 3.11 会自动跳过分支统计）。
+- 分支覆盖率检查：`python scripts/coverage_check.py --branches --min-branches 50`（静态 `dis` 分支点 + 局部 `sys.monitoring` BRANCH 事件；2.13.0 实测 50.52%（2914/5768），CI 门禁 50%；覆盖率门禁仅在 Python 3.12+ 执行）。
 - 可复现构建校验：`python scripts/repro_check.py`（两次构建与 `.sha256` 三方一致；`build_release.py` 固定 zip 时间戳/权限）。
 - 跨平台 CI：`.github/workflows/ci.yml`（ubuntu/windows/macos × Python 3.11/3.12 矩阵，说明见 `docs/ci.md`）。
 - 远端 CI 就绪检查：`python scripts/ci_ready.py`（工作流矩阵/步骤 + `git remote` 自检；`--require-remote` 供工作流使用）；真实远端执行需先按 `docs/github-actions.md` 配置 remote 并启用 Actions。

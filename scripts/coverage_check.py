@@ -379,6 +379,7 @@ def _runtime_measure(
             raise RuntimeError("分支覆盖率需要 Python 3.12+（sys.monitoring BRANCH 事件）")
         import trace
 
+        # count=1/trace=0：只收集行命中，不打印逐行轨迹（trace=1 会打印每一行，CI 日志巨大且可能编码报错）。
         tracer = trace.Trace(count=1, trace=0, ignoredirs=[sys.prefix])
         tracer.runfunc(_run_unittest)
         counts = tracer.results().counts
