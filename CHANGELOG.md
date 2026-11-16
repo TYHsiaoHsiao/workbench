@@ -1,3 +1,14 @@
+## [2.15.0] - 2026-11-16 — 可视化节点工作台（M28：队列运维增强）
+
+- 新增 `packages/flow/cron.py`：零依赖五段式 cron 解析（`*`、`*/n`、`a-b`、`a-b/n`、列表；日/周同时受限按 OR），`parse_cron`/`cron_matches`/`next_run`。
+- `flow queue daemon --cron "*/5 * * * *"`：按分钟匹配触发，记录 last fired 防止同分钟重复；非法表达式退出 2；保留 `--interval` 模式。
+- 新增 `packages/flow/notify.py`：webhook 外送抽为公共模块（`notify_webhook`，User-Agent `workbench-flow/2.15`）；`queue.py` 复用同一实现。
+- `flow batch --webhook-url`：批次有失败图时外送 `event=batch.run` 汇总（含 `failed_graphs`/`summary`），失败不阻断批次；`run_batch` 返回 `webhook` 结果。
+- Web 批次历史面板：`GET /api/batches` → 最近 10 个批次，失败行可「恢复失败图」（复用 M13 `recover` 端点）。
+- 新增 8 项 cron 测试 + 3 项批次 webhook 测试，合计 470 项；行覆盖率 80.9%、分支 51.0%。
+
+兼容性：`flow-queue`/`flow-batch` 契约无变化，新参数均为可选，默认行为不变（向后兼容 MINOR）。
+
 ## [2.14.0] - 2026-11-16 — 可视化节点工作台（M27：索引检索配置增强）
 
 - 检索配置：新增 `knowledge-search.schema.json` 契约与默认 `content/knowledge-search.json`（权重 `heading/path/phrase/coverage`、8 组同义词、13 个停用词、`expand_limit`）。

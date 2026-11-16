@@ -19,14 +19,14 @@ import json
 import re
 import secrets
 import subprocess
-import urllib.error
-import urllib.request
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from contracts import validate
 from core_router.project import default_projects_root
+
+from .notify import notify_webhook as _notify_webhook
 
 from . import store
 from .batch import (
@@ -165,30 +165,6 @@ def list_notifications(project_root: str | Path, *, limit: int = 20) -> list[dic
         if len(records) >= limit:
             break
     return records
-
-
-def _notify_webhook(webhook_url: str | None, payload: dict[str, Any]) -> dict[str, Any]:
-    """把失败通知以 JSON POST 外送到 webhook（失败不影响队列执行）。"""
-    result: dict[str, Any] = {"configured": bool(webhook_url), "ok": False}
-    if not webhook_url:
-        return result
-    try:
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        request = urllib.request.Request(
-            webhook_url,
-            data=body,
-            headers={
-                "Content-Type": "application/json; charset=utf-8",
-                "User-Agent": "workbench-queue/2.12",
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(request, timeout=10) as response:
-            result["status_code"] = getattr(response, "status", None)
-            result["ok"] = True
-    except (OSError, urllib.error.URLError, ValueError) as exc:
-        result["error"] = str(exc)
-    return result
 
 
 def _notify_external(notify_cmd: list[str] | None, message: str) -> bool:

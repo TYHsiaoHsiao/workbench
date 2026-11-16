@@ -1,6 +1,6 @@
-# 可视化节点工作台（M1–M16 + 2.0.1 实时预览 + M20 快照回滚）
+# 可视化节点工作台（M1–M16 + 2.0.1 实时预览 + M20 快照回滚 + M28 队列运维）
 
-> 版本：2.10.0 · 状态：M1–M16 + 2.0.1 实时预览 + M20 Web 快照回滚面板 + M22 索引证据卡接入已完成 · 适用范围：本地单用户
+> 版本：2.15.0 · 状态：M1–M16 + 2.0.1 实时预览 + M20 Web 快照回滚面板 + M22 索引证据卡接入 + M28 队列运维增强已完成 · 适用范围：本地单用户
 
 ## 1. 定位
 
@@ -330,6 +330,12 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - CLI/Web/前端：queue add 支持 `--at`；Web API `POST /api/queue/<id>/cancel`、`POST /api/queue/<id>/move`；前端队列列表显示顺序/计划时间与上移/下移/取消按钮。
 - 边界：定时基于本机时钟，daemon 需保持进程运行；不自动重试失败条目；契约新增可选字段（向后兼容）。
 
+### M28：队列运维增强（2.15.0）
+
+- **cron 定时守护**：`flow queue daemon --cron "*/5 * * * *"`（5 段：分 时 日 月 周；支持 `*`、`*/n`、`a-b`、列表）按分钟匹配触发，记录 last fired 防止同一分钟重复；非法表达式退出 2。
+- **批次失败 webhook**：`flow batch --webhook-url <URL>` 在批次有失败图时外送 `{at,event:"batch.run",project,batch_id,status,message,failed_graphs,summary}`；失败不阻断批次，结果由返回的 `webhook` 字段记录；未配置为 no-op。
+- **Web 批次历史面板**：运行面板下方展示最近 10 个批次（状态/成功失败/耗时），失败批次可「恢复失败图」（复用 `POST /api/batches/<id>/recover`）。
+
 ### M16：队列失败重试与通知外送（2.4.0）
 
 - 失败重试：`flow-queue` 契约条目新增可选 `attempts`（已重试次数）；`retry_entry()` 仅允许 failed 条目重置为 pending（attempts+1、清理批次/结果/通知字段）；`run_queue(..., retry_failed=N)` 先把 `failed 且 attempts<N` 的条目重置再执行；CLI `flow queue retry`、`flow queue run --retry-failed N`、`flow queue daemon --retry-failed N`；Web `POST /api/queue/<id>/retry` 与前端失败行「重试」按钮。
@@ -386,10 +392,11 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - M14（2.2.0）新增 10 项测试（队列引擎 8：入队/过滤/去重/空选择/并行校验/顺序执行/失败通知/limit 与空队列；Web API 2：队列端点、失败通知），全量 `Ran 341 tests ... OK`；CLI 冒烟：`flow queue add/list/run`（含 `--all-projects`）；doctor 9 项含 6 份 flow 契约。
 - M15（2.3.0）新增 10 项测试（定时跳过/计划执行、取消、重排 before/after/index、非法参数；Web API 2：定时+取消、重排），全量 `Ran 351 tests ... OK`；CLI 冒烟：`queue add --at`/`cancel`/`move`/`daemon --until-empty`；doctor 9 项含 6 份 flow 契约。
 - M16（2.4.0）新增 8 项测试（队列重试/通知 6：重试重置、非 failed 拒绝、retry_failed 上限、通知日志、notify-cmd、无失败不通知；Web API 2：重试+通知、retry_failed），全量 `Ran 359 tests ... OK`；CLI 冒烟：`queue retry`、`run --retry-failed 1`、`queue notifications`、daemon 日志参数；doctor 9 项含 6 份 flow 契约。
+- M28（2.15.0）新增 11 项测试（cron 8：通配/步长/范围/非法/周映射/日或周/字段/next_run；批次 webhook 3：成功外送、失败容错、未配置 no-op），全量 `Ran 470 tests ... OK`；CLI 冒烟：非法 `--cron` 退出 2 且提示 5 段格式、`flow batch --webhook-url` 输出 `webhook` 结果（连接失败不影响批次）。
 - M20（2.8.0）新增 5 项测试（覆盖率 2、可复现构建 2、Web 回滚 1），全量 `Ran 387 tests ... OK`；CI 九步全 PASS（覆盖率 76.37%、repro PASS、品牌守卫 0 命中）；Web 冒烟：快照创建 → 列表 → dry-run → 回滚。
 - M22（2.10.0）新增 12 项测试（索引证据卡服务 8、CLI 2、flow 节点 2），全量 `Ran 413 tests ... OK`；CLI 冒烟：`knowledge search --index` 生成同契约知识卡；flow `knowledge_search` 节点 `index` 参数运行后写 `00_project/knowledge-cards/<stage>-candidates.json`；索引缺失/无命中分别报可读错误与 `no_evidence`。
 
-## 18. 后续（M23 候选）
+## 18. 后续（M29 候选）
 
 - 索引维护增强：来源目录过滤/多来源合并、索引任务可视化与后台定时增量（FR-10 后续）。
 - 覆盖率从 77.37% 提升至 PRD 目标的 80%（补 webui/queue/batch 低覆盖分支）。

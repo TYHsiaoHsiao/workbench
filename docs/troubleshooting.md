@@ -181,6 +181,8 @@
 - **队列 webhook 未送达**：webhook 只在批次有失败条目时外送；URL 不通/超时会记录在 `run_queue` 返回的 `webhook.error`，但不影响队列结果；未配置 `--webhook-url` 为 no-op；可先用 `flow queue notifications` 查看 JSONL 通知。
 
 - **分支覆盖率低于 50%**：`coverage_check.py --branches --json` 查看 `branch.files` 最低文件；常见于 `cli/main.py` 参数组合、异常分支、webui 错误路径，补测试即可。分支口径只统计可导入 `packages` 模块（模块顶层与动态代码不计入分母）。
+- **`flow queue daemon --cron` 报「cron 表达式需要 5 段」**：表达式须为 `分 时 日 月 周` 五段（如 `*/5 * * * *`）；步长/范围非法会给出具体字段；守护进程只在分钟边界触发，同一分钟只执行一次。
+- **批次失败未收到 webhook**：确认命令带 `--webhook-url` 且批次确有失败图（成功批次不外送）；外送结果在 JSON/文本的 `webhook` 字段（HTTP 状态码或错误原因），失败不影响批次结果；Web 批次历史面板可核对最近批次。
 - **覆盖率步骤变慢**：`--branches` 会注册局部 `sys.monitoring` 分支事件，2.13.0 实测约 230s；纯行覆盖（不加 `--branches`）约 65s，日常可先用行覆盖快速反馈。
 
 - **GitHub Actions 没有触发**：`python scripts/ci_ready.py --json` 查看工作流是否缺少矩阵/步骤短语与 `git remote` 是否为空；补 remote 后在仓库 Settings → Actions 启用工作流，详见 `docs/github-actions.md`。

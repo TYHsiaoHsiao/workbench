@@ -208,6 +208,7 @@ async function chooseProject(path) {
   await loadWorkflows();
   loadRunHistory();
   await loadQueue();
+  await loadBatches();
   await loadSnapshots();
 }
 
@@ -1474,6 +1475,7 @@ async function runBatch() {
     const recoverBtn = $("#btn-batch-recover");
     if (recoverBtn) recoverBtn.classList.toggle("hidden", !((summary.failed || 0) > 0));
     loadRunHistory();
+    loadBatches();
   } catch (err) {
     logLine("批量运行失败：" + err.message, "err");
   }
@@ -1494,6 +1496,7 @@ async function recoverBatch() {
     setStatus("批次恢复完成：成功 " + (summary.succeeded || 0) + " / 失败 " + (summary.failed || 0));
     $("#btn-batch-recover").classList.add("hidden");
     loadRunHistory();
+    loadBatches();
   } catch (err) {
     logLine("恢复失败图失败：" + err.message, "err");
   }
@@ -1699,6 +1702,95 @@ async function runQueue() {
     await loadQueue();
   } catch (err) {
     logLine("运行队列失败：" + err.message, "err");
+  }
+}
+
+/* ---------------- 批次历史面板（M28） ---------------- */
+
+let batchCache = [];
+
+const batchStatusLabel = (status) =>
+  ({ succeeded: "成功", failed: "失败", running: "运行中" }[status] || status || "-");
+
+async function loadBatches() {
+  if (!state.project) {
+    batchCache = [];
+    renderBatches();
+    return;
+  }
+  try {
+    const data = await api("/api/batches?project=" + encodeURIComponent(state.project) + "&limit=10");
+    batchCache = data.batches || [];
+    renderBatches();
+  } catch (err) {
+    logLine("加载批次历史失败：" + err.message, "warn");
+  }
+}
+
+function renderBatches() {
+  const box = $("#batch-box");
+  if (!box) return;
+  if (!batchCache.length) {
+    box.classList.add("hidden");
+    box.innerHTML = "";
+    return;
+  }
+  const rows = batchCache
+    .map((batch) => {
+      const cls = batch.status === "failed" ? "failed" : "succeeded";
+      let html = '<div class="queue-row ' + cls + '"><div class="queue-line">';
+      html += '<span class="queue-id">' + escapeHtml(batch.batch_id) + "</span>";
+      html +=
+        '<span class="queue-meta">' +
+        escapeHtml(batchStatusLabel(batch.status)) +
+        " · 成功 " +
+        escapeHtml(String(batch.succeeded || 0)) +
+        "/" +
+        escapeHtml(String(batch.total || 0)) +
+        (batch.parallel ? " · 并行 " + escapeHtml(String(batch.workers || 0)) : "");
+      if (batch.duration_ms != null) html += " · " + escapeHtml(String(batch.duration_ms)) + "ms";
+      html += "</span>";
+      if ((batch.failed || 0) > 0) {
+        html +=
+          '<span class="q-actions"><button data-batch-recover="' +
+          escapeHtml(batch.batch_id) +
+          '">恢复失败图</button></span>';
+      }
+      html += "</div>";
+      if (batch.error) html += '<div class="queue-notice">' + escapeHtml(batch.error) + "</div>";
+      return html;
+    })
+    .join("");
+  box.classList.remove("hidden");
+  box.innerHTML =
+    '<div class="queue-head"><span>批次历史（最近 ' +
+    batchCache.length +
+    ' 次）</span><button id="btn-batch-refresh" title="刷新批次历史">刷新</button></div>' +
+    rows;
+  $("#btn-batch-refresh").addEventListener("click", () => loadBatches());
+  box.querySelectorAll("[data-batch-recover]").forEach((btn) =>
+    btn.addEventListener("click", () => recoverBatchById(btn.dataset.batchRecover))
+  );
+}
+
+async function recoverBatchById(batchId) {
+  if (!state.project) return;
+  if (!window.confirm("重跑批次 " + batchId + " 中的失败图？")) return;
+  try {
+    const data = await api("/api/batches/" + encodeURIComponent(batchId) + "/recover", {
+      method: "POST",
+      body: JSON.stringify({ project: state.project }),
+    });
+    const batch = data.batch || {};
+    const summary = batch.summary || {};
+    logLine(
+      "恢复失败图：" + (data.recovered || 0) + " 个 → 成功 " + (summary.succeeded || 0) + " / 失败 " + (summary.failed || 0),
+      data.ok ? "ok" : "err"
+    );
+    loadRunHistory();
+    loadBatches();
+  } catch (err) {
+    logLine("恢复失败图失败：" + err.message, "err");
   }
 }
 

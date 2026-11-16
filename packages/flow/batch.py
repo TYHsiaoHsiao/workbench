@@ -20,6 +20,7 @@ from contracts import validate
 
 from . import store
 from .graph import FlowError
+from .notify import notify_webhook
 from .registry import NodeTypeRegistry, load_node_types
 from .runner import Runner
 
@@ -326,8 +327,13 @@ def run_batch(
     workers: int = 2,
     node_types: NodeTypeRegistry | None = None,
     sessions: dict[str, Runner] | None = None,
+    webhook_url: str | None = None,
 ) -> dict[str, Any]:
-    """批量运行流程图：按图执行（可并行预演）、失败自动重试，返回并保存批次记录。"""
+    """批量运行流程图：按图执行（可并行预演）、失败自动重试，返回并保存批次记录。
+
+    ``webhook_url`` 存在且批次有失败图时，把失败汇总以 JSON POST 外送
+    （M28；失败不影响批次执行），返回值 ``webhook`` 记录外送结果。
+    """
     project = _require_project(project_root)
     registry = node_types or load_node_types()
     effective_dry = True if dry_run is None else bool(dry_run)
@@ -370,7 +376,26 @@ def run_batch(
     record["status"] = "succeeded" if summary["failed"] == 0 else "failed"
     record["finished_at"] = now_iso()
     write_batch(project, record)
-    return {"ok": record["status"] == "succeeded", "project": str(project), "batch": record}
+    webhook = {"configured": bool(webhook_url), "ok": False}
+    if summary["failed"] and webhook_url:
+        failed_graphs = [item["graph_id"] for item in record["graphs"] if not item.get("ok")]
+        payload = {
+            "at": now_iso(),
+            "event": "batch.run",
+            "project": project.name,
+            "batch_id": record["batch_id"],
+            "status": record["status"],
+            "message": f"批次 {record['batch_id']} 失败 {len(failed_graphs)} 个图：{', '.join(failed_graphs)}",
+            "failed_graphs": failed_graphs,
+            "summary": summary,
+        }
+        webhook = notify_webhook(webhook_url, payload)
+    return {
+        "ok": record["status"] == "succeeded",
+        "project": str(project),
+        "batch": record,
+        "webhook": webhook,
+    }
 
 
 def recover_batch(

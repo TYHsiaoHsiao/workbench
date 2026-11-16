@@ -76,6 +76,7 @@ from flow import (
     cancel_entry,
     compare_runs,
     create_snapshot,
+    cron_matches,
     diff_snapshots,
     diff_with_current,
     format_compare_text,
@@ -89,7 +90,9 @@ from flow import (
     list_queue,
     list_snapshots,
     move_entry,
+    next_run,
     notify_path,
+    parse_cron,
     read_batch,
     read_snapshot,
     recover_batch,
@@ -1631,13 +1634,22 @@ def cmd_flow_batch(args: argparse.Namespace) -> int:
             limit=args.limit,
             parallel=bool(args.parallel),
             workers=args.workers,
+            webhook_url=getattr(args, "webhook_url", None),
         )
     except FlowError as exc:
         _print(f"错误: {exc}")
         return EXIT_FAIL
     batch = result["batch"]
     if args.json:
-        _emit({"ok": result["ok"], "project": result["project"], "batch": batch}, True)
+        _emit(
+            {
+                "ok": result["ok"],
+                "project": result["project"],
+                "batch": batch,
+                "webhook": result.get("webhook") or {"configured": False, "ok": False},
+            },
+            True,
+        )
     else:
         summary = batch["summary"]
         mode = "预演" if batch["dry_run"] else "运行"
@@ -1658,6 +1670,12 @@ def cmd_flow_batch(args: argparse.Namespace) -> int:
             f"成功 {summary['succeeded']} / 失败 {summary['failed']} / "
             f"尝试 {summary['attempts']} 次 / 总耗时 {summary['duration_ms']}ms"
         )
+        webhook = result.get("webhook") or {}
+        if webhook.get("configured"):
+            if webhook.get("ok"):
+                _print(f"webhook 外送成功（HTTP {webhook.get('status_code')}）")
+            else:
+                _print(f"webhook 外送失败: {webhook.get('error') or '未知错误'}")
     return EXIT_OK if result["ok"] else EXIT_FAIL
 
 
@@ -1991,15 +2009,36 @@ def cmd_flow_queue_daemon(args: argparse.Namespace) -> int:
     log_file = getattr(args, "log_file", None)
     notify_cmd = shlex.split(args.notify_cmd) if getattr(args, "notify_cmd", None) else None
     webhook_url = getattr(args, "webhook_url", None)
+    cron_expression = getattr(args, "cron", None)
+    cron_spec = None
+    if cron_expression:
+        try:
+            cron_spec = parse_cron(cron_expression)
+        except FlowError as exc:
+            _print(f"错误: {exc}")
+            return EXIT_USAGE
+        _print(
+            "cron 调度: "
+            + cron_expression
+            + f"（下一次触发 {next_run(cron_spec).strftime('%Y-%m-%d %H:%M')}）"
+        )
     _print(
-        f"队列守护已启动：间隔 {interval}s / 每次最多 {limit} 条 / "
+        f"队列守护已启动：{'cron ' + cron_expression if cron_spec else '间隔 ' + str(interval) + 's'} / "
+        f"每次最多 {limit} 条 / "
         f"项目 {len(projects)} 个"
         + (f" / 失败重试上限 {retry_failed}" if retry_failed else "")
         + ("（队列空时退出）" if args.until_empty else "")
         + "；Ctrl+C 停止"
     )
+    last_fire: str | None = None
     try:
         while True:
+            if cron_spec is not None:
+                current_minute = datetime.now().replace(second=0, microsecond=0)
+                if not cron_matches(cron_spec, current_minute) or current_minute.isoformat() == last_fire:
+                    time.sleep(20)
+                    continue
+                last_fire = current_minute.isoformat()
             results = [
                 run_queue(
                     project,
@@ -3043,6 +3082,7 @@ def build_parser() -> argparse.ArgumentParser:
     flow_batch.add_argument("--parallel", action="store_true", help="并行预演多个图（仅 dry-run）")
     flow_batch.add_argument("--workers", type=int, default=2, help="并行线程数（1–8，默认 2）")
     flow_batch.add_argument("--limit", type=int, default=20, help="最多运行流程图数量（默认 20）")
+    flow_batch.add_argument("--webhook-url", help="批次失败时外送 webhook（JSON POST，M28）")
     flow_batch.add_argument("--json", action="store_true", help="以 JSON 输出")
     flow_batch.set_defaults(func=cmd_flow_batch)
 
@@ -3145,6 +3185,10 @@ def build_parser() -> argparse.ArgumentParser:
     queue_daemon.add_argument("--project", help="项目名或项目路径（与 --all-projects 二选一）")
     queue_daemon.add_argument("--all-projects", action="store_true", help="依次执行默认项目根下所有项目的队列")
     queue_daemon.add_argument("--interval", type=int, default=30, help="轮询间隔秒数（1–3600，默认 30）")
+    queue_daemon.add_argument(
+        "--cron",
+        help="cron 表达式（5 段：分 时 日 月 周，如 */5 * * * *）；设置后按分钟匹配触发，忽略 --interval",
+    )
     queue_daemon.add_argument("--limit", type=int, default=5, help="每次最多执行条数（默认 5）")
     queue_daemon.add_argument("--until-empty", action="store_true", help="队列中没有待运行条目后退出")
     queue_daemon.add_argument("--retry-failed", type=int, default=0, help="失败条目自动重置重试上限（0–10，默认 0 关闭）")

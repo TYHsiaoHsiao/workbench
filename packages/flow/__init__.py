@@ -88,6 +88,8 @@ from .queue import (
     validate_queue,
     write_queue,
 )
+from .cron import cron_matches, next_run, parse_cron
+from .notify import notify_webhook
 
 __all__ = [
     "PORT_COMPAT",
@@ -167,6 +169,10 @@ __all__ = [
     "run_queue",
     "validate_queue",
     "write_queue",
+    "parse_cron",
+    "cron_matches",
+    "next_run",
+    "notify_webhook",
     "TemplateError",
     "get_template",
     "instantiate",

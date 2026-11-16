@@ -489,3 +489,7 @@ button.link:hover { text-decoration: underline; }
 .snapshot-label { font-size: 12px; }
 .snapshot-meta { color: #8b97a8; font-size: 11px; margin-top: 2px; }
 .q-apply.danger { border-color: #7a2f2f; color: #f2a1a1; }
+
+/* 批次历史面板（M28） */
+.batch-box { margin-top: 8px; }
+.batch-box .queue-head span { color: #9db4d0; }

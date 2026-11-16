@@ -1,8 +1,8 @@
 {
-  "version": "2.14.0",
+  "version": "2.15.0",
   "contract_version": "1.0",
-  "generated_at": "2026-11-16T10:20:02",
-  "file_count": 192,
+  "generated_at": "2026-11-16T10:47:10",
+  "file_count": 197,
   "files": [
     {
       "path": ".github/workflows/ci.yml",
@@ -16,8 +16,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "size": 46095,
-      "sha256": "46941f1f8c6f215d77f039ad7e35c0fe2ab24eec1f1dd8ed1cf3aafd89529170"
+      "size": 47257,
+      "sha256": "9c96f9a1690bab91c96d8c6532816a3dcf1c7b05addeab69d6e38c2323463f64"
     },
     {
       "path": "config/brand-allowlist.json",
@@ -66,8 +66,8 @@
     },
     {
       "path": "docs/architecture.md",
-      "size": 30242,
-      "sha256": "c83707cedc216dd4d67cf58735f484c88d567e1669ea349ffe7444d21f56b147"
+      "size": 31734,
+      "sha256": "10fbbd1fba45c10c9a907c26c22468d55ce77d51b321eb6f83d00a9cdc41680a"
     },
     {
       "path": "docs/brand-guard.md",
@@ -76,18 +76,18 @@
     },
     {
       "path": "docs/ci.md",
-      "size": 5325,
-      "sha256": "e54e39aa26e646ea67d9da382fc82127f81a28cc69333b95f9eb4766d08ca1c5"
+      "size": 5321,
+      "sha256": "1e9e7b3d38683f87f9737aa3be668c709359b42933eba2789da9cf65b85176f9"
     },
     {
       "path": "docs/command-card.md",
-      "size": 19716,
-      "sha256": "9de532ab98eefb230d0b935ec2fbcde82f48ac945f3a406095a05a2a9af8ed0a"
+      "size": 20287,
+      "sha256": "580301e5eb155c70349c5180b0a45f93dce8c47395f672113bbe0ed336d4a4de"
     },
     {
       "path": "docs/flow-workbench.md",
-      "size": 39908,
-      "sha256": "0d4b415354e7daf5b06da6f2e04a1202a3b6891480b2288d838afb19b4834477"
+      "size": 41051,
+      "sha256": "22bd99eaaf80c54c05c4a2c49435e4ca224e6e50e6f42a4bb7188fbecb6cdfb5"
     },
     {
       "path": "docs/github-actions.md",
@@ -275,6 +275,11 @@
       "sha256": "05d97b79b99e3003ceecd6f66fb95ce2dddb1229f4170818ecb1aed3f1ea0704"
     },
     {
+      "path": "docs/release-notes-2.15.0.md",
+      "size": 2262,
+      "sha256": "d8bc449970e2a41b90a366d8fe227e6a9d3a2833faf5e36011bdbf178a38b7e1"
+    },
+    {
       "path": "docs/release-notes-2.2.0.md",
       "size": 2290,
       "sha256": "cc877f4f638d4b8b97426ec45d630b66e5797edf27b94215d44e59e922826c8d"
@@ -316,8 +321,8 @@
     },
     {
       "path": "docs/requirements-traceability.md",
-      "size": 9259,
-      "sha256": "2e180da892488fbafb6b55a3554c55fb0048d3177fb812c886701079103e8578"
+      "size": 9566,
+      "sha256": "06673a201516db41e3630e7692dcaa5f984f1d2cc447f8a78b595887a8ba5d40"
     },
     {
       "path": "docs/style-registry-report.md",
@@ -331,8 +336,8 @@
     },
     {
       "path": "docs/troubleshooting.md",
-      "size": 20139,
-      "sha256": "7f7f69d6d335311fec6664aca80508ba7a00c6bfd591e05609111230d1661a5c"
+      "size": 20679,
+      "sha256": "f57d472aa2fbb738dd8e0f4b3612657ace12257b2bdb7f0ed13c6e8271c096e9"
     },
     {
       "path": "packages/brand_guard/__init__.py",
@@ -356,8 +361,8 @@
     },
     {
       "path": "packages/cli/main.py",
-      "size": 143501,
-      "sha256": "8a9525abf49e11d3a0facae1d0ba2148e1c55b76c728f7a2d98020300995fe59"
+      "size": 145283,
+      "sha256": "d2a451e6b7adddbac38074766d85d7163a7a4e0697c8c9f8cbfc116eab05ba9d"
     },
     {
       "path": "packages/contracts/__init__.py",
@@ -501,8 +506,8 @@
     },
     {
       "path": "packages/flow/__init__.py",
-      "size": 3863,
-      "sha256": "7f8a63a7c67f55e0fb4279215fafe88a586bb2dcae8fad3c8430a706e32e3c51"
+      "size": 4033,
+      "sha256": "d4ba39cf40c4111c1de1315ed31f1fe11253364685330118f0d6941625a66783"
     },
     {
       "path": "packages/flow/artifacts.py",
@@ -511,8 +516,8 @@
     },
     {
       "path": "packages/flow/batch.py",
-      "size": 15631,
-      "sha256": "bee1a85eb955e47c7132e053f2f31adb886bc0bb5d066d7f52813e463b58091e"
+      "size": 16607,
+      "sha256": "7a6c1add2ac4d5d52c8697eb605c6307c022c6527bffc3fa3810990458c51265"
     },
     {
       "path": "packages/flow/compare.py",
@@ -523,6 +528,11 @@
       "path": "packages/flow/conditions.py",
       "size": 2918,
       "sha256": "ff7afd8783731ce0406852e56e462ecba38a6657d3b064e9f30b50313a8bfc55"
+    },
+    {
+      "path": "packages/flow/cron.py",
+      "size": 3600,
+      "sha256": "edd187e0a06f48231b7a13d43ba81eb0c3e52ab08b4bf3aaa9949b0d88e6d8a2"
     },
     {
       "path": "packages/flow/graph.py",
@@ -540,9 +550,14 @@
       "sha256": "34951936ebb629f95667f3e7c56c06d86491d6765d5bff6ec4b4c24529b80d8b"
     },
     {
+      "path": "packages/flow/notify.py",
+      "size": 1502,
+      "sha256": "56583b97d659b6cb6dade44239bdd19f0623661fe84bc2928369cf1e268ab1b2"
+    },
+    {
       "path": "packages/flow/queue.py",
-      "size": 21741,
-      "sha256": "d0b201fff75b29f069bc22fac2b4cf71746193ab278281d911bb519d615b1cfc"
+      "size": 20794,
+      "sha256": "46a7b354bcec8ab373bd6fef7ce9f106e9f7e9de53cb2169f337e7903250b8c7"
     },
     {
       "path": "packages/flow/registry.py",
@@ -651,23 +666,23 @@
     },
     {
       "path": "packages/webui/static/app.js",
-      "size": 88922,
-      "sha256": "3cde8e90a65df641a4d9ea185455fbdaf47b90a637d30dadcd2d605db39f217a"
+      "size": 92171,
+      "sha256": "34a731ca2aea4ea189c4c443659c448f162cb2cfa6e8d3979bd4b384e5ce7611"
     },
     {
       "path": "packages/webui/static/index.html",
-      "size": 6506,
-      "sha256": "e366f2ab905dbbddf2db6b7c6c373031dfeca54df5f886f8328f0cd15830bf8e"
+      "size": 6576,
+      "sha256": "d0ff30aaa9b2a4ea9bf13694969741ba9b8d9e0d6be5cb9029ebe17264b00483"
     },
     {
       "path": "packages/webui/static/style.css",
-      "size": 15995,
-      "sha256": "73965ae0e5181aa79481019bfc2928146f0bbec70386a1b7d4c89de9d5804f2e"
+      "size": 16110,
+      "sha256": "8a6ff633fd521c00099f6deff10dba67094356d28c7c854aef20cac57ff49209"
     },
     {
       "path": "README.md",
-      "size": 39048,
-      "sha256": "9e1294551ba0f391b2c1ee4a920943b8bf1c7432cde52ce1d98229a5cb8ba47f"
+      "size": 40138,
+      "sha256": "3e7eb5bc78beab238f67ef778f8d16e586da09a599b4e999e4ef796a176f972a"
     },
     {
       "path": "scripts/bench.py",
@@ -805,6 +820,11 @@
       "sha256": "19e0cede72950094920facd6c76a03479dbea53036fb67745b030ea2e073aa1b"
     },
     {
+      "path": "tests/test_flow_batch_webhook.py",
+      "size": 3862,
+      "sha256": "e720f6d4c95ab10176235c953100fe1a100557d7b36ef40d8cca2297a9219fdf"
+    },
+    {
       "path": "tests/test_flow_compare.py",
       "size": 3252,
       "sha256": "364aa27a0fe1ff7df76b69efab8bc9e827b815b15c0ae3fdf07c2875f14ff772"
@@ -813,6 +833,11 @@
       "path": "tests/test_flow_conditions.py",
       "size": 1887,
       "sha256": "962e806ab261e4bf8c777e6326453725967621a4817e566c5c0722d7924dd799"
+    },
+    {
+      "path": "tests/test_flow_cron.py",
+      "size": 2677,
+      "sha256": "27617c5679d744effbe410165409253b238a30de56b4d24e9367c43c5f797c42"
     },
     {
       "path": "tests/test_flow_graph.py",
@@ -957,7 +982,7 @@
     {
       "path": "VERSION",
       "size": 7,
-      "sha256": "36f3b0aa0b0b23b4fd1023df32f7f243ad1e83d1970b435b5bb3a431379ecbd6"
+      "sha256": "c90c3058290761eb1f40ef36a2febaa5a8933a3f473d817f6803f6069def3050"
     },
     {
       "path": "workbench.py",
