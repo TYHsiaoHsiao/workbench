@@ -63,8 +63,10 @@ from knowledge_service import (
     KnowledgeServiceError,
     build_index,
     check_health,
+    default_index_dir,
     discover_kb_root,
     index_info,
+    index_ready,
     load_search_config,
     search_index,
     search_index_card,
@@ -467,6 +469,345 @@ def cmd_init(args: argparse.Namespace) -> int:
         )
         _print("如需固定项目位置：设置环境变量 AI_FILM_PROJECTS_ROOT 指向统一目录后重新 init。")
     return EXIT_OK
+
+
+def _practical_result(
+    check_id: str, label: str, status: str, detail: str, hint: str = ""
+) -> dict[str, Any]:
+    return {"id": check_id, "label": label, "status": status, "detail": detail, "hint": hint}
+
+
+def _quickstart_next_commands(project: Path, graph_id: str | None) -> list[str]:
+    commands = [
+        f'python workbench.py practical-check --project "{project}"',
+        f'python workbench.py flow serve --project "{project}" --port 8899',
+    ]
+    if graph_id:
+        commands.append(
+            f'python workbench.py flow validate --project "{project}" --graph {graph_id}'
+        )
+        commands.append(
+            f'python workbench.py flow run --project "{project}" --graph {graph_id} --dry-run'
+        )
+    commands.append("python workbench.py generate providers")
+    commands.append(
+        f'python workbench.py generate plan mock --project "{project}" '
+        f"--prompt-file 05_shots/shot-01-prompt.md"
+    )
+    return commands
+
+
+def cmd_quickstart(args: argparse.Namespace) -> int:
+    """M38：面向实操的一键启动——建项目、建默认流程图、打印下一步命令。"""
+    name = args.name.strip()
+    if not name:
+        _print("项目名称不能为空")
+        return EXIT_USAGE
+    created = False
+    try:
+        report = create_project(
+            name,
+            base=args.project_root,
+            entry=args.entry,
+            mode=args.mode,
+            force=args.force,
+        )
+        project = Path(report["path"])
+        created = True
+    except ProjectError as exc:
+        if "不能为空" in str(exc):
+            _print(str(exc))
+            return EXIT_USAGE
+        candidate = (
+            Path(args.project_root) / name
+            if args.project_root
+            else default_projects_root() / name
+        )
+        if (candidate / "00_project" / "state.json").is_file():
+            project = candidate
+        else:
+            try:
+                project = resolve_project(name)
+            except FlowError as resolve_exc:
+                _print(f"{exc}；且无法解析已有项目: {resolve_exc}")
+                return EXIT_FAIL
+    try:
+        state = load_state(project)
+    except ProjectError as exc:
+        _print(str(exc))
+        return EXIT_FAIL
+    try:
+        stage_meta = load_registry().stage(state["stage"])
+        stage_name = stage_meta.get("name") or state["stage"]
+    except (RegistryError, KeyError, Exception):  # noqa: BLE001 - 名称缺失不阻塞
+        stage_name = state["stage"]
+    graph_id = ""
+    graphs: list[dict[str, Any]] = []
+    if not args.skip_graph:
+        try:
+            graphs = list_graphs(project)
+            if graphs:
+                graph_id = graphs[0]["graph_id"]
+            else:
+                data = instantiate_template(args.template, project.name, name="从零到成片")
+                write_graph_data(project, data)
+                graphs = list_graphs(project)
+                graph_id = data["graph_id"]
+        except FlowError as exc:
+            _print(f"创建流程图失败: {exc}")
+            return EXIT_FAIL
+    commands = _quickstart_next_commands(project, graph_id or None)
+    payload = {
+        "ok": True,
+        "project": str(project),
+        "project_name": state["project"],
+        "created": created,
+        "entry": state["entry"],
+        "stage": state["stage"],
+        "stage_name": stage_name,
+        "graph_id": graph_id,
+        "graphs_count": len(graphs),
+        "next_commands": commands,
+        "guide": "docs/practical-guide.md",
+    }
+    if args.json:
+        _emit(payload, True)
+        return EXIT_OK
+    _print(f"已准备实操项目: {project}" + ("（新建）" if created else "（已存在，沿用）"))
+    _print(f"入口 {state['entry']}；当前阶段 {state['stage']} {stage_name}")
+    if graph_id:
+        _print(f"流程图: {graph_id}（已就绪，可在 Web 面板拖拽编辑）")
+    else:
+        _print("流程图: 已按 --skip-graph 跳过")
+    _print("")
+    _print("接下来按顺序执行（建议先用 --dry-run 预演，再逐步接真实平台）：")
+    for index, command in enumerate(commands, 1):
+        _print(f"  {index}. {command}")
+    _print("")
+    _print("打开浏览器：先运行上面的 flow serve 命令，再访问终端打印的带 token 链接。")
+    _print("实操手册: docs/practical-guide.md")
+    return EXIT_OK
+
+
+def _practical_checks(project: Path) -> list[dict[str, Any]]:
+    checks: list[dict[str, Any]] = []
+    state: dict[str, Any] | None = None
+    try:
+        state = load_state(project)
+        checks.append(
+            _practical_result(
+                "project",
+                "项目状态",
+                "ok",
+                f"{state['project']} · 阶段 {state['stage']}",
+            )
+        )
+    except (ProjectError, KeyError) as exc:
+        checks.append(
+            _practical_result(
+                "project",
+                "项目状态",
+                "fail",
+                str(exc),
+                "先运行 workbench.py quickstart <名称> 创建项目",
+            )
+        )
+    try:
+        registry = load_registry()
+        checks.append(
+            _practical_result(
+                "registry", "阶段注册表", "ok", f"{len(registry.stages)} 个阶段可加载"
+            )
+        )
+    except (RegistryError, Exception) as exc:  # noqa: BLE001 - 自检需宽容
+        checks.append(
+            _practical_result(
+                "registry", "阶段注册表", "fail", str(exc), "检查 content/stage-registry.json"
+            )
+        )
+    graph_id = ""
+    graph_count = 0
+    if state is not None:
+        try:
+            graphs = list_graphs(project)
+            graph_count = len(graphs)
+            if graphs:
+                graph_id = graphs[0]["graph_id"]
+                data = read_graph_data(project, graph_id)
+                validation = validate_graph(data, load_node_types())
+                if validation["ok"]:
+                    checks.append(
+                        _practical_result(
+                            "flow",
+                            "流程图",
+                            "ok",
+                            f"{graph_count} 张；{graph_id} 校验通过（{len(data['nodes'])} 节点）",
+                        )
+                    )
+                else:
+                    first = (validation.get("errors") or ["未知错误"])[0]
+                    checks.append(
+                        _practical_result(
+                            "flow",
+                            "流程图",
+                            "fail",
+                            f"{graph_id} 校验失败: {first}",
+                            "修复连线后重试：workbench.py flow validate",
+                        )
+                    )
+            else:
+                checks.append(
+                    _practical_result(
+                        "flow",
+                        "流程图",
+                        "warn",
+                        "项目还没有流程图",
+                        "运行 workbench.py quickstart <名称> 或 flow new --template tpl-full-flow",
+                    )
+                )
+        except (FlowError, Exception) as exc:  # noqa: BLE001
+            checks.append(
+                _practical_result("flow", "流程图", "fail", str(exc), "检查 00_project/workflows/")
+            )
+    else:
+        checks.append(
+            _practical_result("flow", "流程图", "fail", "项目状态不可用，跳过流程图检查")
+        )
+    try:
+        kb_root = discover_kb_root()
+        if kb_root is None:
+            checks.append(
+                _practical_result(
+                    "knowledge",
+                    "知识库",
+                    "warn",
+                    "未发现外部知识库（knowledgeIndex.sqlite）",
+                    "把知识库放到文档目录，或为检索配置 kb_root/B 方案索引",
+                )
+            )
+        else:
+            checks.append(
+                _practical_result("knowledge", "知识库", "ok", str(kb_root))
+            )
+    except Exception as exc:  # noqa: BLE001
+        checks.append(
+            _practical_result("knowledge", "知识库", "warn", f"探测失败: {exc}", "可跳过，知识桥为可选项")
+        )
+    try:
+        index_dir = default_index_dir()
+        if index_ready(index_dir):
+            checks.append(
+                _practical_result("index", "本地索引", "ok", f"{index_dir}")
+            )
+        else:
+            checks.append(
+                _practical_result(
+                    "index",
+                    "本地索引",
+                    "warn",
+                    "尚未构建本地索引（可选，用于离线证据卡）",
+                    f"workbench.py index build --source <知识库子目录> --out {index_dir}",
+                )
+            )
+    except (KnowledgeIndexError, Exception) as exc:  # noqa: BLE001
+        checks.append(
+            _practical_result("index", "本地索引", "warn", f"{exc}", "可选能力，不阻塞实操")
+        )
+    try:
+        style_registry = load_style_registry()
+        checks.append(
+            _practical_result(
+                "style", "风格库", "ok", f"{len(style_registry)} 位导演风格可加载"
+            )
+        )
+    except (StyleRegistryError, Exception) as exc:  # noqa: BLE001
+        checks.append(
+            _practical_result(
+                "style", "风格库", "fail", str(exc), "检查 content/style-registry.json"
+            )
+        )
+    try:
+        providers = load_providers().get("providers") or []
+        video = [item for item in providers if item.get("kind") == "video"]
+        unset = [
+            item["provider_id"]
+            for item in video
+            if item.get("env_key") and not os.environ.get(str(item["env_key"]))
+        ]
+        if unset:
+            checks.append(
+                _practical_result(
+                    "generate",
+                    "生成平台",
+                    "warn",
+                    f"{len(video)} 个视频 provider；未配置 key: {', '.join(unset)}",
+                    "先用 mock/dry-run 跑通流程；真实提交前设置对应环境变量",
+                )
+            )
+        else:
+            checks.append(
+                _practical_result(
+                    "generate",
+                    "生成平台",
+                    "ok",
+                    f"{len(video)} 个视频 provider，key 已配置",
+                )
+            )
+    except (GenerateError, Exception) as exc:  # noqa: BLE001
+        checks.append(
+            _practical_result(
+                "generate", "生成平台", "fail", str(exc), "检查 content/generate-providers.json"
+            )
+        )
+    checks.append(
+        _practical_result(
+            "web",
+            "Web 面板",
+            "ok",
+            "启动命令: python workbench.py flow serve --project <项目> --port 8899",
+        )
+    )
+    return checks
+
+
+def cmd_practical_check(args: argparse.Namespace) -> int:
+    """M38：实操自检——项目/流程图/知识库/索引/风格库/生成平台是否可用于真实创作。"""
+    try:
+        project = resolve_project(args.project)
+    except FlowError as exc:
+        _print(f"错误: {exc}")
+        return EXIT_FAIL
+    checks = _practical_checks(project)
+    ok = not any(item["status"] == "fail" for item in checks)
+    summary = {
+        "ok": sum(1 for item in checks if item["status"] == "ok"),
+        "warn": sum(1 for item in checks if item["status"] == "warn"),
+        "fail": sum(1 for item in checks if item["status"] == "fail"),
+    }
+    commands = _quickstart_next_commands(project, None)
+    payload = {
+        "ok": ok,
+        "project": str(project),
+        "summary": summary,
+        "checks": checks,
+        "next_commands": commands,
+    }
+    if args.json:
+        _emit(payload, True)
+    else:
+        _print(f"实操自检: {project}")
+        for item in checks:
+            mark = {"ok": "[OK]", "warn": "[WARN]", "fail": "[FAIL]"}[item["status"]]
+            _print(f"{mark} {item['label']}: {item['detail']}")
+            if item["status"] != "ok" and item["hint"]:
+                _print(f"       建议: {item['hint']}")
+        _print("")
+        _print(f"汇总: OK {summary['ok']} / WARN {summary['warn']} / FAIL {summary['fail']}")
+        if ok:
+            _print("结论: 可以开始实操。下一步: python workbench.py flow serve --project <项目> --port 8899")
+        else:
+            _print("结论: 存在阻塞项，按上面的建议修复后重新运行 practical-check。")
+    return EXIT_OK if ok else EXIT_FAIL
 
 
 def cmd_route(args: argparse.Namespace) -> int:
@@ -2940,6 +3281,31 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--force", action="store_true", help="目标存在时覆盖")
     init.add_argument("--json", action="store_true", help="以 JSON 输出")
     init.set_defaults(func=cmd_init)
+
+    quickstart = sub.add_parser(
+        "quickstart", help="M38：一键准备实操项目（建项目 + 默认流程图 + 下一步命令）"
+    )
+    quickstart.add_argument("name", help="项目名称")
+    quickstart.add_argument("--project-root", help="项目根目录（默认文档目录下的工作台 projects/）")
+    quickstart.add_argument("--entry", default="A", choices=["A", "B", "C", "D"], help="项目入口")
+    quickstart.add_argument(
+        "--mode", default="full", choices=["full", "stage", "relay", "revise"], help="运行模式"
+    )
+    quickstart.add_argument(
+        "--template", default="tpl-full-flow", help="默认流程图模板（默认 tpl-full-flow）"
+    )
+    quickstart.add_argument("--skip-graph", action="store_true", help="只建项目，不创建默认流程图")
+    quickstart.add_argument("--force", action="store_true", help="目标存在时覆盖")
+    quickstart.add_argument("--json", action="store_true", help="以 JSON 输出")
+    quickstart.set_defaults(func=cmd_quickstart)
+
+    practical = sub.add_parser(
+        "practical-check",
+        help="M38：实操自检（项目/流程图/知识库/索引/风格库/生成平台/Web 启动）",
+    )
+    practical.add_argument("--project", required=True, help="项目目录或项目名")
+    practical.add_argument("--json", action="store_true", help="以 JSON 输出")
+    practical.set_defaults(func=cmd_practical_check)
 
     project = sub.add_parser("project", help="跨项目总览")
     project_sub = project.add_subparsers(dest="project_command", required=True)

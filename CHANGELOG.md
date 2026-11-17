@@ -1,3 +1,11 @@
+## [2.25.0] - 2026-11-17 — 实操上线包（M38：quickstart、practical-check、Web 实操指引）
+
+- 新增 `workbench.py quickstart <名称>`：一键创建项目 + 默认流程图（tpl-full-flow）+ 下一步命令清单；支持 `--project-root/--entry/--mode/--template/--skip-graph/--force/--json`，同名项目自动复用。
+- 新增 `workbench.py practical-check --project <项目>`：项目状态、阶段注册表、流程图校验、知识库、本地索引、风格库、生成平台 provider/key、Web 启动命令 8 项自检，输出 `[OK]/[WARN]/[FAIL]` 与修复建议；无 FAIL 退出码 0，`--json` 结构化。
+- Web 顶栏新增「实操指引」面板（7 步速查，不依赖后端新 API）。
+- 新增 `docs/practical-guide.md`（10 分钟从零到第一条提示词）。
+- 新增 6 项单元测试（全量 531 项）；覆盖率行 81.05%（7203/8887）/分支 51.58%（3403/6598）。
+- 兼容性：契约不变，命令纯增量。
 ## [2.24.0] - 2026-11-16 — 可视化节点工作台（M37：飞书卡片通知与批次趋势 SVG 图）
 
 - 通知：`WEBHOOK_FORMATS` 新增 `feishu_card`，发送 `msg_type=interactive` 卡片（告警红/报表绿、标题含 event、正文含摘要与失败图，M37）。

@@ -306,3 +306,62 @@ class CliCoverageTest(unittest.TestCase):
         self.assertEqual(0, code, msg=output)
         code, output = run_cli(["generate", "refresh", "--project", str(self.project), "--all", "--json"])
         self.assertIn(code, (0, 1), msg=output)
+
+
+class M38PracticalTest(unittest.TestCase):
+    """M38：quickstart 与 practical-check 的实操入口。"""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_quickstart_creates_project_and_graph(self) -> None:
+        data = _json(run_cli(["quickstart", "实操项目", "--project-root", str(self.root), "--json"]))
+        self.assertTrue(data["ok"])
+        self.assertTrue(data["created"])
+        self.assertEqual("flow-main", data["graph_id"])
+        self.assertEqual(1, data["graphs_count"])
+        project = Path(data["project"])
+        self.assertTrue((project / "00_project" / "state.json").is_file())
+        self.assertTrue((project / "00_project" / "workflows" / "flow-main.json").is_file())
+        self.assertIn("practical-check", " ".join(data["next_commands"]))
+
+    def test_quickstart_rerun_is_idempotent(self) -> None:
+        first = _json(run_cli(["quickstart", "复用项目", "--project-root", str(self.root), "--json"]))
+        second = _json(run_cli(["quickstart", "复用项目", "--project-root", str(self.root), "--json"]))
+        self.assertTrue(first["created"])
+        self.assertFalse(second["created"])
+        self.assertEqual(first["project"], second["project"])
+
+    def test_quickstart_skip_graph(self) -> None:
+        data = _json(
+            run_cli(["quickstart", "跳过图", "--project-root", str(self.root), "--skip-graph", "--json"])
+        )
+        self.assertEqual(0, data["graphs_count"])
+        self.assertEqual("", data["graph_id"])
+
+    def test_practical_check_ok_and_json(self) -> None:
+        _json(run_cli(["quickstart", "自检项目", "--project-root", str(self.root), "--json"]))
+        project = self.root / "自检项目"
+        data = _json_any(run_cli(["practical-check", "--project", str(project), "--json"]))
+        self.assertTrue(data["ok"])
+        ids = {item["id"] for item in data["checks"]}
+        self.assertTrue({"project", "registry", "flow", "style", "generate"} <= ids)
+        self.assertEqual(0, data["summary"]["fail"])
+        self.assertTrue(data["next_commands"])
+
+    def test_practical_check_missing_project(self) -> None:
+        code, _ = run_cli(["practical-check", "--project", str(self.root / "不存在")])
+        self.assertEqual(1, code)
+
+    def test_practical_check_without_graph_warns(self) -> None:
+        _json(run_cli(["quickstart", "无图项目", "--project-root", str(self.root),
+                       "--skip-graph", "--json"]))
+        data = _json_any(run_cli(["practical-check", "--project", str(self.root / "无图项目"),
+                                  "--json"]))
+        self.assertTrue(data["ok"])
+        flow_check = next(item for item in data["checks"] if item["id"] == "flow")
+        self.assertEqual("warn", flow_check["status"])

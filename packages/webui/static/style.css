@@ -523,3 +523,6 @@ button.link:hover { text-decoration: underline; }
   white-space: pre-wrap;
 }
 
+
+/* M38: 实操指引面板 */
+.practical-card{width:820px;max-width:92vw}.practical-body{max-height:70vh;overflow:auto}.practical-steps{margin:8px 0 10px 20px;padding:0;line-height:1.9}.practical-steps li{margin-bottom:4px}.practical-steps code{background:#111a2e;padding:1px 5px;border-radius:4px;color:#93c5fd}

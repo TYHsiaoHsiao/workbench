@@ -1,4 +1,4 @@
-# 命令卡（v2.24.0）
+# 命令卡（v2.25.0）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -9,6 +9,8 @@
 |---|---|
 | `python workbench.py version` | 版本号 + 契约版本 |
 | `python workbench.py doctor` | 10 项自检：Python、目录骨架、17 份契约、阶段注册表、意图规则、风格注册表、flow（17 节点/4 模板/6 契约）、generate（4 provider）、index（knowledge-index/knowledge-search 契约 + FTS5 trigram 可用）、品牌词表 |
+| `python workbench.py quickstart <名称> [--project-root ...]` | M38：一键建项目 + 默认流程图（tpl-full-flow）+ 下一步命令清单；同名自动复用 |
+| `python workbench.py practical-check --project <项目>` | M38：实操自检（项目/注册表/流程图/知识库/索引/风格库/生成平台/Web 启动），无 FAIL 退出 0 |
 | `python workbench.py check` | 校验阶段注册表；`--project <名或路径>` 同时校验项目 `state.json` 与参考记忆 |
 | `python workbench.py check --project 项目名 --content` | 跨阶段内容一致性：风格卡/知识卡/产物文件存在性、`confirmed_references` 子集、treatment↔shot-plan 时长、下游过期提示（1.0.1） |
 | `python workbench.py brand-guard` | 品牌禁用词扫描；`--json` 输出结构化报告 |
@@ -209,7 +211,7 @@ python workbench.py flow run --project 雨夜回声 --graph flow-main --dry-run
 | `python workbench.py flow batch --project <项目> --all --webhook-url <URL>` | M28：批次失败汇总 JSON POST（`event=batch.run`，含 `failed_graphs` 与 `summary`） |
 | Web：运行面板「批次历史」 | M28：最近 10 个批次；失败行「恢复失败图」→ `POST /api/batches/<id>/recover` |
 
-## 15. 队列运维与批次趋势（M31/M32/M33/M34/M35/M36/M37）
+## 15. 队列运维与批次趋势（M31/M32/M33/M34/M35/M36/M37/M38）
 
 | 命令 | 作用 |
 |---|---|

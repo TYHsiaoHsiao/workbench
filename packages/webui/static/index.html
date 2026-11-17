@@ -15,6 +15,7 @@
       </label>
       <button id="btn-projects" title="项目管理面板">项目…</button>
       <button id="btn-generate" title="生成平台面板（provider/任务/状态刷新）">生成…</button>
+      <button id="btn-practical" title="实操指引（M38：从建项目到第一条提示词）">实操指引</button>
       <label>流程图
         <select id="graph-select"></select>
       </label>
@@ -128,6 +129,25 @@
     <div class="panel-card generate-card gen-detail-card">
       <header><h2>生成任务详情</h2><button id="btn-close-gen-detail" class="link">关闭</button></header>
       <div id="gen-detail-body" class="projects-body"><p class="hint">加载中…</p></div>
+    </div>
+  </div>
+
+  <div id="practical-panel" class="overlay hidden">
+    <div class="panel-card practical-card">
+      <header><h2>实操指引（M38）</h2><button id="btn-close-practical" class="link">关闭</button></header>
+      <div class="projects-body practical-body">
+        <p class="hint">目标：10 分钟内从零到「第一条可提交的提示词」。所有写操作都在当前项目目录内，Web 只监听 127.0.0.1。</p>
+        <ol class="practical-steps">
+          <li><strong>准备项目</strong>：终端执行 <code>python workbench.py quickstart 我的短片 --project-root "D:/AI影视工作台/projects"</code>，自动建项目 + 默认流程图。</li>
+          <li><strong>自检</strong>：<code>python workbench.py practical-check --project 我的短片</code>，全部 OK / 可接受 WARN 即可继续。</li>
+          <li><strong>打开本面板的项目</strong>：用顶部「项目…」选择项目；流程图下拉选择 flow-main。</li>
+          <li><strong>预演整图</strong>：右侧勾选「预演（dry-run）」，点「运行」；或终端 <code>flow run --graph flow-main --dry-run</code>。</li>
+          <li><strong>逐阶段推进</strong>：按 01→08 检查 00_project/state.json 的输出物；知识/风格卡在「生成…」面板查看。</li>
+          <li><strong>接真实平台</strong>：设置 <code>SEEDANCE_API_KEY</code> / <code>MINIMAX_API_KEY</code> 后，用「生成…」面板预检并提交（默认 dry-run，live 前会二次确认）。</li>
+          <li><strong>记录与复盘</strong>：运行历史、批次趋势、报表 MD/CSV/HTML 都在右侧面板；快照与回滚在「创建快照 / 快照列表」。</li>
+        </ol>
+        <p class="hint">完整文档：<code>docs/practical-guide.md</code> · 命令卡：<code>docs/command-card.md</code> · 当前版本见顶栏。</p>
+      </div>
     </div>
   </div>
 

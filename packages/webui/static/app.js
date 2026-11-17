@@ -2677,6 +2677,12 @@ function bindUi() {
     openGenerate().catch((err) => logLine("打开生成面板失败：" + err.message, "err"))
   );
   $("#btn-close-generate").addEventListener("click", () => closeGenerate());
+  $("#btn-practical").addEventListener("click", () => {
+    $("#practical-panel").classList.remove("hidden");
+  });
+  $("#btn-close-practical").addEventListener("click", () => {
+    $("#practical-panel").classList.add("hidden");
+  });
   $("#btn-close-gen-detail").addEventListener("click", () => closeGenDetail());
   $("#btn-close-projects").addEventListener("click", () => closeProjects());
   $("#inspector-body").addEventListener("focusin", () => remember());
