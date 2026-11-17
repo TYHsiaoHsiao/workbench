@@ -1,4 +1,4 @@
-# 命令卡（v2.26.0）
+# 命令卡（v2.27.0）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -11,6 +11,7 @@
 | `python workbench.py doctor` | 10 项自检：Python、目录骨架、17 份契约、阶段注册表、意图规则、风格注册表、flow（17 节点/4 模板/6 契约）、generate（4 provider）、index（knowledge-index/knowledge-search 契约 + FTS5 trigram 可用）、品牌词表 |
 | `python workbench.py quickstart <名称> [--project-root ...] [--demo]` | M38：一键建项目 + 默认流程图 + 下一步命令清单；M39：`--demo` 写入 60 秒演示剧本与首条提示词 |
 | `python workbench.py practical-check --project <项目> [--fix] [--source <知识库>]` | M38：实操自检；M39：`--fix` 自动补建默认流程图，`--source` 可选构建本地索引 |
+| Web 操作台（M40） | 顶栏「实操指引」→ 操作台：17 个白名单操作（开工/项目/索引/生成/流程/队列/快照），危险操作需二次确认；与常用 CLI 等价 |
 | `python workbench.py check` | 校验阶段注册表；`--project <名或路径>` 同时校验项目 `state.json` 与参考记忆 |
 | `python workbench.py check --project 项目名 --content` | 跨阶段内容一致性：风格卡/知识卡/产物文件存在性、`confirmed_references` 子集、treatment↔shot-plan 时长、下游过期提示（1.0.1） |
 | `python workbench.py brand-guard` | 品牌禁用词扫描；`--json` 输出结构化报告 |
@@ -228,3 +229,18 @@ python workbench.py flow run --project 雨夜回声 --graph flow-main --dry-run
 | `--webhook-format feishu_card` | M37：飞书卡片消息（`msg_type=interactive`，告警红/报表绿），适用于 `batch-report --push`、`queue alerts`、`queue run`、`queue daemon`、`flow batch`。 |
 | `python workbench.py flow batch-trend --project <项目> [--limit 10] [--out 路径] [--json]` | M37：导出批次趋势 SVG 图（自包含单文件，成功/失败条形）；`--out` 写文件，缺省打印到标准输出。 |
 | Web：运行面板「批次历史趋势」/「失败告警」/「cron 预览」 | M31：`POST /api/cron/preview` + `GET /api/queue/alerts`；趋势为最近 10 批次成功/失败 SVG 条 |
+
+## 16. Web 操作台（M40）
+
+打开方式：顶栏「实操指引」按钮（原 M38 面板升级为操作台）。所有操作均在本地 Web 服务进程内执行，等价于对应 CLI；不开放任意 shell。
+
+| 分类 | 操作 | 等价 CLI |
+|---|---|---|
+| 开工 | `quickstart_demo` | `quickstart <名称> --demo` |
+| 开工 | `practical_check` | `practical-check --project <项目> --fix` |
+| 项目 | `project_list` | `project list` |
+| 知识库 | `index_build` / `index_info` / `index_verify` / `index_search` | `index build/info/verify/search` |
+| 生成 | `generate_providers` / `generate_plan` / `generate_submit` | `generate providers/plan/submit` |
+| 流程 | `batch_run` / `batch_report` | `flow batch` / `flow batch-report` |
+| 队列 | `queue_add` / `queue_run` | `flow queue add/run` |
+| 快照 | `snapshot_create` / `snapshot_list` / `rollback_apply` | `rollback create/list/apply`（`rollback_apply` 危险，默认 dry-run） |

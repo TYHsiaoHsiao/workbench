@@ -1,3 +1,11 @@
+## [2.27.0] - 2026-11-17 — Web 操作台（M40：所有操作可视化执行）
+
+- 新增 `packages/webui/ops.py`：17 个白名单操作、8 类（开工/项目/知识库/生成/流程/队列/快照），每个操作声明参数 schema；执行时进程内调用 CLI 并捕获输出；危险操作 `rollback_apply` 标记 danger 并由前端二次确认。
+- Web API：`GET /api/ops`（操作元数据）、`POST /api/ops/run`（校验参数后执行，返回 exit_code/output/data）。
+- 前端：「实操指引」升级为操作台（左侧分类列表、参数表单、执行输出、操作后刷新批次/队列/快照/运行历史）。
+- 新增 1 项测试（操作台端点：列表 ≥15 项含 danger、project_list 执行、缺参/未知 op 400），全量 538 项。
+- 兼容性：纯新增，CLI 与契约不变。
+
 ## [2.26.0] - 2026-11-17 — 实操闭环增强（M39：quickstart --demo、practical-check --fix）
 
 - `workbench.py quickstart <名称> --demo`：创建项目与默认流程图后写入演示剧本（`01_story/演示剧本-午夜来电.md`，60 秒竖屏悬疑）与首条镜头提示词（`05_shots/shot-01-prompt.md`）；已存在不覆盖，`demo_files` 出现在 JSON 输出。

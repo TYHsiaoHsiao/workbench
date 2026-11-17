@@ -1,6 +1,6 @@
 # 可视化节点工作台（M1–M16 + 2.0.1 实时预览 + M20 快照回滚 + M28 队列运维）
 
-> 版本：2.26.0 · 状态：M1–M16 + 2.0.1 实时预览 + M20 Web 快照回滚面板 + M22 索引证据卡接入 + M28 队列运维增强 + M31/M32/M33/M34 队列告警、运维报表与批次报表 Web 化 + M35 批次报表 HTML 化 + M36 批次报表推送与告警静默窗口状态 + M38 实操上线引导已完成 · 适用范围：本地单用户
+> 版本：2.27.0 · 状态：M1–M16 + 2.0.1 实时预览 + M20 Web 快照回滚面板 + M22 索引证据卡接入 + M28 队列运维增强 + M31/M32/M33/M34 队列告警、运维报表与批次报表 Web 化 + M35 批次报表 HTML 化 + M36 批次报表推送与告警静默窗口状态 + M38 实操上线引导 + M40 Web 操作台已完成 · 适用范围：本地单用户
 
 ## 1. 定位
 
@@ -382,6 +382,7 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - M35（2.22.0）新增 1 项测试（HTML 报表：doctype/style/汇总卡片/趋势条/明细表/转义/无外链），全量 `Ran 513 tests ... OK`；CLI 冒烟：`flow batch-report --format html --out report.html`；Web 冒烟：批次面板「报表 HTML」下载与 `GET /api/batches/report?format=html`。
 - M36（2.23.0）新增 5 项测试（报表推送事件/空 URL/未知格式、告警 state 展示、Web 推送端点），全量 `Ran 518 tests ... OK`；CLI 冒烟：`flow batch-report --push --webhook-url http://127.0.0.1:9/hook --json` 返回 `webhook.ok=false` 但批次报表正常生成；Web 冒烟：`POST /api/batches/report/push` 与告警面板静默窗口展示。
 - M37（2.24.0）：新增 1 项测试（趋势 SVG 生成/Web 端点/CLI/飞书卡片共 6 项，全量 524 项）；`flow batch-trend --out` 导出自包含 SVG、`GET /api/batches/trend`、Web「趋势 SVG」按钮、`--webhook-format feishu_card`。
+- M40（2.27.0）：新增 1 项测试（操作台端点：列表含 17 项与 danger、`project_list` 执行、缺参/未知 op 400），全量 `Ran 538 tests ... OK`；Web 冒烟：操作台打开 → 选择开工/项目/索引操作 → 执行并显示退出码与输出。
 
 - 新增 22 项 flow 测试（图校验 12、执行引擎 10）+ 12 项 Web API 测试（M1）；M2/M3 新增 18 项（模板 6、能力节点 6、runner 2、Web API 4）。
 - 全量 `Ran 222 tests ... OK`；CLI 冒烟：模板实例化、dry-run、运行历史、批量预演、失败恢复（live 恢复后 01→02）；`doctor` 8 项含 flow 模板检查。
@@ -403,9 +404,9 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - M20（2.8.0）新增 5 项测试（覆盖率 2、可复现构建 2、Web 回滚 1），全量 `Ran 387 tests ... OK`；CI 九步全 PASS（覆盖率 76.37%、repro PASS、品牌守卫 0 命中）；Web 冒烟：快照创建 → 列表 → dry-run → 回滚。
 - M22（2.10.0）新增 12 项测试（索引证据卡服务 8、CLI 2、flow 节点 2），全量 `Ran 413 tests ... OK`；CLI 冒烟：`knowledge search --index` 生成同契约知识卡；flow `knowledge_search` 节点 `index` 参数运行后写 `00_project/knowledge-cards/<stage>-candidates.json`；索引缺失/无命中分别报可读错误与 `no_evidence`。
 
-## 18. 后续（M40 候选）
+## 18. 后续（M41 候选）
 
-- 批次报表图表化（HTML 报告/跨项目聚合）与定时报表外送。
-- 告警静默窗口 UI 配置与 webhook 熔断/飞书签名校验（消息卡片）。
-- 分支覆盖率从 51.42% 提升至 55%（补 queue/batch/report 分支）。
-- GitHub Actions 远端矩阵真实跑通（需配置 remote）与 macOS E2E-02。
+- 操作台扩展：覆盖更多 CLI 操作、参数联动与批量任务队列（M41 候选）。
+- 分支覆盖率从 51% 提升至 55%（补 webui/ops、queue、batch 分支）。
+- 远端 CI 矩阵稳定性与 macOS 可选矩阵（需可用的托管 runner）。
+- 创作主线试点 D：用工作台完成一个完整 60 秒短片的端到端生产。

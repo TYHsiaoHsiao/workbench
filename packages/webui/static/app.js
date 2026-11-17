@@ -2615,6 +2615,196 @@ function renderProjects() {
   });
 }
 
+// ---- 操作台（M40：所有操作可视化执行） ----
+
+const opsState = { ops: [], currentId: "", running: false };
+
+async function openOps() {
+  $("#practical-panel").classList.remove("hidden");
+  if (opsState.ops.length === 0) {
+    await loadOps();
+  }
+}
+
+async function loadOps() {
+  const data = await api("/api/ops");
+  opsState.ops = data.ops || [];
+  renderOpsList();
+  if (!opsState.currentId && opsState.ops.length) {
+    selectOp(opsState.ops[0].id);
+  }
+}
+
+function renderOpsList() {
+  const box = $("#ops-list");
+  box.innerHTML = "";
+  const groups = new Map();
+  for (const op of opsState.ops) {
+    const key = op.category || "其它";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(op);
+  }
+  for (const [category, items] of groups) {
+    const title = document.createElement("div");
+    title.className = "ops-category";
+    title.textContent = category;
+    box.appendChild(title);
+    for (const op of items) {
+      const btn = document.createElement("button");
+      btn.className = "ops-item" + (op.id === opsState.currentId ? " active" : "");
+      btn.textContent = op.label + (op.danger ? " ⚠" : "");
+      btn.title = op.description || "";
+      btn.dataset.op = op.id;
+      btn.addEventListener("click", () => selectOp(op.id));
+      box.appendChild(btn);
+    }
+  }
+}
+
+function opById(opId) {
+  return opsState.ops.find((op) => op.id === opId) || null;
+}
+
+function selectOp(opId) {
+  opsState.currentId = opId;
+  const op = opById(opId);
+  renderOpsList();
+  const desc = $("#ops-desc");
+  const form = $("#ops-form");
+  desc.innerHTML = "";
+  form.innerHTML = "";
+  $("#ops-output").textContent = "（输出将显示在这里）";
+  $("#ops-status").textContent = "";
+  if (!op) return;
+  desc.innerHTML =
+    "<strong>" + escapeHtml(op.label) + "</strong>" +
+    (op.danger ? ' <span class="ops-danger">危险操作</span>' : "") +
+    "<br/><span class=\"hint\">" + escapeHtml(op.description || "") + "</span>";
+  const params = op.params || [];
+  if (params.length === 0) {
+    form.innerHTML = '<p class="hint">该操作无需参数。</p>';
+  }
+  for (const param of params) {
+    const row = document.createElement("label");
+    row.className = "ops-field";
+    const caption = document.createElement("span");
+    caption.textContent = param.label + (param.required ? " *" : "");
+    row.appendChild(caption);
+    let input;
+    if (param.type === "bool") {
+      input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = !!param.default;
+    } else if (param.type === "enum") {
+      input = document.createElement("select");
+      for (const choice of param.choices || []) {
+        const option = document.createElement("option");
+        option.value = choice;
+        option.textContent = choice;
+        if (choice === param.default) option.selected = true;
+        input.appendChild(option);
+      }
+    } else {
+      input = document.createElement("input");
+      input.type = param.type === "int" ? "number" : "text";
+      if (param.default !== null && param.default !== undefined) input.value = param.default;
+      if (param.help) input.placeholder = param.help;
+    }
+    input.dataset.param = param.name;
+    input.dataset.kind = param.type;
+    row.appendChild(input);
+    if (param.help && param.type !== "bool") {
+      const hint = document.createElement("span");
+      hint.className = "hint";
+      hint.textContent = param.help;
+      row.appendChild(hint);
+    }
+    form.appendChild(row);
+  }
+  $("#btn-op-run").disabled = false;
+}
+
+function collectOpParams() {
+  const op = opById(opsState.currentId);
+  const params = {};
+  if (!op) return params;
+  for (const param of op.params || []) {
+    const input = $("#ops-form").querySelector('[data-param="' + param.name + '"]');
+    if (!input) continue;
+    if (param.type === "bool") {
+      params[param.name] = !!input.checked;
+    } else if (param.type === "int") {
+      params[param.name] = input.value === "" ? param.default : Number(input.value);
+    } else {
+      params[param.name] = input.value.trim();
+    }
+  }
+  return params;
+}
+
+function prettyJson(value) {
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch (err) {
+    return String(value);
+  }
+}
+
+async function runSelectedOp() {
+  if (opsState.running || !opsState.currentId) return;
+  const op = opById(opsState.currentId);
+  if (!op) return;
+  if (op.danger && !window.confirm(op.confirm || "该操作有风险，确认执行？")) return;
+  opsState.running = true;
+  $("#btn-op-run").disabled = true;
+  $("#ops-status").textContent = "执行中…";
+  $("#ops-output").textContent = "执行中…";
+  try {
+    const resp = await fetch((state.token ? "/api/ops/run?token=" + encodeURIComponent(state.token) : "/api/ops/run"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ op_id: opsState.currentId, params: collectOpParams() }),
+    });
+    const payload = await resp.json();
+    if (!resp.ok || payload.ok === false) {
+      throw new Error((payload && payload.error) || "请求失败（HTTP " + resp.status + "）");
+    }
+    const result = payload.result || {};
+    const lines = [];
+    lines.push("exit_code: " + result.exit_code + (result.ok ? "（成功）" : "（失败）"));
+    if (result.data) {
+      lines.push("");
+      lines.push(prettyJson(result.data));
+    } else if (result.output) {
+      lines.push("");
+      lines.push(result.output.trim());
+    }
+    $("#ops-output").textContent = lines.join("\n");
+    $("#ops-status").textContent = result.ok ? "完成" : "执行失败（见输出）";
+    logLine("[操作台] " + op.label + (result.ok ? " 成功" : " 失败"));
+    if (typeof refreshAfterOps === "function") refreshAfterOps(op.id);
+  } catch (err) {
+    $("#ops-output").textContent = "错误：" + err.message;
+    $("#ops-status").textContent = "失败";
+    logLine("[操作台] " + op.label + " 失败：" + err.message, "err");
+  } finally {
+    opsState.running = false;
+    $("#btn-op-run").disabled = false;
+  }
+}
+
+function refreshAfterOps(opId) {
+  const refreshOps = new Set([
+    "project_list", "quickstart_demo", "practical_check", "batch_run", "queue_add", "queue_run",
+    "snapshot_create", "snapshot_list", "rollback_apply",
+  ]);
+  if (!refreshOps.has(opId)) return;
+  if (typeof loadBatches === "function") loadBatches().catch(() => {});
+  if (typeof loadQueue === "function") loadQueue().catch(() => {});
+  if (typeof loadSnapshots === "function") loadSnapshots().catch(() => {});
+  if (typeof loadRunHistory === "function") loadRunHistory().catch(() => {});
+}
+
 function bindUi() {
   $("#project-select").addEventListener("change", async (e) => {
     try {
@@ -2678,11 +2868,12 @@ function bindUi() {
   );
   $("#btn-close-generate").addEventListener("click", () => closeGenerate());
   $("#btn-practical").addEventListener("click", () => {
-    $("#practical-panel").classList.remove("hidden");
+    openOps().catch((err) => logLine("打开操作台失败：" + err.message, "err"));
   });
   $("#btn-close-practical").addEventListener("click", () => {
     $("#practical-panel").classList.add("hidden");
   });
+  $("#btn-op-run").addEventListener("click", () => runSelectedOp());
   $("#btn-close-gen-detail").addEventListener("click", () => closeGenDetail());
   $("#btn-close-projects").addEventListener("click", () => closeProjects());
   $("#inspector-body").addEventListener("focusin", () => remember());

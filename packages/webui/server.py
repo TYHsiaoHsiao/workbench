@@ -358,6 +358,11 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
 
     # ---------------- API 实现 ----------------
     def _api_get(self, path: str, query: dict[str, list[str]]) -> None:
+        if path == "/api/ops":
+            from webui.ops import list_ops
+
+            self._json({"ok": True, "ops": list_ops()})
+            return
         if path == "/api/dev/version":
             self._json({"ok": True, **_dev_signature()})
             return
@@ -702,6 +707,17 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
         self._error("not found", HTTPStatus.NOT_FOUND)
 
     def _api_post(self, path: str, query: dict[str, list[str]], body: dict[str, Any]) -> None:
+        if path == "/api/ops/run":
+            from webui.ops import run_op
+
+            op_id = str(body.get("op_id") or "").strip()
+            if not op_id:
+                raise FlowError("缺少 op_id")
+            params = body.get("params") or {}
+            if not isinstance(params, dict):
+                raise FlowError("params 必须为对象")
+            self._json({"ok": True, "result": run_op(op_id, params)})
+            return
         if path == "/api/cron/preview":
             expression = str(body.get("expression") or "").strip()
             if not expression:

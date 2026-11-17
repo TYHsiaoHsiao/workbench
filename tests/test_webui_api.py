@@ -1036,5 +1036,37 @@ class WebUIApiTest(unittest.TestCase):
         self.assertEqual(2, data["count"])
 
 
+    def test_ops_endpoints(self) -> None:
+        status, data = self.client.json("GET", "/api/ops")
+        self.assertEqual(200, status, msg=data)
+        self.assertTrue(data["ok"])
+        ops = data["ops"]
+        self.assertGreaterEqual(len(ops), 15)
+        by_id = {op["id"]: op for op in ops}
+        self.assertIn("quickstart_demo", by_id)
+        self.assertIn("project_list", by_id)
+        self.assertTrue(by_id["rollback_apply"]["danger"])
+
+        status, data = self.client.json(
+            "POST", "/api/ops/run", {"op_id": "project_list", "params": {}}
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertTrue(data["ok"])
+        self.assertTrue(data["result"]["ok"])
+        self.assertEqual(0, data["result"]["exit_code"])
+
+        status, data = self.client.json(
+            "POST", "/api/ops/run", {"op_id": "quickstart_demo", "params": {}}
+        )
+        self.assertEqual(400, status, msg=data)
+        self.assertFalse(data["ok"])
+
+        status, data = self.client.json(
+            "POST", "/api/ops/run", {"op_id": "no_such_op", "params": {}}
+        )
+        self.assertEqual(400, status, msg=data)
+        self.assertFalse(data["ok"])
+
+
 if __name__ == "__main__":
     unittest.main()
