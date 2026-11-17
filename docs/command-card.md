@@ -1,4 +1,4 @@
-# 命令卡（v2.25.0）
+# 命令卡（v2.26.0）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -9,8 +9,8 @@
 |---|---|
 | `python workbench.py version` | 版本号 + 契约版本 |
 | `python workbench.py doctor` | 10 项自检：Python、目录骨架、17 份契约、阶段注册表、意图规则、风格注册表、flow（17 节点/4 模板/6 契约）、generate（4 provider）、index（knowledge-index/knowledge-search 契约 + FTS5 trigram 可用）、品牌词表 |
-| `python workbench.py quickstart <名称> [--project-root ...]` | M38：一键建项目 + 默认流程图（tpl-full-flow）+ 下一步命令清单；同名自动复用 |
-| `python workbench.py practical-check --project <项目>` | M38：实操自检（项目/注册表/流程图/知识库/索引/风格库/生成平台/Web 启动），无 FAIL 退出 0 |
+| `python workbench.py quickstart <名称> [--project-root ...] [--demo]` | M38：一键建项目 + 默认流程图 + 下一步命令清单；M39：`--demo` 写入 60 秒演示剧本与首条提示词 |
+| `python workbench.py practical-check --project <项目> [--fix] [--source <知识库>]` | M38：实操自检；M39：`--fix` 自动补建默认流程图，`--source` 可选构建本地索引 |
 | `python workbench.py check` | 校验阶段注册表；`--project <名或路径>` 同时校验项目 `state.json` 与参考记忆 |
 | `python workbench.py check --project 项目名 --content` | 跨阶段内容一致性：风格卡/知识卡/产物文件存在性、`confirmed_references` 子集、treatment↔shot-plan 时长、下游过期提示（1.0.1） |
 | `python workbench.py brand-guard` | 品牌禁用词扫描；`--json` 输出结构化报告 |

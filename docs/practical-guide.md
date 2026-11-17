@@ -110,3 +110,26 @@ python workbench.py rollback list --project "我的短片"
 | 端口被占用 | `flow serve --port 8900` 更换端口 |
 
 更多：`docs/command-card.md`、`docs/troubleshooting.md`、`docs/ci.md`。
+
+## 演示素材（M39）
+
+```bash
+python workbench.py quickstart 演示短片 --demo
+```
+
+会额外写入：
+
+- `01_story/演示剧本-午夜来电.md`：60 秒竖屏悬疑短片大纲（三幕 / 9 个节拍）
+- `05_shots/shot-01-prompt.md`：第一条镜头提示词（竖屏 9:16、雨夜便利店）
+
+随后可直接运行 `generate plan mock --project 演示短片 --prompt-file 05_shots/shot-01-prompt.md` 验证生成链路。
+
+## 自动修复（M39）
+
+```bash
+# 缺流程图时补建默认模板；也可追加 --source 构建本地索引
+python workbench.py practical-check --project 我的短片 --fix
+```
+
+- 只做安全修复：补建默认流程图、可选构建本地索引；不覆盖已有文件。
+- 知识库、风格库、生成平台 key 属于环境配置，`--fix` 不会改动，会给出明确提示。

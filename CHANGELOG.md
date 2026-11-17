@@ -1,3 +1,10 @@
+## [2.26.0] - 2026-11-17 — 实操闭环增强（M39：quickstart --demo、practical-check --fix）
+
+- `workbench.py quickstart <名称> --demo`：创建项目与默认流程图后写入演示剧本（`01_story/演示剧本-午夜来电.md`，60 秒竖屏悬疑）与首条镜头提示词（`05_shots/shot-01-prompt.md`）；已存在不覆盖，`demo_files` 出现在 JSON 输出。
+- `workbench.py practical-check --project <项目> --fix`：安全自动修复——缺流程图时补建 `tpl-full-flow` 默认图；`--source` 可选构建本地索引；修复项以 `fixes` 数组输出并在文本模式打印「已修复/跳过」。
+- `docs/practical-guide.md` 增加演示素材与自动修复章节。
+- 新增 6 项测试（全量 537 项）；覆盖率行 81.05%（7254/8950）/分支 51.57%（3417/6626）。
+- 兼容性：契约不变，命令参数纯增量。
 ## [2.25.0] - 2026-11-17 — 实操上线包（M38：quickstart、practical-check、Web 实操指引）
 
 - 新增 `workbench.py quickstart <名称>`：一键创建项目 + 默认流程图（tpl-full-flow）+ 下一步命令清单；支持 `--project-root/--entry/--mode/--template/--skip-graph/--force/--json`，同名项目自动复用。

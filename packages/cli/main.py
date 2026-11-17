@@ -497,6 +497,60 @@ def _quickstart_next_commands(project: Path, graph_id: str | None) -> list[str]:
     return commands
 
 
+DEMO_STORY = """# 演示剧本：午夜来电（60 秒竖屏悬疑）
+
+- 类型：都市悬疑 / 60 秒竖屏
+- 一句话：深夜值班的便利店店员接到一通来自"明天的自己"的电话。
+- 主要人物：店员（25 岁，疲惫）、电话另一端（声音疲惫、与店员同声线）。
+
+## 第一幕（0–15s）建立
+1. 便利店深夜，雨声，店员趴在收银台打盹。
+2. 座机突然响起，店员迟疑接起。
+3. 听筒里传来与店员一模一样的声音："听我说，30 秒后有人会进店。"
+
+## 第二幕（15–45s）升级
+4. 店员看向门口，雨幕里出现一个撑伞人影。
+5. 电话里的自己急促地说："别让他碰到柜台下的纸箱。"
+6. 人影推门进来，径直走向柜台。
+7. 店员下意识把纸箱往脚边踢了踢。
+
+## 第三幕（45–60s）反转
+8. 人影摘下兜帽——是一周后的店员自己，手里拿着同一部座机听筒。
+9. 结尾字幕："每一次接通，都是另一次逃亡。"
+
+## 分镜提示（供 05_shots 使用）
+- 景别以中近景为主，竖屏构图，人物居中偏下。
+- 色调：冷青 + 便利店暖黄局部对比；雨夜高反差。
+- 声音：环境雨声、电话铃声、心跳低频逐渐加快。
+"""
+
+DEMO_SHOT_PROMPT = """# 镜头 01 提示词（示例）
+
+竖屏 9:16，深夜便利店收银台，25 岁店员趴在柜台小憩，头顶白光与货架暖黄形成冷暖对比；窗外雨幕、玻璃反光、远处路灯；中近景，浅景深，35mm 质感；冷青主色，便利店招牌红光点缀；电影感，高细节，写实摄影，无文字水印。
+
+## 负面
+卡通、3D 渲染、过曝、低清、僵硬表情、多余手指、文字水印
+"""
+
+
+def _seed_demo_assets(project: Path) -> list[str]:
+    """M39：quickstart --demo 写入演示剧本与第一条镜头提示词（已存在则不覆盖）。"""
+    story_dir = project / "01_story"
+    shots_dir = project / "05_shots"
+    story_dir.mkdir(parents=True, exist_ok=True)
+    shots_dir.mkdir(parents=True, exist_ok=True)
+    created: list[str] = []
+    story = story_dir / "演示剧本-午夜来电.md"
+    if not story.is_file():
+        story.write_text(DEMO_STORY, encoding="utf-8")
+        created.append(str(story.relative_to(project)).replace("\\", "/"))
+    prompt = shots_dir / "shot-01-prompt.md"
+    if not prompt.is_file():
+        prompt.write_text(DEMO_SHOT_PROMPT, encoding="utf-8")
+        created.append(str(prompt.relative_to(project)).replace("\\", "/"))
+    return created
+
+
 def cmd_quickstart(args: argparse.Namespace) -> int:
     """M38：面向实操的一键启动——建项目、建默认流程图、打印下一步命令。"""
     name = args.name.strip()
@@ -556,6 +610,9 @@ def cmd_quickstart(args: argparse.Namespace) -> int:
         except FlowError as exc:
             _print(f"创建流程图失败: {exc}")
             return EXIT_FAIL
+    demo_files: list[str] = []
+    if getattr(args, "demo", False):
+        demo_files = _seed_demo_assets(project)
     commands = _quickstart_next_commands(project, graph_id or None)
     payload = {
         "ok": True,
@@ -568,6 +625,7 @@ def cmd_quickstart(args: argparse.Namespace) -> int:
         "graph_id": graph_id,
         "graphs_count": len(graphs),
         "next_commands": commands,
+        "demo_files": demo_files,
         "guide": "docs/practical-guide.md",
     }
     if args.json:
@@ -579,6 +637,8 @@ def cmd_quickstart(args: argparse.Namespace) -> int:
         _print(f"流程图: {graph_id}（已就绪，可在 Web 面板拖拽编辑）")
     else:
         _print("流程图: 已按 --skip-graph 跳过")
+    if demo_files:
+        _print("已写入演示素材: " + "、".join(demo_files))
     _print("")
     _print("接下来按顺序执行（建议先用 --dry-run 预演，再逐步接真实平台）：")
     for index, command in enumerate(commands, 1):
@@ -770,6 +830,57 @@ def _practical_checks(project: Path) -> list[dict[str, Any]]:
     return checks
 
 
+def _practical_repairs(project: Path, *, fix_source: str | None = None) -> list[dict[str, Any]]:
+    """M39：practical-check --fix 的安全自动修复（只做无风险补齐，不覆盖已有内容）。"""
+    fixes: list[dict[str, Any]] = []
+    try:
+        load_state(project)
+    except ProjectError as exc:
+        fixes.append({"id": "project", "ok": False, "detail": f"项目状态不可用，无法自动修复: {exc}"})
+        return fixes
+    try:
+        graphs = list_graphs(project)
+        if graphs:
+            fixes.append({"id": "flow", "ok": True, "detail": "已有流程图，无需修复"})
+        else:
+            data = instantiate_template("tpl-full-flow", project.name, name="从零到成片")
+            write_graph_data(project, data)
+            fixes.append(
+                {"id": "flow", "ok": True, "detail": f"已创建默认流程图 {data['graph_id']}（tpl-full-flow）"}
+            )
+    except (FlowError, Exception) as exc:  # noqa: BLE001
+        fixes.append({"id": "flow", "ok": False, "detail": f"创建默认流程图失败: {exc}"})
+    try:
+        index_dir = default_index_dir()
+        try:
+            ready = index_ready(index_dir)
+        except KnowledgeIndexError:
+            ready = False
+        if ready:
+            fixes.append({"id": "index", "ok": True, "detail": "本地索引已就绪，无需修复"})
+        elif fix_source:
+            build_index(Path(fix_source), index_dir)
+            fixes.append({"id": "index", "ok": True, "detail": f"已从 {fix_source} 构建索引到 {index_dir}"})
+        else:
+            fixes.append(
+                {
+                    "id": "index",
+                    "ok": False,
+                    "detail": "未指定 --source（或知识库未发现），跳过索引构建",
+                }
+            )
+    except (KnowledgeIndexError, Exception) as exc:  # noqa: BLE001
+        fixes.append({"id": "index", "ok": False, "detail": f"构建索引失败: {exc}"})
+    fixes.append(
+        {
+            "id": "knowledge",
+            "ok": True,
+            "detail": "知识库/风格库/生成平台 key 属于环境配置项，--fix 不会自动修改，请按提示手动处理",
+        }
+    )
+    return fixes
+
+
 def cmd_practical_check(args: argparse.Namespace) -> int:
     """M38：实操自检——项目/流程图/知识库/索引/风格库/生成平台是否可用于真实创作。"""
     try:
@@ -777,6 +888,9 @@ def cmd_practical_check(args: argparse.Namespace) -> int:
     except FlowError as exc:
         _print(f"错误: {exc}")
         return EXIT_FAIL
+    fixes: list[dict[str, Any]] | None = None
+    if getattr(args, "fix", False):
+        fixes = _practical_repairs(project, fix_source=getattr(args, "source", None))
     checks = _practical_checks(project)
     ok = not any(item["status"] == "fail" for item in checks)
     summary = {
@@ -792,10 +906,17 @@ def cmd_practical_check(args: argparse.Namespace) -> int:
         "checks": checks,
         "next_commands": commands,
     }
+    if fixes is not None:
+        payload["fixes"] = fixes
     if args.json:
         _emit(payload, True)
     else:
         _print(f"实操自检: {project}")
+        if fixes is not None:
+            _print("自动修复:")
+            for fix in fixes:
+                _print(("  [已修复] " if fix["ok"] else "  [跳过] ") + fix["detail"])
+            _print("")
         for item in checks:
             mark = {"ok": "[OK]", "warn": "[WARN]", "fail": "[FAIL]"}[item["status"]]
             _print(f"{mark} {item['label']}: {item['detail']}")
@@ -3295,6 +3416,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--template", default="tpl-full-flow", help="默认流程图模板（默认 tpl-full-flow）"
     )
     quickstart.add_argument("--skip-graph", action="store_true", help="只建项目，不创建默认流程图")
+    quickstart.add_argument("--demo", action="store_true", help="M39：写入演示剧本与首条镜头提示词")
     quickstart.add_argument("--force", action="store_true", help="目标存在时覆盖")
     quickstart.add_argument("--json", action="store_true", help="以 JSON 输出")
     quickstart.set_defaults(func=cmd_quickstart)
@@ -3304,6 +3426,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="M38：实操自检（项目/流程图/知识库/索引/风格库/生成平台/Web 启动）",
     )
     practical.add_argument("--project", required=True, help="项目目录或项目名")
+    practical.add_argument("--fix", action="store_true", help="M39：自动补齐缺失流程图（可选构建本地索引）")
+    practical.add_argument("--source", help="M39：--fix 时用于构建本地索引的知识库目录（可选）")
     practical.add_argument("--json", action="store_true", help="以 JSON 输出")
     practical.set_defaults(func=cmd_practical_check)
 

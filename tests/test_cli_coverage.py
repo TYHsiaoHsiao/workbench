@@ -365,3 +365,80 @@ class M38PracticalTest(unittest.TestCase):
         self.assertTrue(data["ok"])
         flow_check = next(item for item in data["checks"] if item["id"] == "flow")
         self.assertEqual("warn", flow_check["status"])
+
+class M39PracticalFixTest(unittest.TestCase):
+    """M39：quickstart --demo 演示素材与 practical-check --fix 自动修复。"""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_quickstart_demo_creates_assets(self) -> None:
+        data = _json(
+            run_cli(["quickstart", "演示项目", "--project-root", str(self.root), "--demo", "--json"])
+        )
+        self.assertTrue(data["ok"])
+        project = Path(data["project"])
+        story = project / "01_story" / "演示剧本-午夜来电.md"
+        prompt = project / "05_shots" / "shot-01-prompt.md"
+        self.assertTrue(story.is_file())
+        self.assertTrue(prompt.is_file())
+        self.assertIn("01_story/演示剧本-午夜来电.md", data["demo_files"])
+        self.assertIn("05_shots/shot-01-prompt.md", data["demo_files"])
+        self.assertIn("午夜来电", story.read_text(encoding="utf-8"))
+        self.assertIn("竖屏", prompt.read_text(encoding="utf-8"))
+
+    def test_quickstart_demo_is_idempotent(self) -> None:
+        first = _json(
+            run_cli(["quickstart", "演示复用", "--project-root", str(self.root), "--demo", "--json"])
+        )
+        project = Path(first["project"])
+        story = project / "01_story" / "演示剧本-午夜来电.md"
+        original = story.read_text(encoding="utf-8")
+        second = _json(
+            run_cli(["quickstart", "演示复用", "--project-root", str(self.root), "--demo", "--json"])
+        )
+        self.assertEqual([], second["demo_files"])
+        self.assertEqual(original, story.read_text(encoding="utf-8"))
+
+    def test_practical_check_fix_creates_default_flow(self) -> None:
+        _json(
+            run_cli(["quickstart", "待修复", "--project-root", str(self.root),
+                     "--skip-graph", "--json"])
+        )
+        project = self.root / "待修复"
+        data = _json_any(
+            run_cli(["practical-check", "--project", str(project), "--fix", "--json"])
+        )
+        fixes = {item["id"]: item for item in data["fixes"]}
+        self.assertTrue(fixes["flow"]["ok"])
+        self.assertIn("创建默认流程图", fixes["flow"]["detail"])
+        flow_check = next(item for item in data["checks"] if item["id"] == "flow")
+        self.assertEqual("ok", flow_check["status"])
+        self.assertTrue((project / "00_project" / "workflows" / "flow-main.json").is_file())
+
+    def test_practical_check_fix_keeps_existing_graph(self) -> None:
+        _json(run_cli(["quickstart", "已有图", "--project-root", str(self.root), "--json"]))
+        project = self.root / "已有图"
+        data = _json_any(
+            run_cli(["practical-check", "--project", str(project), "--fix", "--json"])
+        )
+        fixes = {item["id"]: item for item in data["fixes"]}
+        self.assertEqual("已有流程图，无需修复", fixes["flow"]["detail"])
+
+    def test_practical_check_fix_reports_index_skipped(self) -> None:
+        _json(run_cli(["quickstart", "索引跳过", "--project-root", str(self.root), "--json"]))
+        project = self.root / "索引跳过"
+        data = _json_any(
+            run_cli(["practical-check", "--project", str(project), "--fix", "--json"])
+        )
+        fixes = {item["id"]: item for item in data["fixes"]}
+        # 本仓库可能已构建索引，也可能未构建；无论哪种都要有 index 修复项
+        self.assertIn("index", fixes)
+
+    def test_practical_check_fix_missing_project(self) -> None:
+        code, _ = run_cli(["practical-check", "--project", str(self.root / "不存在"), "--fix"])
+        self.assertEqual(1, code)
