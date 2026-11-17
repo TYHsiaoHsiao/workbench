@@ -1,6 +1,6 @@
 # 可视化节点工作台（M1–M16 + 2.0.1 实时预览 + M20 快照回滚 + M28 队列运维）
 
-> 版本：2.28.0 · 状态：M1–M16 + 2.0.1 实时预览 + M20 Web 快照回滚面板 + M22 索引证据卡接入 + M28 队列运维增强 + M31/M32/M33/M34 队列告警、运维报表与批次报表 Web 化 + M35 批次报表 HTML 化 + M36 批次报表推送与告警静默窗口状态 + M38 实操上线引导 + M40 Web 操作台 + M41 操作台扩展与历史/批量已完成 · 适用范围：本地单用户
+> 版本：2.29.0 · 状态：M1–M16 + 2.0.1 实时预览 + M20 Web 快照回滚面板 + M22 索引证据卡接入 + M28 队列运维增强 + M31/M32/M33/M34 队列告警、运维报表与批次报表 Web 化 + M35 批次报表 HTML 化 + M36 批次报表推送与告警静默窗口状态 + M38 实操上线引导 + M40 Web 操作台 + M41 操作台扩展与历史/批量已完成 · 适用范围：本地单用户 + M42 全 Web 化（44 操作、搜索过滤、历史落盘）
 
 ## 1. 定位
 
@@ -377,6 +377,8 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 29. 批次趋势报表为只读汇总（最近 N 批），不含图表渲染、跨项目聚合或定时生成。
 
 ## 17. 验证
+
+- M42（2.29.0）新增 2 项测试（44 操作注册表覆盖、历史 JSONL 落盘与重载），全量 `Ran 548 tests ... OK`；Web 冒烟：`/api/ops` 返回 44 项、搜索过滤、`/api/ops/history` 可读。
 - M33（2.20.0）新增 12 项测试（通知格式/重试 7、报表 4、CLI 集成 1），全量 `Ran 509 tests ... OK`；CLI 冒烟：`flow batch-report --format md --out`、`flow queue alerts --webhook-format feishu --webhook-retries 1`。
 - M34（2.21.0）新增 3 项测试（告警去重 2：静默窗口抑制/不同失败图重发；Web API 1：`/api/batches/report` md/csv），全量 `Ran 512 tests ... OK`；Web 冒烟：批次面板「报表 MD/CSV/预览」；`flow queue alerts --dedupe-minutes` 二次推送返回 `suppressed=true`。
 - M35（2.22.0）新增 1 项测试（HTML 报表：doctype/style/汇总卡片/趋势条/明细表/转义/无外链），全量 `Ran 513 tests ... OK`；CLI 冒烟：`flow batch-report --format html --out report.html`；Web 冒烟：批次面板「报表 HTML」下载与 `GET /api/batches/report?format=html`。
@@ -405,7 +407,12 @@ core_router（state/门禁/advance） · knowledge_service · style_service · c
 - M20（2.8.0）新增 5 项测试（覆盖率 2、可复现构建 2、Web 回滚 1），全量 `Ran 387 tests ... OK`；CI 九步全 PASS（覆盖率 76.37%、repro PASS、品牌守卫 0 命中）；Web 冒烟：快照创建 → 列表 → dry-run → 回滚。
 - M22（2.10.0）新增 12 项测试（索引证据卡服务 8、CLI 2、flow 节点 2），全量 `Ran 413 tests ... OK`；CLI 冒烟：`knowledge search --index` 生成同契约知识卡；flow `knowledge_search` 节点 `index` 参数运行后写 `00_project/knowledge-cards/<stage>-candidates.json`；索引缺失/无命中分别报可读错误与 `no_evidence`。
 
-## 18. 后续（M42 候选）
+## 18. 后续（M43 候选）
+
+- 操作台参数联动（选择项目后自动填充图/快照/风格）与操作预设/定时任务。
+- 分支覆盖率提升到 55%（重点 webui/ops.py、queue、batch 分支）。
+- 创作主线试点 D：用操作台完成一条 60 秒短片端到端。
+- 远端 CI 矩阵稳定性（macOS 托管 runner 可用时恢复）。
 
 - 操作台增强：参数联动（选择项目后自动填充图/快照）、操作预设与定时任务。
 - 分支覆盖率提升到 55%（当前 51.29%，重点 `flow/registry.py`、`cli/main.py`、操作台分支）。

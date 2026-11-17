@@ -19,7 +19,7 @@ class OpsRegistryTest(unittest.TestCase):
 
     def test_list_ops_hides_handlers_and_has_expected_ops(self) -> None:
         public = ops.list_ops()
-        self.assertGreaterEqual(len(public), 24)
+        self.assertGreaterEqual(len(public), 40)
         for item in public:
             self.assertNotIn("handler", item)
         by_id = {item["id"]: item for item in public}
@@ -126,3 +126,45 @@ class OpsRegistryTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class M42OpsTest(unittest.TestCase):
+    def test_new_ops_registered(self) -> None:
+        ids = {op["id"] for op in ops.list_ops()}
+        for expected in [
+            "init_project", "quickstart", "route", "gate_list", "gate_set", "next_stage",
+            "flow_new", "flow_list", "flow_run", "flow_runs",
+            "style_list", "style_show", "style_apply", "style_inject",
+            "artifact_register", "reference_list", "project_export",
+            "generate_jobs", "generate_retry", "generate_adopt",
+        ]:
+            self.assertIn(expected, ids)
+        self.assertGreaterEqual(len(ids), 40)
+        by_id = {op["id"]: op for op in ops.list_ops()}
+        self.assertTrue(by_id["next_stage"].get("confirm"))
+        self.assertTrue(by_id["gate_set"].get("confirm"))
+
+    def test_history_persisted_to_file(self) -> None:
+        import os
+        import tempfile
+        from pathlib import Path as _Path
+
+        from flow import FlowError
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _Path(tmp) / "ops-history.jsonl"
+            old = os.environ.get("WORKBENCH_OPS_HISTORY")
+            os.environ["WORKBENCH_OPS_HISTORY"] = str(path)
+            try:
+                with self.assertRaises(FlowError):
+                    ops.run_op("no_such_op_m42", {})
+                self.assertTrue(path.is_file())
+                ops._HISTORY.clear()
+                ops._load_history()
+                self.assertTrue(
+                    any(entry.get("op_id") == "no_such_op_m42" for entry in ops._HISTORY)
+                )
+            finally:
+                if old is None:
+                    os.environ.pop("WORKBENCH_OPS_HISTORY", None)
+                else:
+                    os.environ["WORKBENCH_OPS_HISTORY"] = old

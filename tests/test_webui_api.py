@@ -1041,7 +1041,7 @@ class WebUIApiTest(unittest.TestCase):
         self.assertEqual(200, status, msg=data)
         self.assertTrue(data["ok"])
         ops = data["ops"]
-        self.assertGreaterEqual(len(ops), 15)
+        self.assertGreaterEqual(len(ops), 40)
         by_id = {op["id"]: op for op in ops}
         self.assertIn("quickstart_demo", by_id)
         self.assertIn("project_list", by_id)

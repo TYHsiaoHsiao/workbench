@@ -558,3 +558,14 @@ button.link:hover { text-decoration: underline; }
 .ops-history-item { font-size: 11px; line-height: 1.5; padding: 3px 4px; border-radius: 4px; color: #a8b3c1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ops-history-item:hover { background: rgba(255,255,255,0.05); }
 .ops-history-item.failed { color: #f87171; }
+.ops-filter {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 12px;
+}

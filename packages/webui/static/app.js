@@ -2617,13 +2617,14 @@ function renderProjects() {
 
 // ---- 操作台（M40：所有操作可视化执行） ----
 
-const opsState = { ops: [], currentId: "", running: false, selected: new Set(), history: [] };
+const opsState = { ops: [], currentId: "", running: false, selected: new Set(), history: [], filter: "" };
 
 async function openOps() {
   $("#practical-panel").classList.remove("hidden");
   if (opsState.ops.length === 0) {
     await loadOps();
   }
+  bindOpsFilter();
   loadOpsHistory().catch(() => {});
 }
 
@@ -2652,6 +2653,16 @@ function renderOpsHistory() {
   }
 }
 
+function bindOpsFilter() {
+  const input = $("#ops-filter");
+  if (!input || input.dataset.bound === "1") return;
+  input.dataset.bound = "1";
+  input.addEventListener("input", (event) => {
+    opsState.filter = event.target.value || "";
+    renderOpsList();
+  });
+}
+
 async function loadOps() {
   const data = await api("/api/ops");
   opsState.ops = data.ops || [];
@@ -2663,9 +2674,15 @@ async function loadOps() {
 
 function renderOpsList() {
   const box = $("#ops-list");
+  const query = String(opsState.filter || "").trim().toLowerCase();
+  const matches = (op) =>
+    !query ||
+    [op.id, op.label, op.category, op.description].some((value) =>
+      String(value || "").toLowerCase().includes(query)
+    );
   box.innerHTML = "";
   const groups = new Map();
-  for (const op of opsState.ops) {
+  for (const op of opsState.ops.filter(matches)) {
     const key = op.category || "其它";
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(op);

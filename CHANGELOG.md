@@ -1,3 +1,11 @@
+## [2.29.0] - 2026-11-17 — 全 Web 化（M42：操作台 44 操作、历史落盘与搜索过滤）
+
+- 操作台：白名单操作从 24 个扩展到 **44 个**，新增 20 个覆盖创作主线的操作——`init_project`、`quickstart`（不写演示素材）、`route`、`gate_list`、`gate_set`、`next_stage`、`flow_new`、`flow_list`、`flow_run`、`flow_runs`、`style_list`、`style_show`、`style_apply`、`style_inject`、`artifact_register`、`reference_list`、`project_export`、`generate_jobs`、`generate_retry`、`generate_adopt`；状态变更操作（推进阶段/写门禁）带 `confirm` 文案。
+- 操作历史落盘：JSONL 追加写入（环境变量 `WORKBENCH_OPS_HISTORY` 可覆盖路径，默认 `~/.workbench/ops-history.jsonl`），重启不丢；模块导入时加载最近 50 条。
+- 操作搜索过滤：操作台侧栏新增搜索框，按名称/ID/分类/描述过滤。
+- 测试：新增 2 项（注册表覆盖 40+ 操作、历史落盘与重载），全量 548 项通过；覆盖率行 80.95% / 分支 50.72%。
+- 兼容性：仅新增操作与前端过滤，CLI/契约不变，向后兼容（MINOR）。
+
 ## [2.28.0] - 2026-11-17 — Web 操作台扩展（M41：更多操作、操作历史与批量执行）
 
 - 操作台新增 7 个白名单操作（共 24 个）：项目摘要 `project_summary`、生成任务刷新 `generate_refresh`、批次报表推送 `batch_report_push`、队列告警 `queue_alerts` / `queue_alerts_push`、批次历史 `flow_batches`、环境自检 `doctor`；参数表单自动渲染，危险操作仍二次确认。

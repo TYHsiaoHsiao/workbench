@@ -236,7 +236,10 @@
 处理：工作流矩阵已改为 ubuntu/windows × Python 3.11/3.12（4 作业），不再默认包含 macOS；如需恢复 macOS 验证，
 观察 `gh run list --json` 中 macOS runner 可用性后，把 `macos-latest` 加回 `.github/workflows/ci.yml` 的 `os` 列表并观察 1–2 个 run。
 
-## 21. Web 操作台（M40/M41）
+## 21. Web 操作台（M40/M41/M42）
+
+- **操作台搜索无结果**：搜索按名称/ID/分类/描述子串匹配；清空输入即可恢复全部 44 个操作。
+- **操作历史丢失**：默认写入 `~/.workbench/ops-history.jsonl`；若设置 `WORKBENCH_OPS_HISTORY`，请确认路径可写；仅保留最近 50 条。
 
 - **「实操指引」打开后侧栏为空或加载失败**：操作台依赖 `GET /api/ops`；先确认服务已重启到 2.27.0（旧进程没有该端点），再刷新页面。
 - **执行操作返回 400**：参数校验失败（缺必填参数、整数非法、未知 op）；看输出里的错误文本，按表单必填项填写；`rollback_apply` 默认只做 dry-run 预演。

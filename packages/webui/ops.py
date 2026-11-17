@@ -11,9 +11,11 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import os
 import time
 from contextlib import redirect_stdout
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Callable
 
 from flow import FlowError
@@ -83,6 +85,44 @@ def _invoke(handler: Callable[[argparse.Namespace], int], **kwargs: Any) -> dict
 
 _HISTORY_MAX = 50
 _HISTORY: list[dict[str, Any]] = []
+_HISTORY_ENV = "WORKBENCH_OPS_HISTORY"
+
+
+def history_path() -> Path:
+    override = os.environ.get(_HISTORY_ENV)
+    if override:
+        return Path(override).expanduser()
+    return Path.home() / ".workbench" / "ops-history.jsonl"
+
+
+def _persist_history(entry: dict[str, Any]) -> None:
+    try:
+        path = history_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+
+
+def _load_history() -> None:
+    path = history_path()
+    if not path.is_file():
+        return
+    try:
+        lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    except OSError:
+        return
+    for line in lines[-_HISTORY_MAX:]:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(entry, dict) and entry.get("op_id"):
+            _HISTORY.append(entry)
 
 
 def _now() -> str:
@@ -111,6 +151,7 @@ def _record_history(
         entry["error"] = error
     _HISTORY.append(entry)
     del _HISTORY[: max(0, len(_HISTORY) - _HISTORY_MAX)]
+    _persist_history(entry)
     return entry
 
 
@@ -373,6 +414,212 @@ def run_doctor(params: dict[str, Any]) -> dict[str, Any]:
 
 
 # ---- 注册表 ----
+
+
+def run_init_project(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(
+        _cli().cmd_init,
+        name=params["name"],
+        project_root=params.get("project_root") or None,
+        entry=params.get("entry") or "A",
+        mode=params.get("mode") or "full",
+        force=bool(params.get("force")),
+        json=True,
+    )
+
+
+def run_quickstart_plain(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(
+        _cli().cmd_quickstart,
+        name=params["name"],
+        project_root=params.get("project_root") or None,
+        entry=params.get("entry") or "A",
+        mode=params.get("mode") or "full",
+        template=params.get("template") or "tpl-full-flow",
+        skip_graph=bool(params.get("skip_graph")),
+        force=bool(params.get("force")),
+        demo=False,
+        json=True,
+    )
+
+
+def run_route(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(_cli().cmd_route, text=params["text"], json=True)
+
+
+def run_gate_list(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(
+        _cli().cmd_gate,
+        project=params["project"],
+        action="list",
+        gate_id=None,
+        note=None,
+        json=True,
+    )
+
+
+def run_gate_set(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(
+        _cli().cmd_gate,
+        project=params["project"],
+        action=params.get("action") or "pass",
+        gate_id=params["gate_id"],
+        note=params.get("note") or "",
+        json=True,
+    )
+
+
+def run_next_stage(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(_cli().cmd_next, project=params["project"], json=True)
+
+
+def run_flow_new(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(
+        _cli().cmd_flow_new,
+        project=params["project"],
+        name=params["name"],
+        graph=params.get("graph") or None,
+        template=params.get("template") or "tpl-full-flow",
+        force=False,
+        json=True,
+    )
+
+
+def run_flow_list(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(_cli().cmd_flow_list, project=params["project"], json=True)
+
+
+def run_style_list_op(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(
+        _cli().cmd_style_list,
+        category=params.get("category") or None,
+        quality=params.get("quality") or None,
+        json=True,
+    )
+
+
+def run_style_show(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(
+        _cli().cmd_style_show,
+        ref=params["ref"],
+        tool=params.get("tool") or None,
+        json=True,
+    )
+
+
+def run_style_apply(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(
+        _cli().cmd_style_apply,
+        project=params["project"],
+        ref=params["ref"],
+        tool=params.get("tool") or None,
+        json=True,
+    )
+
+
+def run_style_inject(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(
+        _cli().cmd_style_inject,
+        project=params["project"],
+        ref=params["ref"],
+        stage=params.get("stage") or "06",
+        tool=params.get("tool") or None,
+        prompt_file=params["prompt_file"],
+        json=True,
+    )
+
+
+def run_flow_run(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(
+        _cli().cmd_flow_run,
+        project=params["project"],
+        graph=params["graph"],
+        dry_run=bool(params.get("dry_run", True)),
+        yes=bool(params.get("yes", True)),
+        mode=params.get("mode") or "full",
+        node=params.get("node") or None,
+        retries=int(params.get("retries") or 0),
+        json=True,
+    )
+
+
+def run_flow_runs(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(
+        _cli().cmd_flow_runs,
+        project=params["project"],
+        limit=int(params.get("limit") or 20),
+        json=True,
+    )
+
+
+def run_artifact_register(params: dict[str, Any]) -> dict[str, Any]:
+    raw = str(params.get("paths") or "").replace("，", ",")
+    paths = [item.strip() for item in raw.split(",") if item.strip()]
+    return _invoke(
+        _cli().cmd_artifact_register,
+        project=params["project"],
+        stage=params["stage"],
+        kind=params.get("kind") or "generation",
+        path=paths,
+        note=params.get("note") or "",
+        next_action=params.get("next_action") or None,
+        json=True,
+    )
+
+
+def run_generate_jobs(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(
+        _cli().cmd_generate_jobs,
+        project=params["project"],
+        limit=int(params.get("limit") or 20),
+        json=True,
+    )
+
+
+def run_generate_retry_op(params: dict[str, Any]) -> dict[str, Any]:
+    live = bool(params.get("live"))
+    return _invoke(
+        _cli().cmd_generate_retry,
+        project=params["project"],
+        job_id=params["job_id"],
+        live=live,
+        dry_run=bool(params.get("dry_run", True)),
+        json=True,
+    )
+
+
+def run_generate_adopt_op(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(
+        _cli().cmd_generate_adopt,
+        project=params["project"],
+        job_id=params.get("job_id") or None,
+        all=bool(params.get("all", True)),
+        stage=params.get("stage") or "05",
+        kind=params.get("kind") or "generation",
+        note=params.get("note") or "",
+        limit=int(params.get("limit") or 20),
+        json=True,
+    )
+
+
+def run_reference_list_op(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(
+        _cli().cmd_reference_list,
+        project=params["project"],
+        stage=params.get("stage") or None,
+        json=True,
+    )
+
+
+def run_project_export(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(
+        _cli().cmd_export,
+        project=params["project"],
+        out=params.get("out") or None,
+        force=bool(params.get("force")),
+        json=True,
+    )
+
 
 OPS: list[dict[str, Any]] = [
     {
@@ -648,7 +895,162 @@ OPS: list[dict[str, Any]] = [
         "description": "十项自检：Python/布局/契约/注册表/风格库/流程/生成/索引/品牌词表（M41）。",
         "params": [],
         "handler": run_doctor,
-    },
+    },    {"id": "init_project", "label": "创建项目（init）", "category": "开工",
+     "description": "按入口/模式创建项目骨架（state v2），可指定项目根目录。",
+     "params": [
+         _p("name", "项目名称", "text", required=True),
+         _p("project_root", "项目根目录（可选）", "text"),
+         _p("entry", "项目入口", "enum", default="A", choices=["A", "B", "C", "D"]),
+         _p("mode", "启动模式", "enum", default="full", choices=["full", "stage", "relay", "revise"]),
+     ],
+     "handler": run_init_project},
+    {"id": "quickstart", "label": "一键开工（不写演示素材）", "category": "开工",
+     "description": "创建项目 + 默认流程图，不写入演示剧本与示例提示词。",
+     "params": [
+         _p("name", "项目名称", "text", required=True),
+         _p("project_root", "项目根目录（可选）", "text"),
+         _p("entry", "项目入口", "enum", default="A", choices=["A", "B", "C", "D"]),
+         _p("mode", "启动模式", "enum", default="full", choices=["full", "stage", "relay", "revise"]),
+         _p("skip_graph", "不创建默认流程图", "bool", default=False),
+     ],
+     "handler": run_quickstart_plain},
+    {"id": "route", "label": "意图路由（route）", "category": "阶段",
+     "description": "把一句话需求路由到对应 Skill/阶段命令建议。",
+     "params": [_p("text", "需求描述", "text", required=True)],
+     "handler": run_route},
+    {"id": "gate_list", "label": "查看阶段门禁", "category": "阶段",
+     "description": "列出当前阶段门禁及通过状态。",
+     "params": [_p("project", "项目路径或名称", "text", required=True)],
+     "handler": run_gate_list},
+    {"id": "gate_set", "label": "通过/失败/豁免门禁", "category": "阶段",
+     "description": "写入一个门禁结果（会修改项目状态）。",
+     "params": [
+         _p("project", "项目路径或名称", "text", required=True),
+         _p("gate_id", "门禁 ID", "text", required=True),
+         _p("action", "动作", "enum", default="pass", choices=["pass", "fail", "waive"]),
+         _p("note", "备注", "text"),
+     ],
+     "confirm": "会写入门禁状态（state.json），确定继续？",
+     "handler": run_gate_set},
+    {"id": "next_stage", "label": "推进到下一阶段", "category": "阶段",
+     "description": "推进项目阶段并写状态文件。",
+     "params": [_p("project", "项目路径或名称", "text", required=True)],
+     "confirm": "会推进阶段并写 state.json，确定继续？",
+     "handler": run_next_stage},
+    {"id": "flow_new", "label": "新建流程图", "category": "流程",
+     "description": "按模板创建一张流程图。",
+     "params": [
+         _p("project", "项目路径或名称", "text", required=True),
+         _p("name", "流程图名称", "text", required=True),
+         _p("graph", "图 ID（可选）", "text"),
+         _p("template", "模板", "text", default="tpl-full-flow"),
+     ],
+     "handler": run_flow_new},
+    {"id": "flow_list", "label": "流程图列表", "category": "流程",
+     "description": "列出项目内的流程图。",
+     "params": [_p("project", "项目路径或名称", "text", required=True)],
+     "handler": run_flow_list},
+    {"id": "flow_run", "label": "运行流程图", "category": "流程",
+     "description": "运行流程图（默认 dry-run 预演）。",
+     "params": [
+         _p("project", "项目路径或名称", "text", required=True),
+         _p("graph", "图 ID", "text", required=True),
+         _p("dry_run", "预演（不写盘）", "bool", default=True),
+         _p("mode", "运行模式", "enum", default="full", choices=["full", "stage", "single"]),
+         _p("node", "目标节点（可空）", "text"),
+         _p("retries", "节点重试次数", "int", default=0),
+     ],
+     "handler": run_flow_run},
+    {"id": "flow_runs", "label": "运行记录", "category": "流程",
+     "description": "列出最近的流程图运行记录。",
+     "params": [
+         _p("project", "项目路径或名称", "text", required=True),
+         _p("limit", "条数", "int", default=20),
+     ],
+     "handler": run_flow_runs},
+    {"id": "style_list", "label": "风格库列表", "category": "风格",
+     "description": "列出导演风格卡（可按类别/质量过滤）。",
+     "params": [_p("category", "类别（可空）", "text"), _p("quality", "质量等级 A/B/C（可空）", "text")],
+     "handler": run_style_list_op},
+    {"id": "style_show", "label": "查看风格卡", "category": "风格",
+     "description": "查看某导演风格卡与工具适配提示词。",
+     "params": [
+         _p("ref", "风格编号/名称", "text", required=True),
+         _p("tool", "目标工具（可空）", "text"),
+     ],
+     "handler": run_style_show},
+    {"id": "style_apply", "label": "应用风格卡到项目", "category": "风格",
+     "description": "把风格卡应用到项目，生成风格画像。",
+     "params": [
+         _p("project", "项目路径或名称", "text", required=True),
+         _p("ref", "风格编号/名称", "text", required=True),
+         _p("tool", "目标工具（可空）", "text"),
+     ],
+     "handler": run_style_apply},
+    {"id": "style_inject", "label": "风格注入提示词", "category": "风格",
+     "description": "把风格卡注入一条提示词文件。",
+     "params": [
+         _p("project", "项目路径或名称", "text", required=True),
+         _p("ref", "风格编号/名称", "text", required=True),
+         _p("prompt_file", "提示词文件（项目内）", "text", required=True),
+         _p("stage", "阶段", "enum", default="06", choices=["06", "08"]),
+         _p("tool", "目标工具（可空）", "text"),
+     ],
+     "handler": run_style_inject},
+    {"id": "artifact_register", "label": "登记产物", "category": "项目",
+     "description": "把文件登记为阶段产物（写入 state.stage_artifacts）。",
+     "params": [
+         _p("project", "项目路径或名称", "text", required=True),
+         _p("stage", "阶段", "text", required=True),
+         _p("kind", "产物类型", "text", default="generation"),
+         _p("paths", "文件路径（逗号分隔，项目内）", "text", required=True),
+         _p("note", "备注", "text"),
+         _p("next_action", "下一步提示", "text"),
+     ],
+     "handler": run_artifact_register},
+    {"id": "reference_list", "label": "参考记忆列表", "category": "项目",
+     "description": "查看项目参考记忆（可按阶段过滤）。",
+     "params": [
+         _p("project", "项目路径或名称", "text", required=True),
+         _p("stage", "阶段（可空）", "text"),
+     ],
+     "handler": run_reference_list_op},
+    {"id": "project_export", "label": "导出项目", "category": "项目",
+     "description": "把项目导出为 zip 归档。",
+     "params": [
+         _p("project", "项目路径或名称", "text", required=True),
+         _p("out", "输出 zip 路径（可空）", "text"),
+         _p("force", "覆盖已存在文件", "bool", default=False),
+     ],
+     "handler": run_project_export},
+    {"id": "generate_jobs", "label": "生成任务列表", "category": "生成",
+     "description": "列出项目生成任务（dry-run/live 记录）。",
+     "params": [
+         _p("project", "项目路径或名称", "text", required=True),
+         _p("limit", "条数", "int", default=20),
+     ],
+     "handler": run_generate_jobs},
+    {"id": "generate_retry", "label": "重试生成任务", "category": "生成",
+     "description": "重试失败/取消的生成任务（默认 dry-run）。",
+     "params": [
+         _p("project", "项目路径或名称", "text", required=True),
+         _p("job_id", "任务 ID", "text", required=True),
+         _p("live", "真实提交", "bool", default=False),
+     ],
+     "handler": run_generate_retry_op},
+    {"id": "generate_adopt", "label": "回填生成结果", "category": "生成",
+     "description": "把成功的生成结果回填为项目产物（默认全部）。",
+     "params": [
+         _p("project", "项目路径或名称", "text", required=True),
+         _p("job_id", "任务 ID（all=false 时必填）", "text"),
+         _p("all", "回填全部已成功任务", "bool", default=True),
+         _p("stage", "回填阶段", "enum", default="05", choices=["01", "02", "03", "04", "05", "06", "07", "08"]),
+         _p("kind", "产物类型", "text", default="generation"),
+         _p("note", "备注", "text"),
+         _p("limit", "条数", "int", default=20),
+     ],
+     "handler": run_generate_adopt_op},
+
 ]
 
 OPS_BY_ID = {item["id"]: item for item in OPS}
@@ -782,3 +1184,6 @@ def run_ops_batch(items: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         "count": len(results),
         "results": results,
     }
+
+
+_load_history()
