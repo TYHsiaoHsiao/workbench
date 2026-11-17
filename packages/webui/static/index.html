@@ -16,6 +16,7 @@
       <button id="btn-projects" title="项目管理面板">项目…</button>
       <button id="btn-generate" title="生成平台面板（provider/任务/状态刷新）">生成…</button>
       <button id="btn-practical" title="实操指引（M38：从建项目到第一条提示词）">实操指引</button>
+      <button id="btn-storyboard" title="故事成片：故事 → 分镜 / 提示词 / 字幕 / 配音 / 多风格对比">故事成片</button>
       <label>流程图
         <select id="graph-select"></select>
       </label>
@@ -151,6 +152,39 @@
             <span id="ops-status" class="hint"></span>
           </div>
           <pre id="ops-output" class="ops-output">（输出将显示在这里）</pre>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="storyboard-panel" class="overlay hidden">
+    <div class="panel-card storyboard-card">
+      <header><h2>故事成片（故事 → 分镜 / 提示词 / 字幕 / 配音 / 多风格对比）</h2><button id="btn-close-storyboard" class="link">关闭</button></header>
+      <div class="storyboard-body">
+        <section class="sb-form">
+          <label class="sb-field">故事（可直接粘贴，一句话也能生成）
+            <textarea id="sb-story" rows="7" placeholder="深夜，便利店的灯管嗡嗡作响，雨点敲着玻璃。店员趴在收银台打盹，座机突然响起……"></textarea>
+          </label>
+          <div class="sb-row">
+            <label class="sb-field">标题<input id="sb-title" placeholder="留空自动取"></label>
+            <label class="sb-field">时长（秒）<input id="sb-duration" type="number" value="60" min="5" max="600"></label>
+            <label class="sb-field">画幅<select id="sb-aspect"></select></label>
+            <label class="sb-field">风格<select id="sb-style"></select></label>
+          </div>
+          <div class="sb-row">
+            <label class="sb-field sb-compare">对比风格（可选，逗号分隔，如 悬疑,写实,都市）<input id="sb-compare" placeholder="悬疑,写实,都市"></label>
+            <button id="btn-sb-demo" class="link">填入演示故事</button>
+            <button id="btn-sb-generate" class="primary">生成分镜与提示词</button>
+            <span id="sb-status" class="hint"></span>
+          </div>
+        </section>
+        <section class="sb-result">
+          <div id="sb-files" class="sb-files"><p class="hint">生成后在这里打开预览页 / 对比页 / 字幕 / 提示词。</p></div>
+          <div id="sb-shots" class="sb-shots"></div>
+        </section>
+        <section class="sb-history">
+          <h3>最近生成 <button id="btn-sb-history" class="link">刷新</button></h3>
+          <div id="sb-history"><p class="hint">暂无记录</p></div>
         </section>
       </div>
     </div>

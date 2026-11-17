@@ -2920,6 +2920,135 @@ function refreshAfterOps(opId) {
   if (typeof loadRunHistory === "function") loadRunHistory().catch(() => {});
 }
 
+// ---------------- 故事成片（storyboard：故事→分镜/提示词/字幕/配音/多风格对比） ----------------
+const storyboardState = { options: null, currentRun: null, historyRuns: [] };
+
+function sbFileUrl(runId, name) {
+  let url = "/api/storyboard/file?run=" + encodeURIComponent(runId) + "&name=" + encodeURIComponent(name);
+  if (state.token) url += "&token=" + encodeURIComponent(state.token);
+  return url;
+}
+
+function sbFileLink(run, name, label) {
+  const href = sbFileUrl(run.run_id, name);
+  return `<a class="sb-file" href="${href}" target="_blank" rel="noopener">${escapeHtml(label || name)}</a>`;
+}
+
+async function openStoryboard() {
+  $("#storyboard-panel").classList.remove("hidden");
+  if (!storyboardState.options) {
+    try {
+      const data = await api("/api/storyboard/options");
+      storyboardState.options = data;
+      $("#sb-style").innerHTML = data.styles.map((s) => `<option>${escapeHtml(s)}</option>`).join("");
+      $("#sb-aspect").innerHTML = data.aspects.map((a) => `<option>${escapeHtml(a)}</option>`).join("");
+      $("#sb-duration").value = data.defaults.duration;
+      $("#sb-style").value = data.defaults.style;
+      $("#sb-aspect").value = data.defaults.aspect;
+      $("#sb-story").value = $("#sb-story").value || data.demo_story;
+    } catch (err) {
+      $("#sb-status").textContent = "加载选项失败：" + err.message;
+    }
+  }
+  await loadStoryboardHistory();
+}
+
+function fillDemoStory() {
+  if (storyboardState.options && storyboardState.options.demo_story) {
+    $("#sb-story").value = storyboardState.options.demo_story;
+    $("#sb-status").textContent = "已填入演示故事";
+  }
+}
+
+function renderStoryboardRun(run) {
+  if (!run || !run.run_id) return;
+  const links = [];
+  links.push(sbFileLink(run, "分镜与提示词.html", "打开预览页（复制提示词）"));
+  if (run.compare && run.compare.length) links.push(sbFileLink(run, "多风格对比.html", "打开多风格对比"));
+  links.push(sbFileLink(run, "提示词包.md", "提示词包.md"));
+  links.push(sbFileLink(run, "分镜表.md", "分镜表.md"));
+  links.push(sbFileLink(run, "字幕.srt", "字幕.srt"));
+  links.push(sbFileLink(run, "配音清单.md", "配音清单.md"));
+  $("#sb-files").innerHTML = `<div class="sb-meta">${escapeHtml(run.title)} ｜ ${escapeHtml(run.style)} ｜ ${escapeHtml(run.aspect)} ｜ ${run.duration}s ｜ ${run.shots} 镜 ｜ 角色：${escapeHtml(run.character || "主角")}</div>` + links.join("");
+  const rows = (run.shot_preview || []).map(
+    (s) => `<tr><td>${String(s.no).padStart(2, "0")}</td><td>${escapeHtml(s.phase)}</td><td>${s.duration}s</td><td>${escapeHtml(s.size)}</td><td>${escapeHtml(s.move)}</td><td>${escapeHtml(s.scene)}${s.dialogue ? "（台词：" + escapeHtml(s.dialogue) + "）" : ""}</td></tr>`
+  );
+  $("#sb-shots").innerHTML = rows.length
+    ? `<table class="sb-table"><thead><tr><th>镜号</th><th>阶段</th><th>时长</th><th>景别</th><th>运镜</th><th>画面 / 台词</th></tr></thead><tbody>${rows.join("")}</tbody></table>`
+    : "";
+}
+
+async function loadStoryboardHistory() {
+  try {
+    const data = await api("/api/storyboard/list");
+    const runs = data.runs || [];
+    storyboardState.historyRuns = runs;
+    if (!runs.length) {
+      $("#sb-history").innerHTML = '<p class="hint">暂无记录</p>';
+      return;
+    }
+    if (!storyboardState.currentRun && runs.length) {
+      storyboardState.currentRun = runs[0];
+      renderStoryboardRun(runs[0]);
+    }
+    $("#sb-history").innerHTML = runs
+      .map(
+        (r) => `<div class="sb-history-row"><span>${escapeHtml(r.title || r.run_id)} · ${r.shots} 镜 · ${escapeHtml(r.style || "")}</span><button class="link" data-sb-load="${escapeHtml(r.run_id)}">查看</button></div>`
+      )
+      .join("");
+    $("#sb-history").querySelectorAll("[data-sb-load]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const run = runs.find((r) => r.run_id === btn.dataset.sbLoad);
+        if (run) renderStoryboardRun(Object.assign({ character: "" }, run));
+      });
+    });
+  } catch (err) {
+    $("#sb-history").innerHTML = `<p class="hint">加载失败：${escapeHtml(err.message)}</p>`;
+  }
+}
+
+async function generateStoryboard() {
+  const story = $("#sb-story").value.trim();
+  if (!story) {
+    $("#sb-status").textContent = "请先输入故事";
+    return;
+  }
+  const btn = $("#btn-sb-generate");
+  btn.disabled = true;
+  $("#sb-status").textContent = "生成中…";
+  try {
+    const payload = {
+      story,
+      title: $("#sb-title").value.trim(),
+      duration: parseInt($("#sb-duration").value || "60", 10),
+      aspect: $("#sb-aspect").value,
+      style: $("#sb-style").value,
+      compare: $("#sb-compare").value.trim(),
+    };
+    const data = await api("/api/storyboard/generate", { method: "POST", body: JSON.stringify(payload) });
+    storyboardState.currentRun = data.run;
+    renderStoryboardRun(data.run);
+    $("#sb-status").textContent = "已生成 " + data.run.shots + " 镜";
+    logLine("[故事成片] 已生成：" + data.run.run_id + "（" + data.run.shots + " 镜）");
+    await loadStoryboardHistory();
+  } catch (err) {
+    $("#sb-status").textContent = "生成失败：" + err.message;
+    logLine("[故事成片] 失败：" + err.message, "err");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function bindStoryboard() {
+  $("#btn-storyboard").addEventListener("click", () => {
+    openStoryboard().catch((err) => logLine("打开故事成片失败：" + err.message, "err"));
+  });
+  $("#btn-close-storyboard").addEventListener("click", () => $("#storyboard-panel").classList.add("hidden"));
+  $("#btn-sb-demo").addEventListener("click", () => fillDemoStory());
+  $("#btn-sb-generate").addEventListener("click", () => generateStoryboard());
+  $("#btn-sb-history").addEventListener("click", () => loadStoryboardHistory().catch(() => {}));
+}
+
 function bindUi() {
   $("#project-select").addEventListener("change", async (e) => {
     try {
@@ -2999,6 +3128,10 @@ function bindUi() {
 
 async function main() {
   bindUi();
+  bindStoryboard();
+  if (location.hash === "#storyboard") {
+    openStoryboard().catch((err) => logLine("打开故事成片失败：" + err.message, "err"));
+  }
   bindGlobalHandlers();
   applyWorldTransform();
   logLine("可视化节点工作台已就绪。");

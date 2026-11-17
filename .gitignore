@@ -11,3 +11,4 @@ index/
 .pytest_cache/
 .idea/
 .vscode/
+storyboard-output/

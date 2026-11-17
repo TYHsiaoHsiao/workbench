@@ -1,3 +1,12 @@
+## [2.30.0] - 2026-11-17 — 故事成片（M43：故事→分镜→提示词包并入工作台）
+
+- 新增 `packages/storyboard/`：把独立工具 story2prompt 并入工作台（`core.py` 分镜构建 + `__init__.py` 的 `generate()/write_package()/new_run_id()`），零第三方依赖，输出 13 个文件：分镜表、提示词包、prompts.txt、分镜与提示词.html、即梦/可灵/Seedance 三平台 txt + 负面词、字幕.srt、配音清单.md、多风格对比 md/html（可选）、meta.json。
+- Web 面板：顶栏「故事成片」（`#btn-storyboard`）打开面板——粘贴故事、标题/时长/画幅/风格/对比风格，一键生成；展示镜表与文件链接（预览页/对比页/提示词包/分镜表/字幕/配音清单），最近生成列表可回看；`#storyboard` 深链接自动打开。
+- Web API：`GET /api/storyboard/options|list|file`、`POST /api/storyboard/generate`（`STORYBOARD_ROOT` 限定读取，路径穿越防护）。
+- 删除独立 `story2prompt` 目录与入口（用户要求删除冗余）；`.gitignore` 与发行脚本跳过 `storyboard-output/` 运行时产物。
+- 测试：新增 `tests/test_storyboard.py` 7 项（生成/落盘文件/SRT 块数/三平台行数/对比页/非法参数），全量 555 项通过。
+- 兼容性：纯新增，CLI/契约不变（MINOR）。
+
 ## [2.29.0] - 2026-11-17 — 全 Web 化（M42：操作台 44 操作、历史落盘与搜索过滤）
 
 - 操作台：白名单操作从 24 个扩展到 **44 个**，新增 20 个覆盖创作主线的操作——`init_project`、`quickstart`（不写演示素材）、`route`、`gate_list`、`gate_set`、`next_stage`、`flow_new`、`flow_list`、`flow_run`、`flow_runs`、`style_list`、`style_show`、`style_apply`、`style_inject`、`artifact_register`、`reference_list`、`project_export`、`generate_jobs`、`generate_retry`、`generate_adopt`；状态变更操作（推进阶段/写门禁）带 `confirm` 文案。

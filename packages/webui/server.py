@@ -89,6 +89,7 @@ from generate import (
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 WORKBENCH_ROOT = Path(__file__).resolve().parents[2]
+STORYBOARD_ROOT = WORKBENCH_ROOT / "storyboard-output"
 
 CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -372,6 +373,47 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             except (TypeError, ValueError):
                 raise FlowError(f"limit 需要整数: {limit_raw}") from None
             self._json({"ok": True, "count": len(list_history(limit)), "history": list_history(limit)})
+            return
+        if path == "/api/storyboard/options":
+            from storyboard import ASPECTS, DEFAULT_ASPECT, DEFAULT_DURATION, DEFAULT_STYLE, DEMO_STORY, STYLES
+
+            self._json(
+                {
+                    "ok": True,
+                    "styles": list(STYLES),
+                    "aspects": list(ASPECTS),
+                    "defaults": {
+                        "duration": DEFAULT_DURATION,
+                        "aspect": DEFAULT_ASPECT,
+                        "style": DEFAULT_STYLE,
+                    },
+                    "demo_story": DEMO_STORY,
+                }
+            )
+            return
+        if path == "/api/storyboard/list":
+            runs = []
+            if STORYBOARD_ROOT.exists():
+                for child in sorted(STORYBOARD_ROOT.iterdir(), reverse=True)[:20]:
+                    meta_path = child / "meta.json"
+                    if child.is_dir() and meta_path.exists():
+                        try:
+                            runs.append(json.loads(meta_path.read_text(encoding="utf-8")))
+                        except (OSError, json.JSONDecodeError):
+                            continue
+            self._json({"ok": True, "runs": runs})
+            return
+        if path == "/api/storyboard/file":
+            run_id = (query.get("run") or [""])[0]
+            name = (query.get("name") or [""])[0]
+            if not run_id or not name:
+                raise FlowError("缺少 run 或 name 参数")
+            base = STORYBOARD_ROOT.resolve()
+            target = (STORYBOARD_ROOT / run_id / name).resolve()
+            if base not in target.parents or not target.is_file():
+                raise FlowError("文件不存在")
+            ctype = CONTENT_TYPES.get(target.suffix.lower(), "text/plain; charset=utf-8")
+            self._send(HTTPStatus.OK, target.read_bytes(), ctype)
             return
         if path == "/api/dev/version":
             self._json({"ok": True, **_dev_signature()})
@@ -735,6 +777,28 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             if not isinstance(items, list):
                 raise FlowError("items 必须为数组")
             self._json({"ok": True, "result": run_ops_batch(items)})
+            return
+        if path == "/api/storyboard/generate":
+            from storyboard import StoryboardError, generate, new_run_id, write_package
+
+            story = str(body.get("story") or "")
+            try:
+                data = generate(
+                    story,
+                    title=str(body.get("title") or ""),
+                    duration=body.get("duration") or 60,
+                    aspect=str(body.get("aspect") or "9:16"),
+                    style=str(body.get("style") or "悬疑"),
+                    shots=body.get("shots"),
+                    prefix=str(body.get("prefix") or ""),
+                    compare=body.get("compare"),
+                )
+            except StoryboardError as exc:
+                raise FlowError(str(exc)) from None
+            run_id = new_run_id()
+            meta = write_package(STORYBOARD_ROOT / run_id, data)
+            meta["run_id"] = run_id
+            self._json({"ok": True, "run": meta})
             return
         if path == "/api/cron/preview":
             expression = str(body.get("expression") or "").strip()
