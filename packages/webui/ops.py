@@ -11,7 +11,9 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import time
 from contextlib import redirect_stdout
+from datetime import datetime
 from typing import Any, Callable
 
 from flow import FlowError
@@ -75,6 +77,51 @@ def _invoke(handler: Callable[[argparse.Namespace], int], **kwargs: Any) -> dict
         "output": output[-_MAX_OUTPUT:],
         "data": parsed,
     }
+
+
+# ---- 操作历史（M41） ----
+
+_HISTORY_MAX = 50
+_HISTORY: list[dict[str, Any]] = []
+
+
+def _now() -> str:
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def _record_history(
+    op_id: str,
+    label: str,
+    *,
+    started_at: str,
+    duration_ms: int,
+    ok: bool,
+    exit_code: int = 0,
+    error: str = "",
+) -> dict[str, Any]:
+    entry = {
+        "op_id": op_id,
+        "label": label,
+        "started_at": started_at,
+        "duration_ms": duration_ms,
+        "ok": ok,
+        "exit_code": exit_code,
+    }
+    if error:
+        entry["error"] = error
+    _HISTORY.append(entry)
+    del _HISTORY[: max(0, len(_HISTORY) - _HISTORY_MAX)]
+    return entry
+
+
+def list_history(limit: int = 20) -> list[dict[str, Any]]:
+    """返回最近的操作历史（新→旧，最多 50 条）。"""
+    try:
+        raw = int(limit)
+    except (TypeError, ValueError):
+        raw = 20
+    limit = max(1, min(raw, _HISTORY_MAX))
+    return list(reversed(_HISTORY))[:limit]
 
 
 # ---- 处理器（延迟导入 CLI，避免 server 启动即加载全部命令） ----
@@ -258,6 +305,71 @@ def run_rollback_apply(params: dict[str, Any]) -> dict[str, Any]:
 
 def run_project_list(params: dict[str, Any]) -> dict[str, Any]:
     return _invoke(_cli().cmd_project_list, root=params.get("root") or None, json=True)
+
+
+def run_project_summary(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(_cli().cmd_project_summary, project=params["project"], json=True)
+
+
+def run_generate_refresh(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(
+        _cli().cmd_generate_refresh,
+        project=params["project"],
+        job_id=params.get("job_id") or None,
+        all=bool(params.get("all", True)),
+        limit=int(params.get("limit") or 20),
+        json=True,
+    )
+
+
+def run_batch_report_push(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(
+        _cli().cmd_flow_batch_report,
+        project=params["project"],
+        format=params.get("format") or "md",
+        limit=int(params.get("limit") or 20),
+        push=True,
+        webhook_url=params["webhook_url"],
+        webhook_format=params.get("webhook_format") or "generic",
+        webhook_retries=int(params.get("webhook_retries") or 0),
+        json=True,
+    )
+
+
+def run_queue_alerts(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(
+        _cli().cmd_flow_queue_alerts,
+        project=params["project"],
+        limit=int(params.get("limit") or 50),
+        webhook_url=None,
+        fail_if_failures=False,
+        webhook_format="generic",
+        webhook_retries=0,
+        dedupe_minutes=30,
+        json=True,
+    )
+
+
+def run_queue_alerts_push(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(
+        _cli().cmd_flow_queue_alerts,
+        project=params["project"],
+        limit=int(params.get("limit") or 50),
+        webhook_url=params["webhook_url"],
+        fail_if_failures=False,
+        webhook_format=params.get("format") or "generic",
+        webhook_retries=int(params.get("webhook_retries") or 0),
+        dedupe_minutes=int(params.get("dedupe_minutes") if params.get("dedupe_minutes") is not None else 30),
+        json=True,
+    )
+
+
+def run_flow_batches(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(_cli().cmd_flow_batches, project=params["project"], limit=int(params.get("limit") or 10), json=True)
+
+
+def run_doctor(params: dict[str, Any]) -> dict[str, Any]:
+    return _invoke(_cli().cmd_doctor, json=True)
 
 
 # ---- 注册表 ----
@@ -456,6 +568,87 @@ OPS: list[dict[str, Any]] = [
         "confirm": "回滚会覆盖项目当前文件（dry_run=false 时）。确认执行？",
         "handler": run_rollback_apply,
     },
+    {
+        "id": "project_summary",
+        "label": "项目摘要",
+        "category": "项目",
+        "description": "查看项目阶段、产物登记与流程图概览（M41）。",
+        "params": [_p("project", "项目（路径或名称）", "text", required=True)],
+        "handler": run_project_summary,
+    },
+    {
+        "id": "generate_refresh",
+        "label": "刷新生成任务",
+        "category": "生成",
+        "description": "查询平台任务状态并回填（M41；默认刷新全部 submitted 任务）。",
+        "params": [
+            _p("project", "项目（路径或名称）", "text", required=True),
+            _p("job_id", "任务 ID（可选，留空配合“全部”）", "text"),
+            _p("all", "刷新全部 submitted 任务", "bool", default=True),
+            _p("limit", "最多刷新数", "int", default=20),
+        ],
+        "handler": run_generate_refresh,
+    },
+    {
+        "id": "batch_report_push",
+        "label": "推送批次报表",
+        "category": "流程",
+        "description": "生成批次趋势报表并外送到 webhook（M41；支持飞书格式）。",
+        "params": [
+            _p("project", "项目（路径或名称）", "text", required=True),
+            _p("webhook_url", "Webhook 地址", "text", required=True),
+            _p("format", "报表格式", "enum", default="md", choices=["md", "csv", "html"]),
+            _p("webhook_format", "推送格式", "enum", default="generic", choices=["generic", "feishu", "feishu_card"]),
+            _p("webhook_retries", "重试次数", "int", default=0),
+            _p("limit", "批次数", "int", default=20),
+        ],
+        "handler": run_batch_report_push,
+    },
+    {
+        "id": "queue_alerts",
+        "label": "队列失败告警",
+        "category": "队列",
+        "description": "聚合最近队列失败通知，并展示静默窗口状态（M41）。",
+        "params": [
+            _p("project", "项目（路径或名称）", "text", required=True),
+            _p("limit", "通知条数", "int", default=50),
+        ],
+        "handler": run_queue_alerts,
+    },
+    {
+        "id": "queue_alerts_push",
+        "label": "推送队列告警摘要",
+        "category": "队列",
+        "description": "把队列失败告警摘要外送到 webhook（支持静默窗口，M41）。",
+        "params": [
+            _p("project", "项目（路径或名称）", "text", required=True),
+            _p("webhook_url", "Webhook 地址", "text", required=True),
+            _p("format", "推送格式", "enum", default="generic", choices=["generic", "feishu", "feishu_card"]),
+            _p("webhook_retries", "重试次数", "int", default=0),
+            _p("dedupe_minutes", "静默窗口（分钟，0=关闭）", "int", default=30),
+            _p("limit", "通知条数", "int", default=50),
+        ],
+        "handler": run_queue_alerts_push,
+    },
+    {
+        "id": "flow_batches",
+        "label": "批次历史",
+        "category": "流程",
+        "description": "列出最近的批次运行记录（M41）。",
+        "params": [
+            _p("project", "项目（路径或名称）", "text", required=True),
+            _p("limit", "条数", "int", default=10),
+        ],
+        "handler": run_flow_batches,
+    },
+    {
+        "id": "doctor",
+        "label": "环境自检（doctor）",
+        "category": "运维",
+        "description": "十项自检：Python/布局/契约/注册表/风格库/流程/生成/索引/品牌词表（M41）。",
+        "params": [],
+        "handler": run_doctor,
+    },
 ]
 
 OPS_BY_ID = {item["id"]: item for item in OPS}
@@ -474,7 +667,17 @@ def list_ops() -> list[dict[str, Any]]:
 def run_op(op_id: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
     op = OPS_BY_ID.get(op_id)
     if op is None:
-        raise FlowError(f"未知操作: {op_id}")
+        message = f"未知操作: {op_id}"
+        _record_history(
+            str(op_id),
+            str(op_id),
+            started_at=_now(),
+            duration_ms=0,
+            ok=False,
+            exit_code=1,
+            error=message,
+        )
+        raise FlowError(message)
     given = dict(params or {})
     missing = [
         param["name"]
@@ -503,7 +706,79 @@ def run_op(op_id: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         else:
             value = str(value).strip()
         normalized[name] = value
-    result = op["handler"](normalized)
+    started_at = _now()
+    started = time.perf_counter()
+    try:
+        result = op["handler"](normalized)
+    except Exception as exc:
+        duration_ms = int((time.perf_counter() - started) * 1000)
+        _record_history(
+            op_id,
+            op["label"],
+            started_at=started_at,
+            duration_ms=duration_ms,
+            ok=False,
+            exit_code=1,
+            error=str(exc),
+        )
+        raise
+    duration_ms = int((time.perf_counter() - started) * 1000)
     result["op_id"] = op_id
     result["label"] = op["label"]
+    result["duration_ms"] = duration_ms
+    _record_history(
+        op_id,
+        op["label"],
+        started_at=started_at,
+        duration_ms=duration_ms,
+        ok=bool(result.get("ok")),
+        exit_code=int(result.get("exit_code") or 0),
+    )
     return result
+
+
+_BATCH_MAX = 20
+
+
+def run_ops_batch(items: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """顺序执行多个操作（M41）；单次最多 20 个，单项失败不中断整体。"""
+    if not isinstance(items, list) or not items:
+        raise FlowError("批量执行需要非空 items 列表")
+    if len(items) > _BATCH_MAX:
+        raise FlowError(f"单次批量最多 {_BATCH_MAX} 个操作")
+    results: list[dict[str, Any]] = []
+    for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            raise FlowError(f"第 {index + 1} 项格式无效（需要对象）")
+        op_id = str(item.get("op_id") or "").strip()
+        params = item.get("params") or {}
+        if not op_id:
+            raise FlowError(f"第 {index + 1} 项缺少 op_id")
+        try:
+            result = run_op(op_id, params)
+            results.append(
+                {
+                    "index": index + 1,
+                    "op_id": op_id,
+                    "label": result.get("label"),
+                    "ok": bool(result.get("ok")),
+                    "exit_code": int(result.get("exit_code") or 0),
+                    "duration_ms": int(result.get("duration_ms") or 0),
+                    "output": str(result.get("output") or "")[-2000:],
+                    "data": result.get("data"),
+                }
+            )
+        except FlowError as exc:
+            results.append(
+                {
+                    "index": index + 1,
+                    "op_id": op_id,
+                    "ok": False,
+                    "error": str(exc),
+                }
+            )
+    return {
+        "ok": all(item.get("ok") for item in results),
+        "count": len(results),
+        "results": results,
+    }

@@ -363,6 +363,16 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
 
             self._json({"ok": True, "ops": list_ops()})
             return
+        if path == "/api/ops/history":
+            from webui.ops import list_history
+
+            limit_raw = (query.get("limit") or ["20"])[0]
+            try:
+                limit = int(limit_raw)
+            except (TypeError, ValueError):
+                raise FlowError(f"limit 需要整数: {limit_raw}") from None
+            self._json({"ok": True, "count": len(list_history(limit)), "history": list_history(limit)})
+            return
         if path == "/api/dev/version":
             self._json({"ok": True, **_dev_signature()})
             return
@@ -717,6 +727,14 @@ class WorkbenchHandler(BaseHTTPRequestHandler):
             if not isinstance(params, dict):
                 raise FlowError("params 必须为对象")
             self._json({"ok": True, "result": run_op(op_id, params)})
+            return
+        if path == "/api/ops/batch":
+            from webui.ops import run_ops_batch
+
+            items = body.get("items")
+            if not isinstance(items, list):
+                raise FlowError("items 必须为数组")
+            self._json({"ok": True, "result": run_ops_batch(items)})
             return
         if path == "/api/cron/preview":
             expression = str(body.get("expression") or "").strip()

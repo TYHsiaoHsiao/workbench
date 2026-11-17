@@ -1,3 +1,11 @@
+## [2.28.0] - 2026-11-17 — Web 操作台扩展（M41：更多操作、操作历史与批量执行）
+
+- 操作台新增 7 个白名单操作（共 24 个）：项目摘要 `project_summary`、生成任务刷新 `generate_refresh`、批次报表推送 `batch_report_push`、队列告警 `queue_alerts` / `queue_alerts_push`、批次历史 `flow_batches`、环境自检 `doctor`；参数表单自动渲染，危险操作仍二次确认。
+- 操作历史：进程内环形缓冲（最多 50 条）+ `GET /api/ops/history?limit=`；前端「最近操作」展示状态/耗时/时间，失败红字。
+- 批量执行：`POST /api/ops/batch`（items ≤ 20，顺序执行、单项失败不中断、返回逐项结果）；前端勾选复选框后「批量执行选中」。
+- 测试：新增 `tests/test_ops.py` 7 项 + `tests/test_webui_api.py::test_ops_history_and_batch_endpoints`，全量 546 项通过；覆盖率行 81.1%、分支 51.29%。
+- 兼容性：契约无变化，纯增量（MINOR）；CLI 行为不变，操作台与 CLI 等价。
+
 ## [2.27.0] - 2026-11-17 — Web 操作台（M40：所有操作可视化执行）
 
 - 新增 `packages/webui/ops.py`：17 个白名单操作、8 类（开工/项目/知识库/生成/流程/队列/快照），每个操作声明参数 schema；执行时进程内调用 CLI 并捕获输出；危险操作 `rollback_apply` 标记 danger 并由前端二次确认。

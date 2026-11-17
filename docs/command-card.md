@@ -1,4 +1,4 @@
-# 命令卡（v2.27.0）
+# 命令卡（v2.28.0）
 
 > 所有命令在 `workbench/` 目录下执行：`python workbench.py <命令>`。
 > Python >= 3.10，无第三方运行时依赖。退出码：`0` 成功，`1` 校验失败/门禁拦截，`2` 参数错误，`3` 环境不可用。
@@ -230,7 +230,7 @@ python workbench.py flow run --project 雨夜回声 --graph flow-main --dry-run
 | `python workbench.py flow batch-trend --project <项目> [--limit 10] [--out 路径] [--json]` | M37：导出批次趋势 SVG 图（自包含单文件，成功/失败条形）；`--out` 写文件，缺省打印到标准输出。 |
 | Web：运行面板「批次历史趋势」/「失败告警」/「cron 预览」 | M31：`POST /api/cron/preview` + `GET /api/queue/alerts`；趋势为最近 10 批次成功/失败 SVG 条 |
 
-## 16. Web 操作台（M40）
+## 16. Web 操作台（M40/M41）
 
 打开方式：顶栏「实操指引」按钮（原 M38 面板升级为操作台）。所有操作均在本地 Web 服务进程内执行，等价于对应 CLI；不开放任意 shell。
 
@@ -244,3 +244,9 @@ python workbench.py flow run --project 雨夜回声 --graph flow-main --dry-run
 | 流程 | `batch_run` / `batch_report` | `flow batch` / `flow batch-report` |
 | 队列 | `queue_add` / `queue_run` | `flow queue add/run` |
 | 快照 | `snapshot_create` / `snapshot_list` / `rollback_apply` | `rollback create/list/apply`（`rollback_apply` 危险，默认 dry-run） |
+| 项目/运维 | `project_summary` / `doctor` | `project summary` / `doctor` |
+| 生成 | `generate_refresh` | `generate refresh [job_id] --all` |
+| 流程 | `batch_report_push` / `flow_batches` | `flow batch-report --push --webhook-url <url>` / `flow batches` |
+| 队列 | `queue_alerts` / `queue_alerts_push` | `flow queue alerts [--webhook-url <url>]` |
+
+操作历史：`GET /api/ops/history?limit=20`；批量执行：`POST /api/ops/batch`（items ≤ 20，顺序执行、单项失败不中断）；前端勾选左侧复选框后点「批量执行选中」。

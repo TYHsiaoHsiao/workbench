@@ -2617,12 +2617,38 @@ function renderProjects() {
 
 // ---- 操作台（M40：所有操作可视化执行） ----
 
-const opsState = { ops: [], currentId: "", running: false };
+const opsState = { ops: [], currentId: "", running: false, selected: new Set(), history: [] };
 
 async function openOps() {
   $("#practical-panel").classList.remove("hidden");
   if (opsState.ops.length === 0) {
     await loadOps();
+  }
+  loadOpsHistory().catch(() => {});
+}
+
+async function loadOpsHistory() {
+  const data = await api("/api/ops/history?limit=20");
+  opsState.history = data.history || [];
+  renderOpsHistory();
+}
+
+function renderOpsHistory() {
+  const box = $("#ops-history");
+  if (!box) return;
+  if (!opsState.history.length) {
+    box.innerHTML = '<p class="hint">暂无记录</p>';
+    return;
+  }
+  box.innerHTML = "";
+  for (const item of opsState.history) {
+    const row = document.createElement("div");
+    row.className = "ops-history-item" + (item.ok ? "" : " failed");
+    const label = item.label || item.op_id || "";
+    const when = String(item.started_at || "").replace("T", " ").slice(5, 16);
+    row.textContent = (item.ok ? "✓ " : "✗ ") + label + " · " + item.duration_ms + "ms · " + when;
+    row.title = item.error || item.op_id || "";
+    box.appendChild(row);
   }
 }
 
@@ -2650,14 +2676,84 @@ function renderOpsList() {
     title.textContent = category;
     box.appendChild(title);
     for (const op of items) {
+      const row = document.createElement("div");
+      row.className = "ops-row";
+      const check = document.createElement("input");
+      check.type = "checkbox";
+      check.className = "ops-check";
+      check.checked = opsState.selected.has(op.id);
+      check.title = "勾选以加入批量执行（按默认参数顺序执行）";
+      check.addEventListener("change", () => {
+        if (check.checked) opsState.selected.add(op.id);
+        else opsState.selected.delete(op.id);
+        updateBatchButton();
+      });
+      row.appendChild(check);
       const btn = document.createElement("button");
       btn.className = "ops-item" + (op.id === opsState.currentId ? " active" : "");
       btn.textContent = op.label + (op.danger ? " ⚠" : "");
       btn.title = op.description || "";
       btn.dataset.op = op.id;
       btn.addEventListener("click", () => selectOp(op.id));
-      box.appendChild(btn);
+      row.appendChild(btn);
+      box.appendChild(row);
     }
+  }
+  updateBatchButton();
+}
+
+function updateBatchButton() {
+  const btn = $("#btn-op-batch");
+  if (!btn) return;
+  const count = opsState.selected.size;
+  btn.textContent = "批量执行选中（" + count + "）";
+  btn.disabled = count === 0 || opsState.running;
+}
+
+async function runBatchOps() {
+  if (opsState.running || opsState.selected.size === 0) return;
+  const items = opsState.ops
+    .filter((op) => opsState.selected.has(op.id))
+    .map((op) => ({ op_id: op.id, params: {} }));
+  if (!window.confirm("将按默认参数顺序执行 " + items.length + " 个操作，确认继续？")) return;
+  opsState.running = true;
+  $("#btn-op-run").disabled = true;
+  updateBatchButton();
+  $("#ops-status").textContent = "批量执行中…";
+  $("#ops-output").textContent = "批量执行中…";
+  try {
+    const resp = await fetch(state.token ? "/api/ops/batch?token=" + encodeURIComponent(state.token) : "/api/ops/batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items }),
+    });
+    const payload = await resp.json();
+    if (!resp.ok || payload.ok === false) {
+      throw new Error((payload && payload.error) || "请求失败（HTTP " + resp.status + "）");
+    }
+    const result = payload.result || {};
+    const lines = [];
+    lines.push("批量执行：" + result.count + " 个操作，" + (result.ok ? "全部成功" : "存在失败") + "。");
+    for (const item of result.results || []) {
+      const flag = item.ok ? "✓" : "✗";
+      const detail = item.error ? " · " + item.error : item.output && item.output.length > 120 ? "" : "";
+      lines.push(flag + " [" + item.index + "] " + (item.label || item.op_id) + " · exit " + (item.exit_code == null ? "-" : item.exit_code) + (item.duration_ms != null ? " · " + item.duration_ms + "ms" : "") + detail);
+    }
+    $("#ops-output").textContent = lines.join("\n");
+    $("#ops-status").textContent = result.ok ? "批量完成" : "批量完成（部分失败）";
+    logLine("[操作台] 批量执行 " + (result.count || 0) + " 个操作" + (result.ok ? " 全部成功" : " 存在失败"));
+    await loadOpsHistory();
+    for (const item of result.results || []) {
+      if (item.ok && typeof refreshAfterOps === "function") refreshAfterOps(item.op_id);
+    }
+  } catch (err) {
+    $("#ops-output").textContent = "错误：" + err.message;
+    $("#ops-status").textContent = "批量执行失败";
+    logLine("[操作台] 批量执行失败：" + err.message, "err");
+  } finally {
+    opsState.running = false;
+    $("#btn-op-run").disabled = false;
+    updateBatchButton();
   }
 }
 
@@ -2790,6 +2886,8 @@ async function runSelectedOp() {
   } finally {
     opsState.running = false;
     $("#btn-op-run").disabled = false;
+    updateBatchButton();
+    loadOpsHistory().catch(() => {});
   }
 }
 
@@ -2874,6 +2972,8 @@ function bindUi() {
     $("#practical-panel").classList.add("hidden");
   });
   $("#btn-op-run").addEventListener("click", () => runSelectedOp());
+  $("#btn-op-batch").addEventListener("click", () => runBatchOps());
+  $("#btn-ops-history-refresh").addEventListener("click", () => loadOpsHistory().catch((err) => logLine("加载操作历史失败：" + err.message, "err")));
   $("#btn-close-gen-detail").addEventListener("click", () => closeGenDetail());
   $("#btn-close-projects").addEventListener("click", () => closeProjects());
   $("#inspector-body").addEventListener("focusin", () => remember());

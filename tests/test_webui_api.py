@@ -1067,6 +1067,38 @@ class WebUIApiTest(unittest.TestCase):
         self.assertEqual(400, status, msg=data)
         self.assertFalse(data["ok"])
 
+    def test_ops_history_and_batch_endpoints(self) -> None:
+        status, data = self.client.json("GET", "/api/ops/history?limit=5")
+        self.assertEqual(200, status, msg=data)
+        self.assertTrue(data["ok"])
+        self.assertIsInstance(data["history"], list)
+        self.assertLessEqual(len(data["history"]), 5)
+
+        status, data = self.client.json(
+            "POST", "/api/ops/batch", {"items": [{"op_id": "project_list", "params": {}}]}
+        )
+        self.assertEqual(200, status, msg=data)
+        self.assertTrue(data["ok"])
+        result = data["result"]
+        self.assertEqual(1, result["count"])
+        self.assertTrue(result["results"][0]["ok"])
+
+        status, data = self.client.json("POST", "/api/ops/batch", {"items": []})
+        self.assertEqual(400, status, msg=data)
+        self.assertFalse(data["ok"])
+
+        status, data = self.client.json("POST", "/api/ops/batch", {"items": "bad"})
+        self.assertEqual(400, status, msg=data)
+        self.assertFalse(data["ok"])
+
+        status, data = self.client.json("GET", "/api/ops/history?limit=bad")
+        self.assertEqual(400, status, msg=data)
+        self.assertFalse(data["ok"])
+
+        status, data = self.client.json("GET", "/api/ops/history")
+        self.assertEqual(200, status, msg=data)
+        self.assertGreaterEqual(len(data["history"]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

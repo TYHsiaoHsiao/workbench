@@ -134,14 +134,19 @@
 
   <div id="practical-panel" class="overlay hidden">
     <div class="panel-card practical-card ops-card">
-      <header><h2>操作台（M40：所有操作可视化执行）</h2><button id="btn-close-practical" class="link">关闭</button></header>
+      <header><h2>操作台（M41：更多操作 + 历史 + 批量执行）</h2><button id="btn-close-practical" class="link">关闭</button></header>
       <div class="ops-body">
-        <aside id="ops-list" class="ops-list"><p class="hint">加载中…</p></aside>
+        <aside class="ops-side">
+          <div id="ops-list" class="ops-list"><p class="hint">加载中…</p></div>
+          <div class="ops-history-head"><h3>最近操作</h3><button id="btn-ops-history-refresh" class="link">刷新</button></div>
+          <div id="ops-history" class="ops-history"><p class="hint">暂无记录</p></div>
+        </aside>
         <section class="ops-main">
           <div id="ops-desc" class="ops-desc">选择左侧操作</div>
           <div id="ops-form" class="ops-form"></div>
           <div class="ops-actions">
             <button id="btn-op-run" class="primary" disabled>执行</button>
+            <button id="btn-op-batch" disabled title="按默认参数顺序执行勾选的操作">批量执行选中（0）</button>
             <span id="ops-status" class="hint"></span>
           </div>
           <pre id="ops-output" class="ops-output">（输出将显示在这里）</pre>

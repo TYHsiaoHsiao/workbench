@@ -1,6 +1,6 @@
 # 需求追溯表（FR ↔ 实现 ↔ 里程碑 ↔ 证据）
 
-> 版本：2.27.0 · 状态：M40（迭代 46）落盘 · 维护规则见文末
+> 版本：2.28.0 · 状态：M41（迭代 47）落盘 · 维护规则见文末
 
 本文件把 PRD §6 的 22 条功能需求（FR-01–FR-22）映射到工作台实现、里程碑与验证证据，作为需求—实现—验收之间的可审计链路。检查工具：`python scripts/check_fr_mapping.py`（CI 门禁，要求 22 条全覆盖、无重复）。
 
@@ -55,6 +55,7 @@
 | 实操上线包（quickstart/practical-check/Web 指引） | M38（2.25.0） | `packages/cli/main.py::cmd_quickstart/cmd_practical_check`、`docs/practical-guide.md`、Web「实操指引」面板、`tests/test_cli_coverage.py::M38PracticalTest` | FR-01、FR-20 |
 | 实操闭环（演示素材/自动修复） | M39（2.26.0） | `packages/cli/main.py::_seed_demo_assets/_practical_repairs`、`tests/test_cli_coverage.py::M39PracticalFixTest` | FR-01、FR-20 |
 | Web 操作台（17 个白名单操作可视化执行） | M40（2.27.0） | `packages/webui/ops.py`（OPS 注册表/`run_op`）、`GET /api/ops`、`POST /api/ops/run`、Web 操作台面板；`tests/test_webui_api.py::test_ops_endpoints` | FR-01、FR-20、FR-22 |
+| Web 操作台扩展（更多操作、操作历史、批量执行） | M41（2.28.0） | `packages/webui/ops.py`（新增 7 个 op、`_HISTORY`/`list_history`、`run_ops_batch`）、`GET /api/ops/history`、`POST /api/ops/batch`、Web 操作台勾选与历史面板；`tests/test_ops.py`、`tests/test_webui_api.py` | FR-01、FR-20、FR-22 |
 | 批次报表 Web 化与告警静默窗口（报表预览/导出、告警去重） | M34（2.21.0） | `packages/webui/server.py`（`GET /api/batches/report`）、`packages/webui/static/app.js`（报表 MD/CSV/预览按钮）、`packages/flow/queue.py::push_queue_alerts`（`dedupe_minutes`）、CLI `flow queue alerts --dedupe-minutes`；`tests/test_webui_api.py`、`tests/test_flow_queue.py` |
 | 远端 CI 工作流硬化与就绪检查 | M26（2.13.1） | `.github/workflows/ci.yml`（permissions/concurrency/timeout/UTF-8）、`scripts/ci_ready.py`、`docs/github-actions.md`、`tests/test_ci_ready.py` | FR-21、FR-22 |
 | 分支覆盖率门禁 | M25（2.13.0） | `scripts/coverage_check.py --branches`（`dis` 静态分支点 + 局部 `sys.monitoring` BRANCH 事件）、`scripts/run_ci.py` 覆盖率步骤、`tests/test_ci_scripts.py::BranchCoverageTest` | FR-22（NFR） |
